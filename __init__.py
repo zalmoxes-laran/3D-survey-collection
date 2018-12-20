@@ -56,7 +56,7 @@ else:
     from . import (
             UI,
             import_3DSC,
-            i_points_txt,
+            #i_points_txt,
             #functions,
             )
 
@@ -81,7 +81,7 @@ classes = (
     UI.VIEW3D_PT_Import_ToolBar,
     import_3DSC.ImportMultipleObjs,
     import_3DSC.OBJECT_OT_IMPORTPOINTS,
-    i_points_txt.ImportCoorPoints,
+    import_3DSC.ImportCoorPoints,
     InterfaceVars,
 )
 
