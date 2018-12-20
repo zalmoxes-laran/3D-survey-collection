@@ -56,8 +56,8 @@ else:
     from . import (
             UI,
             import_3DSC,
-            #i_points_txt,
-            #functions,
+            export_3DSC,
+            functions,
             )
 
 # register
@@ -79,9 +79,19 @@ class InterfaceVars(PropertyGroup):
 
 classes = (
     UI.VIEW3D_PT_Import_ToolBar,
+    UI.VIEW3D_PT_Export_ToolBar,
     import_3DSC.ImportMultipleObjs,
     import_3DSC.OBJECT_OT_IMPORTPOINTS,
     import_3DSC.ImportCoorPoints,
+    export_3DSC.ExportCoordinates,
+    export_3DSC.OBJECT_OT_ExportButtonName,
+    export_3DSC.OBJECT_OT_ExportObjButton,
+    export_3DSC.OBJECT_OT_fbxexp,
+    export_3DSC.OBJECT_OT_fbxexportbatch,
+    export_3DSC.OBJECT_OT_objexportbatch,
+    export_3DSC.OBJECT_OT_osgtexportbatch,
+    functions.OBJECT_OT_createcyclesmat,
+    functions.OBJECT_OT_savepaintcam,
     InterfaceVars,
 )
 

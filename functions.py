@@ -40,12 +40,8 @@ def get_nodegroupname_from_obj(obj):
         nodegroupname = None
     return nodegroupname
 
-
-
 #if 'Material Output' in [node.name for node in bpy.data.materials['your_material_name'].node_tree.nodes]:
 #    print('Yes!')
-
-
 
 def get_cc_node_in_obj_mat(nodegroupname,type):
     if type == 'RGB':

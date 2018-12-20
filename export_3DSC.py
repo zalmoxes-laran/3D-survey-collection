@@ -2,48 +2,17 @@ import bpy
 import os
 from .functions import *
 
-class ToolsPanel(bpy.types.Panel):
-    bl_space_type = "VIEW_3D"
-    bl_region_type = "TOOLS"
-    bl_context = "objectmode"
-    bl_category = "3DSC"
-    bl_label = "Exporters"
-    bl_options = {'DEFAULT_CLOSED'}
+import bpy
+import math
 
-    def draw(self, context):
-        layout = self.layout
-        obj = context.object
-        row = layout.row()
-        if obj is not None:
-            self.layout.operator("export.coordname", icon="WORLD_DATA", text='Coordinates')
-            row = layout.row()
-            row.label(text="Active object is: " + obj.name)
-            row = layout.row()
-            row.label(text="Override")
-            row = layout.row()
-            row.prop(obj, "name")
-            row = layout.row()
-            self.layout.operator("export.object", icon="OBJECT_DATA", text='Exp. one obj')
-            row = layout.row()
-            row.label(text="Resulting file: " + obj.name + ".obj")
-            row = layout.row()
-            self.layout.operator("obj.exportbatch", icon="OBJECT_DATA", text='Exp. several obj')
-            row = layout.row()
-            self.layout.operator("fbx.exportbatch", icon="OBJECT_DATA", text='Exp. several fbx UE4')
-            row = layout.row()
-            self.layout.operator("fbx.exp", icon="OBJECT_DATA", text='Exp. fbx UE4')
-            row = layout.row()
-            self.layout.operator("osgt.exportbatch", icon="OBJECT_DATA", text='Exp. several osgt files')
-            row = layout.row()
-#            if is_windows():
-#                row = layout.row()
-#                row.label(text="We are under Windows..")
-        else:
-            row.label(text="Select object(s) to see tools here.")
-            row = layout.row()
+from bpy_extras.io_utils import ExportHelper
+from bpy.props import StringProperty, BoolProperty, EnumProperty
+from bpy.types import Operator
 
-        
-        
+
+############## from here operators to export text ########################
+
+
 class OBJECT_OT_ExportButtonName(bpy.types.Operator):
     bl_idname = "export.coordname"
     bl_label = "Export coord name"
@@ -55,59 +24,112 @@ class OBJECT_OT_ExportButtonName(bpy.types.Operator):
             
         return {'FINISHED'}
 
-#class OBJECT_OT_ExportButtonName(bpy.types.Operator):
-#    bl_idname = "export.coordname"
-#    bl_label = "Export coord name"
-#    bl_options = {"REGISTER", "UNDO"}
-
-#    def execute(self, context):
-
-#        basedir = os.path.dirname(bpy.data.filepath)
-
-#        if not basedir:
-#            raise Exception("Save the blend file")
-
-#        selection = bpy.context.selected_objects
-#        bpy.ops.object.select_all(action='DESELECT')
-#        activename = bpy.path.clean_name(bpy.context.scene.objects.active.name)
-#        fn = os.path.join(basedir, activename)
-#        file = open(fn + ".txt", 'w')
-
-#        # write selected objects coordinate
-#        for obj in selection:
-#            obj.select = True
-#            file.write("%s %s %s %s\n" % (obj.name, obj.location[0], obj.location[1], obj.location[2]))
-#        file.close()
-#        return {'FINISHED'}
-
-#class OBJECT_OT_ExportabsButtonName(bpy.types.Operator):
-#    bl_idname = "export.abscoordname"
-#    bl_label = "Export abs coord name"
-#    bl_options = {"REGISTER", "UNDO"}
-
-#    def execute(self, context):
-
-#        basedir = os.path.dirname(bpy.data.filepath)
-
-#        if not basedir:
-#            raise Exception("Save the blend file")
-
-#        selection = bpy.context.selected_objects
-#        bpy.ops.object.select_all(action='DESELECT')
-#        activename = bpy.path.clean_name(bpy.context.scene.objects.active.name)
-#        fn = os.path.join(basedir, activename)
-#        file = open(fn + ".txt", 'w')
-
-#        # write selected objects coordinate
-#        for obj in selection:
-#            obj.select = True
-#            x_abs = obj.location[0] + bpy.data.window_managers['WinMan'].crsx
-#            y_abs = obj.location[1] + bpy.data.window_managers['WinMan'].crsy
-#            file.write("%s %s %s %s\n" % (obj.name, x_abs, y_abs, obj.location[2]))
-#        file.close()
-#        return {'FINISHED'}
-
+def write_some_data(context, filepath, shift, rot, cam, nam):
+    print("running write some data...")
     
+    selection = bpy.context.selected_objects
+    bpy.ops.object.select_all(action='DESELECT')
+#    activename = bpy.path.clean_name(bpy.context.scene.objects.active.name)
+#    fn = os.path.join(basedir, activename)
+
+    f = open(filepath, 'w', encoding='utf-8')
+        
+#    file = open(fn + ".txt", 'w')
+
+    # write selected objects coordinate
+    for obj in selection:
+        obj.select = True
+
+        x_coor = obj.location[0]
+        y_coor = obj.location[1]
+        z_coor = obj.location[2]
+        
+        if rot == True or cam == True:
+            rotation_grad_x = math.degrees(obj.rotation_euler[0])
+            rotation_grad_y = math.degrees(obj.rotation_euler[1])
+            rotation_grad_z = math.degrees(obj.rotation_euler[2])
+
+        if shift == True:
+            shift_x = context.scene.BL_x_shift
+            shift_y = context.scene.BL_y_shift
+            shift_z = context.scene.BL_z_shift
+            x_coor = x_coor+shift_x
+            y_coor = y_coor+shift_y
+            z_coor = z_coor+shift_z
+
+        # Generate UV sphere at x = lon and y = lat (and z = 0 )
+
+        if rot == True:
+            if nam == True:
+                f.write("%s %s %s %s %s %s %s\n" % (obj.name, x_coor, y_coor, z_coor, rotation_grad_x, rotation_grad_y, rotation_grad_z))
+            else:    
+                f.write("%s %s %s %s %s %s\n" % (x_coor, y_coor, z_coor, rotation_grad_x, rotation_grad_y, rotation_grad_z))
+        if cam == True:
+            if obj.type == 'CAMERA':
+                f.write("%s %s %s %s %s %s %s %s\n" % (obj.name, x_coor, y_coor, z_coor, rotation_grad_x, rotation_grad_y, rotation_grad_z, obj.data.lens))        
+        if rot == False and cam == False:
+            if nam == True:
+                f.write("%s %s %s %s\n" % (obj.name, x_coor, y_coor, z_coor))
+            else:
+                f.write("%s %s %s\n" % (x_coor, y_coor, z_coor))
+        
+    f.close()    
+    
+#    f.write("Hello World %s" % use_some_setting)
+#    f.close()
+
+    return {'FINISHED'}
+
+class ExportCoordinates(Operator, ExportHelper):
+    """This appears in the tooltip of the operator and in the generated docs"""
+    bl_idname = "export_test.some_data"  # important since its how bpy.ops.import_test.some_data is constructed
+    bl_label = "Export Coordinate Data"
+
+    # ExportHelper mixin class uses this
+    filename_ext = ".txt"
+
+    filter_glob = StringProperty(
+            default="*.txt",
+            options={'HIDDEN'},
+            maxlen=255,  # Max internal buffer length, longer would be clamped.
+            )
+
+    # List of operator properties, the attributes will be assigned
+    # to the class instance from the operator settings before calling.
+
+    nam = BoolProperty(
+            name="Add names of objects",
+            description="This tool includes name",
+            default=True,
+            )
+
+    rot = BoolProperty(
+            name="Add coordinates of rotation",
+            description="This tool includes name, position and rotation",
+            default=False,
+            )
+
+    cam = BoolProperty(
+            name="Export only cams",
+            description="This tool includes name, position, rotation and focal lenght",
+            default=False,
+            )
+
+    shift = BoolProperty(
+            name="World shift coordinates",
+            description="Shift coordinates using the General Shift Value (GSV)",
+            default=False,
+            )
+
+    def execute(self, context):
+        return write_some_data(context, self.filepath, self.shift, self.rot, self.cam, self.nam)
+
+# Only needed if you want to add into a dynamic menu
+def menu_func_export(self, context):
+    self.layout.operator(ExportCoordinates.bl_idname, text="Text Export Operator")
+
+############## from here operators to export geometry ########################
+
 class OBJECT_OT_ExportObjButton(bpy.types.Operator):
     bl_idname = "export.object"
     bl_label = "Export object"
@@ -208,7 +230,9 @@ class OBJECT_OT_fbxexportbatch(bpy.types.Operator):
             bpy.ops.export_scene.fbx(filepath = fn + ".fbx", filter_glob="*.fbx", version='BIN7400', use_selection=True, global_scale=1.0, axis_forward='-Z', axis_up='Y', bake_space_transform=False, object_types={'MESH'}, use_mesh_modifiers=False, mesh_smooth_type='FACE', use_mesh_edges=False, use_tspace=False, use_armature_deform_only=False, bake_anim=False, bake_anim_use_nla_strips=False, bake_anim_step=1.0, bake_anim_simplify_factor=1.0, use_anim=False, use_anim_action_all=False, use_default_take=False, use_anim_optimize=False, anim_optimize_precision=6.0, path_mode='AUTO', embed_textures=False, batch_mode='OFF', use_batch_own_dir=True, use_metadata=True)
             obj.select = False
         return {'FINISHED'}
+
 #_______________________________________________________________________________________________________________
+
 class OBJECT_OT_osgtexportbatch(bpy.types.Operator):
     bl_idname = "osgt.exportbatch"
     bl_label = "osgt export batch"
@@ -219,19 +243,7 @@ class OBJECT_OT_osgtexportbatch(bpy.types.Operator):
         basedir = os.path.dirname(bpy.data.filepath)
         if not basedir:
             raise Exception("Blend file is not saved")
-
         bpy.ops.osg.export(SELECTED=True)
-
-#        selection = bpy.context.selected_objects
-#        bpy.ops.object.select_all(action='DESELECT')
-#
-#        for obj in selection:
-#            obj.select = True
-#            name = bpy.path.clean_name(obj.name)
-#            fn = os.path.join(basedir, name)
-#            bpy.ops.osg.export(filepath = fn + ".osgt", SELECTED=True)
-#            bpy.ops.osg.export(SELECTED=True)
-#            obj.select = False
         return {'FINISHED'}
 
 
