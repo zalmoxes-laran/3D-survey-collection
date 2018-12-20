@@ -1,4 +1,9 @@
 import bpy
+
+from bpy.types import Panel
+from bpy.types import Operator
+from bpy.types import PropertyGroup
+
 import os
 from bpy_extras.io_utils import ImportHelper
 
@@ -9,32 +14,7 @@ from bpy.props import (BoolProperty,
                        CollectionProperty
                        )
 
-class ToolsPanel4(bpy.types.Panel):
-    bl_space_type = "VIEW_3D"
-    bl_region_type = "TOOLS"
-    bl_context = "objectmode"
-    bl_category = "3DSC"
-    bl_label = "Importers"
-    bl_options = {'DEFAULT_CLOSED'}
-
-    def draw(self, context):
-        layout = self.layout
-        obj = context.object
-#        row = layout.row()        
-#        row.label(text="Shift values:")
-#        row = layout.row()
-#        row.prop(context.scene, 'BL_x_shift', toggle = True)
-#        row = layout.row()  
-#        row.prop(context.scene, 'BL_y_shift', toggle = True)
-#        row = layout.row()  
-#        row.prop(context.scene, 'BL_z_shift', toggle = True)     
-        row = layout.row()
-        self.layout.operator("import_scene.multiple_objs", icon="WORLD_DATA", text='Import multiple objs')
-        row = layout.row()
-        self.layout.operator("import_points.txt", icon="WORLD_DATA", text='Import txt points')
-#        row = layout.row()
-
-class OBJECT_OT_IMPORTPOINTS(bpy.types.Operator):
+class OBJECT_OT_IMPORTPOINTS(Operator):
     """Import points as empty objects from a txt file"""
     bl_idname = "import_points.txt"
     bl_label = "ImportPoints"
@@ -44,8 +24,7 @@ class OBJECT_OT_IMPORTPOINTS(bpy.types.Operator):
         bpy.ops.import_test.some_data('INVOKE_DEFAULT')
         return {'FINISHED'}
 
-
-class ImportMultipleObjs(bpy.types.Operator, ImportHelper):
+class ImportMultipleObjs(Operator, ImportHelper):
     """This appears in the tooltip of the operator and in the generated docs"""
     bl_idname = "import_scene.multiple_objs"
     bl_label = "Import multiple OBJ's"
@@ -60,7 +39,7 @@ class ImportMultipleObjs(bpy.types.Operator, ImportHelper):
             )
 
     # Selected files
-    files = CollectionProperty(type=bpy.types.PropertyGroup)
+    files = CollectionProperty(type=PropertyGroup)
 
     # List of operator properties, the attributes will be assigned
     # to the class instance from the operator settings before calling.
@@ -163,7 +142,8 @@ class ImportMultipleObjs(bpy.types.Operator, ImportHelper):
         else:
             row.prop(self, "groups_as_vgroups_setting")
 
-        row = layout.split(percentage=0.67)
+#        row = layout.split(percentage=0.67)
+        row = layout.split(align)
         row.prop(self, "clamp_size_setting")
         layout.prop(self, "axis_forward_setting")
         layout.prop(self, "axis_up_setting")
@@ -191,7 +171,7 @@ class ImportMultipleObjs(bpy.types.Operator, ImportHelper):
                                 use_split_groups = self.split_groups_setting,
                                 use_groups_as_vgroups = self.groups_as_vgroups_setting,
                                 use_image_search = self.image_search_setting,
-                                split_mode = self.split_mode_setting,
-                                global_clamp_size = self.clamp_size_setting)
+                                split_mode = self.split_mode_setting)#,
+#                                global_clamp_size = self.clamp_size_setting)
 
         return {'FINISHED'}

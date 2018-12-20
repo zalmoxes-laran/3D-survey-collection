@@ -1,67 +1,73 @@
-'''
-Copyright (C) 2018 EMANUEL DEMETRESCU
-emanuel.demetrescu@gmail.com
+#'''
+# CC-BY-NC 2018 EMANUEL DEMETRESCU
+# emanuel.demetrescu@gmail.com
 
-Created by EMANUEL DEMETRESCU
+#Created by EMANUEL DEMETRESCU
 
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
 
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
 
-    You should have received a copy of the GNU General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-'''
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#'''
 
 bl_info = {
     "name": "3D Survey Collection",
-    "author": "E. Demetrescu",
+    "author": "Emanuel Demetrescu",
     "version": (1,4.0),
-    "blender": (2, 8, 0),
-    "location": "Tool Shelf panel",
+    "blender": (2, 80, 0),
+    "location": "3D View > Toolbox",
     "description": "A collection of tools for 3D Survey activities",
-    "warning": "",
+#    "warning": "",
     "wiki_url": "",
-    "tracker_url": "",
-    "category": "Tools"}
+#    "tracker_url": "",
+    "category": "Tools",
+    }
 
 
-import bpy
+if "bpy" in locals():
+    import importlib
+    importlib.reload(import_3DSC)
+#    importlib.reload(functions)
+#    importlib.reload(mesh_helpers)
+else:
+    import math
+    import bpy
+    from bpy.props import (
+            StringProperty,
+            BoolProperty,
+            FloatProperty,
+            EnumProperty,
+            PointerProperty,
+            CollectionProperty,
+            )
+    from bpy.types import (
+            AddonPreferences,
+            PropertyGroup,
+            )
 
-
-# load and reload submodules
-##################################
-
-import importlib
-from . import developer_utils
-importlib.reload(developer_utils)
-modules = developer_utils.setup_addon_modules(__path__, __name__, "bpy" in locals())
-
-from bpy.props import (BoolProperty,
-                       FloatProperty,
-                       StringProperty,
-                       EnumProperty,
-                       CollectionProperty
-                       )
+    from . import (
+            UI,
+            import_3DSC,
+            i_points_txt,
+            #functions,
+            )
 
 # register
 ##################################
 
-import traceback
+#import traceback
 
 
-#def register():
-#    bpy.utils.register_class(InterfaceVars)
-#    bpy.types.WindowManager.interface_vars = bpy.props.PointerProperty(type=InterfaceVars)
-
-
-class InterfaceVars(bpy.types.PropertyGroup):
-    cc_nodes = bpy.props.EnumProperty(
+class InterfaceVars(PropertyGroup):
+    cc_nodes = EnumProperty(
         items=[
             ('RGB', 'RGB', 'RGB Curve', '', 0),
             ('BC', 'BC', 'Bright/Contrast', '', 1),
@@ -70,11 +76,18 @@ class InterfaceVars(bpy.types.PropertyGroup):
         default='RGB'
     )
 
-def register():
-    try: bpy.utils.register_module(__name__)
-    except: traceback.print_exc()
 
-    print("Registered {} with {} modules".format(bl_info["name"], len(modules)))
+classes = (
+    UI.VIEW3D_PT_Import_ToolBar,
+    import_3DSC.ImportMultipleObjs,
+    import_3DSC.OBJECT_OT_IMPORTPOINTS,
+    i_points_txt.ImportCoorPoints,
+    InterfaceVars,
+)
+
+def register():
+    for cls in classes:
+        bpy.utils.register_class(cls)
 
 #    bpy.utils.register_class(InterfaceVars)
     bpy.types.WindowManager.interface_vars = bpy.props.PointerProperty(type=InterfaceVars)
@@ -85,7 +98,7 @@ def register():
       description = "Define the root path of the undistorted images",
       subtype = 'DIR_PATH'
       )
-      
+
     bpy.types.Scene.BL_x_shift = FloatProperty(
       name = "X shift",
       default = 0.0,
@@ -105,11 +118,5 @@ def register():
       )
 
 def unregister():
-    try: bpy.utils.unregister_module(__name__)
-    except: traceback.print_exc()
-
-    print("Unregistered {}".format(bl_info["name"]))
-
-
-if __name__ == "__main__":
-	register()
+    for cls in classes:
+        bpy.utils.unregister_class(cls)
