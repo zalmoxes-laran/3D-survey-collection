@@ -69,9 +69,6 @@ else:
 # register
 ##################################
 
-#import traceback
-
-
 class InterfaceVars(PropertyGroup):
     cc_nodes = EnumProperty(
         items=[
@@ -82,16 +79,15 @@ class InterfaceVars(PropertyGroup):
         default='RGB'
     )
 
-
 classes = (
     UI.VIEW3D_PT_Shift_ToolBar,
     UI.VIEW3D_PT_Import_ToolBar,
     UI.VIEW3D_PT_Export_ToolBar,
-    UI.VIEW3D_PT_QuickUtils_ToolBar,
-    UI.VIEW3D_PT_LODgenerator,
-    UI.VIEW3D_PT_ccTool,
-    UI.VIEW3D_PT_PhotogrTool,
-    UI.VIEW3D_PT_TexPatcher,
+   UI.VIEW3D_PT_QuickUtils_ToolBar,
+   UI.VIEW3D_PT_LODgenerator,
+   UI.VIEW3D_PT_ccTool,
+   UI.VIEW3D_PT_PhotogrTool,
+   UI.VIEW3D_PT_TexPatcher,
     import_3DSC.ImportMultipleObjs,
     import_3DSC.OBJECT_OT_IMPORTPOINTS,
     import_3DSC.ImportCoorPoints,
@@ -134,29 +130,25 @@ classes = (
     PhotogrTool.OBJECT_OT_Canon6D24,
     PhotogrTool.OBJECT_OT_Canon6D35,
     PhotogrTool.OBJECT_OT_Canon6Dscene,
-    PhotogrTool.OBJECT_OT_createcyclesmat,
     PhotogrTool.OBJECT_OT_IsometricScene,
     PhotogrTool.OBJECT_OT_nikond320018mm,
     PhotogrTool.OBJECT_OT_nikond3200scene,
     PhotogrTool.OBJECT_OT_NoBetterCameras,
     PhotogrTool.OBJECT_OT_paintcam,
-    PhotogrTool.OBJECT_OT_savepaintcam,
     TexPatcher.OBJECT_OT_applyoritexset,
     TexPatcher.OBJECT_OT_applysptexset,
-    TexPatcher.OBJECT_OT_createcyclesmat,
     TexPatcher.OBJECT_OT_exitsetup,
     TexPatcher.OBJECT_OT_paintsetup,
     TexPatcher.OBJECT_OT_removepaintsetup,
     TexPatcher.OBJECT_OT_textransfer,
-    TexPatcher.OBJECT_OT_savepaintcam,
-    InterfaceVars,
+    InterfaceVars
 )
+
 
 def register():
     for cls in classes:
         bpy.utils.register_class(cls)
-
-#    bpy.utils.register_class(InterfaceVars)
+    
     bpy.types.WindowManager.interface_vars = bpy.props.PointerProperty(type=InterfaceVars)
 
     bpy.types.Scene.BL_undistorted_path = StringProperty(
@@ -165,7 +157,7 @@ def register():
       description = "Define the root path of the undistorted images",
       subtype = 'DIR_PATH'
       )
-
+      
     bpy.types.Scene.BL_x_shift = FloatProperty(
       name = "X shift",
       default = 0.0,
