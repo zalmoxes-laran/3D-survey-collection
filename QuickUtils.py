@@ -321,8 +321,8 @@ class OBJECT_OT_createpersonalgroups(bpy.types.Operator):
     def execute(self, context):
         for ob in bpy.context.selected_objects:
             bpy.ops.object.select_all(action='DESELECT')
-            ob.select = True
-            bpy.context.scene.objects.active = ob
+            ob.select_set(True)
+            bpy.context.view_layer.objects.active = ob
             make_group(ob,context)
         return {'FINISHED'}
 

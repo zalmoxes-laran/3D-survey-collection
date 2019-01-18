@@ -110,8 +110,10 @@ class ToolsPanelQuickUtils:
         row = layout.row()
         self.layout.operator("local.texture", icon="TEXTURE", text='Local texture mode ON')
         row = layout.row()
-        self.layout.operator("light.off", icon="LAMP_DATA", text='Deactivate lights')
-        row = layout.row()
+
+#   Here I need to remove this feature since it is no more usefull
+#        self.layout.operator("light.off", icon="LIGHT", text='Deactivate lights')
+#        row = layout.row()
         self.layout.operator("create.personalgroups", icon="GROUP", text='Create per-object groups')
         row = layout.row()
         self.layout.operator("remove.alluvexcept1", icon="GROUP", text='Only UV0 will survive')
@@ -122,10 +124,6 @@ class ToolsPanelQuickUtils:
         row = layout.row()
         self.layout.operator("lod0poly.reducer", icon="IMGDISPLAY", text='LOD0 mesh decimator')
         row = layout.row()
-        
-        self.layout.operator("quality.check", icon="META_DATA", text='Quality check')
-        row = layout.row()
-
         self.layout.operator("project.segmentation", icon="SCULPTMODE_HLT", text='Mono-cutter')
         row = layout.row()
         self.layout.operator("project.segmentationinv", icon="SCULPTMODE_HLT", text='Multi-cutter')
@@ -141,9 +139,8 @@ class ToolsPanelQuickUtils:
         row.label(text="Switch engine")
         self.layout.operator("activatenode.material", icon="PMARKER_SEL", text='Activate cycles nodes')
         self.layout.operator("deactivatenode.material", icon="PMARKER", text='De-activate cycles nodes')
-        self.layout.operator("bi2cycles.material", icon="SMOOTH", text='Create cycles nodes')
+        self.layout.operator("bi2cycles.material", icon="PARTICLES", text='Create cycles nodes')
         self.layout.operator("cycles2bi.material", icon="PMARKER", text='Cycles to BI')
-
 
 class ToolsPanelLODgenerator:
     bl_label = "LOD generator"
@@ -167,7 +164,7 @@ class ToolsPanelLODgenerator:
         row.label(text="Start always selecting LOD0 objs")
         self.layout.operator("lod1.b2osg", icon="MESH_ICOSPHERE", text='LOD 1 (creation)')
         self.layout.operator("lod2.b2osg", icon="MESH_CUBE", text='LOD 2 (creation)')
-        self.layout.operator("bake.b2osg", icon="RADIO", text='just bake')
+#        self.layout.operator("bake.b2osg", icon="QUESTION", text='just bake')
         
         row = layout.row()
         if obj:
@@ -175,7 +172,7 @@ class ToolsPanelLODgenerator:
             row = layout.row()
             row.label(text= "LOD1/LOD2_"+ obj.name + ".obj" )
             row = layout.row()
-        self.layout.operator("create.grouplod", icon="OOPS", text='Create LOD cluster(s)')
+        self.layout.operator("create.grouplod", icon="QUESTION", text='Create LOD cluster(s)')
         row = layout.row()
         self.layout.operator("remove.grouplod", icon="CANCEL", text='Remove LOD cluster(s)')
         row = layout.row()
