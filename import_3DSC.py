@@ -174,7 +174,7 @@ class ImportMultipleObjs(Operator, ImportHelper):
             )
 
     # Selected files
-    files = CollectionProperty(type=PropertyGroup)
+    files: CollectionProperty(type=PropertyGroup)
 
     # List of operator properties, the attributes will be assigned
     # to the class instance from the operator settings before calling.
@@ -293,11 +293,9 @@ class ImportMultipleObjs(Operator, ImportHelper):
         # iterate through the selected files
         for i in self.files:
         
-            # generate full path to file
             print(i)
             path_to_file = (os.path.join(folder, i.name))
 
-            # call obj operator and assign ui values
             bpy.ops.import_scene.obj(filepath = path_to_file,
                                 axis_forward = self.axis_forward_setting,
                                 axis_up = self.axis_up_setting,
@@ -308,6 +306,5 @@ class ImportMultipleObjs(Operator, ImportHelper):
                                 use_groups_as_vgroups = self.groups_as_vgroups_setting,
                                 use_image_search = self.image_search_setting,
                                 split_mode = self.split_mode_setting)#,
-#                                global_clamp_size = self.clamp_size_setting)
 
         return {'FINISHED'}
