@@ -30,31 +30,31 @@ class OBJECT_OT_LOD0(bpy.types.Operator):
         selected_objs = bpy.context.selected_objects
         for obj in bpy.context.selected_objects:
             bpy.ops.object.select_all(action='DESELECT')
-            obj.select = True
-            bpy.context.scene.objects.active = obj
+            obj.select_set(True)
+            bpy.context.view_layer.objects.active = obj
             bpy.ops.object.shade_smooth()
             baseobj = obj.name
             if not baseobj.endswith('LOD0'):
                 obj.name = baseobj + '_LOD0'
             if len(obj.data.uv_layers) > 1:
-                if obj.data.uv_textures[0].name =='MultiTex' and obj.data.uv_textures[1].name =='Atlas':
+                if obj.data.uv_layers[0].name =='MultiTex' and obj.data.uv_layers[1].name =='Atlas':
                     pass
             else:
                 mesh = obj.data
-                mesh.uv_textures.active_index = 0
-                multitex_uvmap = mesh.uv_textures.active
+                mesh.uv_layers.active_index = 0
+                multitex_uvmap = mesh.uv_layers.active
                 multitex_uvmap_name = multitex_uvmap.name
                 multitex_uvmap.name = 'MultiTex'
-                atlas_uvmap = mesh.uv_textures.new()
+                atlas_uvmap = mesh.uv_layers.new()
                 atlas_uvmap.name = 'Atlas'
-                mesh.uv_textures.active_index = 1
+                mesh.uv_layers.active_index = 1
                 bpy.ops.object.editmode_toggle()
                 bpy.ops.mesh.select_all(action='SELECT')
                 bpy.ops.mesh.remove_doubles()
                 bpy.ops.uv.select_all(action='SELECT')
                 bpy.ops.uv.pack_islands(margin=0.001)
                 bpy.ops.object.editmode_toggle()
-                mesh.uv_textures.active_index = 0
+                mesh.uv_layers.active_index = 0
 
         return {'FINISHED'}
 
@@ -84,13 +84,13 @@ class OBJECT_OT_BAKE(bpy.types.Operator):
         print('>>>>>> '+str(ob_tot)+' objects will be processed')
 
         for obj in bpy.context.selected_objects:
-            obj.data.uv_textures["MultiTex"].active_render = True
+            obj.data.uv_layers["MultiTex"].active_render = True
             start_time_ob = time.time()
             print('>>> BAKE >>>')
             print('>>>>>> processing the object ""'+ obj.name+'"" ('+str(ob_counter)+'/'+str(ob_tot)+')')
             bpy.ops.object.select_all(action='DESELECT')
-            obj.select = True
-            bpy.context.scene.objects.active = obj
+            obj.select_set(True)
+            bpy.context.view_layer.objects.active = obj
             baseobjwithlod = obj.name
             if '_LOD0' in baseobjwithlod:
                 baseobj = baseobjwithlod.replace("_LOD0", "")
@@ -107,11 +107,11 @@ class OBJECT_OT_BAKE(bpy.types.Operator):
             for i in range(0,len(bpy.data.objects[lod1name].material_slots)):
                 bpy.ops.object.material_slot_remove()
 
-            if obj.data.uv_textures[1] and obj.data.uv_textures[1].name =='Atlas':
+            if obj.data.uv_layers[1] and obj.data.uv_layers[1].name =='Atlas':
                 print('Found Atlas UV mapping layer. I will use it.')
-                uv_textures = obj.data.uv_textures
-                uv_textures = obj.data.uv_textures
-                uv_textures.remove(uv_textures[0])
+                uv_layers = obj.data.uv_layers
+                uv_layers = obj.data.uv_layers
+                uv_layers.remove(uv_layers[0])
             else:
                 print('Creating new UV mapping layer.')
                 bpy.ops.object.editmode_toggle()
@@ -139,7 +139,7 @@ class OBJECT_OT_BAKE(bpy.types.Operator):
             tempimage.filepath_raw = "//"+subfolder+'/'+lod1name+".jpg"
             tempimage.file_format = 'JPEG'
 
-            for uv_face in oggetto.data.uv_textures.active.data:
+            for uv_face in oggetto.data.uv_layers.active.data:
                 uv_face.image = tempimage
 
             #--------------------------------------------------------------
@@ -214,13 +214,13 @@ class OBJECT_OT_LOD1(bpy.types.Operator):
         print('>>>>>> '+str(ob_tot)+' objects will be processed')
 
         for obj in bpy.context.selected_objects:
-            obj.data.uv_textures["MultiTex"].active_render = True
+            obj.data.uv_layers["MultiTex"].active_render = True
             start_time_ob = time.time()
             print('>>> LOD 1 >>>')
             print('>>>>>> processing the object ""'+ obj.name+'"" ('+str(ob_counter)+'/'+str(ob_tot)+')')
             bpy.ops.object.select_all(action='DESELECT')
-            obj.select = True
-            bpy.context.scene.objects.active = obj
+            obj.select_set(True)
+            bpy.context.view_layer.objects.active = obj
             baseobjwithlod = obj.name
             if '_LOD0' in baseobjwithlod:
                 baseobj = baseobjwithlod.replace("_LOD0", "")
@@ -237,11 +237,11 @@ class OBJECT_OT_LOD1(bpy.types.Operator):
             for i in range(0,len(bpy.data.objects[lod1name].material_slots)):
                 bpy.ops.object.material_slot_remove()
 
-            if obj.data.uv_textures[1] and obj.data.uv_textures[1].name =='Atlas':
+            if obj.data.uv_layers[1] and obj.data.uv_layers[1].name =='Atlas':
                 print('Found Atlas UV mapping layer. I will use it.')
-                uv_textures = obj.data.uv_textures
-                uv_textures = obj.data.uv_textures
-                uv_textures.remove(uv_textures[0])
+                uv_layers = obj.data.uv_layers
+                uv_layers = obj.data.uv_layers
+                uv_layers.remove(uv_layers[0])
             else:
                 print('Creating new UV mapping layer.')
                 bpy.ops.object.editmode_toggle()
@@ -269,7 +269,7 @@ class OBJECT_OT_LOD1(bpy.types.Operator):
             tempimage.filepath_raw = "//"+subfolder+'/'+lod1name+".jpg"
             tempimage.file_format = 'JPEG'
 
-            for uv_face in oggetto.data.uv_textures.active.data:
+            for uv_face in oggetto.data.uv_layers.active.data:
                 uv_face.image = tempimage
 
             #--------------------------------------------------------------
@@ -339,14 +339,14 @@ class OBJECT_OT_LOD2(bpy.types.Operator):
         print('>>>>>> '+str(ob_tot)+' objects will be processed')
 
         for obj in bpy.context.selected_objects:
-            obj.data.uv_textures["MultiTex"].active_render = True
+            obj.data.uv_layers["MultiTex"].active_render = True
             print('>>> LOD 2 >>>')
             print('>>>>>> processing the object ""'+ obj.name+'"" ('+str(ob_counter)+'/'+str(ob_tot)+')')
             start_time_ob = time.time()
 
             bpy.ops.object.select_all(action='DESELECT')
-            obj.select = True
-            bpy.context.scene.objects.active = obj
+            obj.select_set(True)
+            bpy.context.view_layer.objects.active = obj
             baseobjwithlod = obj.name
             if '_LOD0' in baseobjwithlod:
                 baseobj = baseobjwithlod.replace("_LOD0", "")
@@ -365,10 +365,10 @@ class OBJECT_OT_LOD2(bpy.types.Operator):
                 bpy.ops.object.material_slot_remove()
 
 # se abbiamo precedente atlas, inutile rifarlo
-            if obj.data.uv_textures[1] and obj.data.uv_textures[1].name =='Atlas':
+            if obj.data.uv_layers[1] and obj.data.uv_layers[1].name =='Atlas':
                 print('Found Atlas UV mapping layer. I will use it.')
-                uv_textures = obj.data.uv_textures
-                uv_textures.remove(uv_textures[0])
+                uv_layers = obj.data.uv_layers
+                uv_layers.remove(uv_layers[0])
 
             else:
                 print('Creating new UV mapping layer.')
@@ -404,7 +404,7 @@ class OBJECT_OT_LOD2(bpy.types.Operator):
             tempimage.filepath_raw = "//"+subfolder+'/'+lod2name+".jpg"
             tempimage.file_format = 'JPEG'
 
-            for uv_face in oggetto.data.uv_textures.active.data:
+            for uv_face in oggetto.data.uv_layers.active.data:
                 uv_face.image = tempimage
 
             #--------------------------------------------------------------
@@ -471,16 +471,16 @@ class OBJECT_OT_ExportGroupsLOD(bpy.types.Operator):
                 if obj.get('fbx_type') is not None:
                     print('Found LOD cluster to export: "'+obj.name+'", object')
                     bpy.ops.object.select_all(action='DESELECT')
-                    obj.select = True
-                    bpy.context.scene.objects.active = obj
+                    obj.select_set(True)
+                    bpy.context.view_layer.objects.active = obj
                     for ob in getChildren(obj):
-                        ob.select = True
+                        ob.select_set(True)
                     name = bpy.path.clean_name(obj.name)
                     fn = os.path.join(basedir, name)
                     bpy.ops.export_scene.fbx(filepath= fn + ".fbx", check_existing=True, axis_forward='-Z', axis_up='Y', filter_glob="*.fbx", version='BIN7400', ui_tab='MAIN', use_selection=True, global_scale=1.0, apply_unit_scale=True, bake_space_transform=False, object_types={'ARMATURE', 'CAMERA', 'EMPTY', 'LAMP', 'MESH', 'OTHER'}, use_mesh_modifiers=True, mesh_smooth_type='EDGE', use_mesh_edges=False, use_tspace=False, use_custom_props=False, add_leaf_bones=True, primary_bone_axis='Y', secondary_bone_axis='X', use_armature_deform_only=False, bake_anim=True, bake_anim_use_all_bones=True, bake_anim_use_nla_strips=True, bake_anim_use_all_actions=True, bake_anim_force_startend_keying=True, bake_anim_step=1.0, bake_anim_simplify_factor=1.0, use_anim=True, use_anim_action_all=True, use_default_take=True, use_anim_optimize=True, anim_optimize_precision=6.0, path_mode='RELATIVE', embed_textures=False, batch_mode='OFF', use_batch_own_dir=True, use_metadata=True)
                 else:
                     print('The "' + obj.name + '" empty object has not the correct settings to export an FBX - LOD enabled file. I will skip it.')
-                    obj.select = False
+                    obj.select_set(False)
                     print('>>> Object number '+str(ob_counter)+' processed in '+str(time.time() - start_time)+' seconds')
                     ob_counter += 1
 
@@ -504,14 +504,14 @@ class OBJECT_OT_RemoveGroupsLOD(bpy.types.Operator):
         bpy.ops.object.select_all(action='DESELECT')
         for obj in listobjects:
             if obj.get('fbx_type') is not None:
-                obj.select = True
-                bpy.context.scene.objects.active = obj
+                obj.select_set(True)
+                bpy.context.view_layer.objects.active = obj
                 for ob in getChildren(obj):
-                    ob.select = True
+                    ob.select_set(True)
                 bpy.ops.object.parent_clear(type='CLEAR_KEEP_TRANSFORM')
                 bpy.ops.object.select_all(action='DESELECT')
-                obj.select = True
-                bpy.context.scene.objects.active = obj
+                obj.select_set(True)
+                bpy.context.view_layer.objects.active = obj
                 bpy.ops.object.delete()
         return {'FINISHED'}
 
@@ -527,8 +527,8 @@ class OBJECT_OT_CreateGroupsLOD(bpy.types.Operator):
         listobjects = bpy.context.selected_objects
         for obj in listobjects:
             bpy.ops.object.select_all(action='DESELECT')
-            obj.select = True
-            bpy.context.scene.objects.active = obj
+            obj.select_set(True)
+            bpy.context.view_layer.objects.active = obj
             baseobjwithlod = obj.name
 
             if '_LOD0' in baseobjwithlod:

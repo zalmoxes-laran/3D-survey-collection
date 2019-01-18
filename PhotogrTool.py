@@ -219,7 +219,7 @@ class CreateCameraImagePlane(bpy.types.Operator):
             if not undistortedpath:
                 raise Exception("Hey Buddy, you have to set the undistorted images path !")
 
-            bpy.context.object.data.uv_textures.active.data[0].image = bpy.data.images.load(undistortedpath+cameraname)
+            bpy.context.object.data.uv_layers.active.data[0].image = bpy.data.images.load(undistortedpath+cameraname)
 
             bpy.ops.view3d.tex_to_material()
 
@@ -245,7 +245,7 @@ class CreateCameraImagePlane(bpy.types.Operator):
                     obj_exists = True
                     bpy.ops.object.select_all(action='DESELECT')
                     scene.objects.active = obj
-                    obj.select = True
+                    obj.select_set(True)
                     return {'FINISHED'}
             if obj_exists is False:
                 camera = bpy.context.scene.camera

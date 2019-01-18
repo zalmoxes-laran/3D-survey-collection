@@ -334,9 +334,9 @@ class OBJECT_OT_removealluvexcept1(bpy.types.Operator):
 
     def execute(self, context):
         for ob in bpy.context.selected_objects:
-            if ob.data.uv_textures[1]:
-                uv_textures = ob.data.uv_textures
-                uv_textures.remove(uv_textures[1])
+            if ob.data.uv_layers[1]:
+                uv_layers = ob.data.uv_layers
+                uv_layers.remove(uv_layers[1])
         return {'FINISHED'}
 
 class OBJECT_OT_removefromallgroups(bpy.types.Operator):

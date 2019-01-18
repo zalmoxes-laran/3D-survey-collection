@@ -55,7 +55,7 @@ def get_cc_node_in_obj_mat(nodegroupname,type):
 
 
 def set_up_lens(obj,sens_width,sens_lenght,lens):
-    obj.select = True
+    obj.select_set(True)
     obj.data.lens = lens
     obj.data.sensor_fit = 'HORIZONTAL'
     obj.data.sensor_width = sens_width
@@ -137,8 +137,8 @@ def tex_to_mat():
         unique_images = []
 
         # get the texface images and store indices
-        if (ob.data.uv_textures):
-            for f in ob.data.uv_textures.active.data:
+        if (ob.data.uv_layers):
+            for f in ob.data.uv_layers.active.data:
                 if f.image:
                     img = f.image
                     #build list of unique images
@@ -212,7 +212,7 @@ def decimate_mesh(context,obj,ratio,lod):
     selected_obs = context.selected_objects
     bpy.ops.object.select_all(action='DESELECT')
     D = bpy.data
-    obj.select = True
+    obj.select_set(True)
     context.scene.objects.active = obj
     bpy.ops.object.editmode_toggle()
     print('Decimating the original mesh to obtain the '+lod+' mesh...')
@@ -584,7 +584,7 @@ def newimage2selpoly(ob, nametex):
     tempimage = bpy.data.images.new(name=nametex, width=4096, height=4096, alpha=False)
     tempimage.filepath_raw = "//T_"+nametex+".png"
     tempimage.file_format = 'PNG'
-    for uv_face in me.uv_textures.active.data:
+    for uv_face in me.uv_layers.active.data:
         uv_face.image = tempimage
     return
 

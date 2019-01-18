@@ -152,16 +152,16 @@ class ToolsPanelLODgenerator:
         layout = self.layout
         obj = context.object
         row = layout.row()
-        if obj:
-            row.label(text="Override name:")
-            row = layout.row()
-            row.prop(obj, "name", text='')
-            row = layout.row()
-        row.label(text="Actions on selected objects:")
-        row = layout.row()
+#        if obj:
+#            row.label(text="Override name:")
+#            row = layout.row()
+#            row.prop(obj, "name", text='')
+#            row = layout.row()
+#        row.label(text="on selected:")
+#        row = layout.row()
         self.layout.operator("lod0.b2osg", icon="MESH_UVSPHERE", text='LOD 0 (set as)')
         row = layout.row()
-        row.label(text="Start always selecting LOD0 objs")
+        row.label(text="Select LOD0 objs")
         self.layout.operator("lod1.b2osg", icon="MESH_ICOSPHERE", text='LOD 1 (creation)')
         self.layout.operator("lod2.b2osg", icon="MESH_CUBE", text='LOD 2 (creation)')
 #        self.layout.operator("bake.b2osg", icon="QUESTION", text='just bake')
