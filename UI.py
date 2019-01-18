@@ -57,8 +57,8 @@ class ToolsPanelExport:
             row = layout.row()
             self.layout.operator("fbx.exp", icon="OBJECT_DATA", text='Exp. fbx UE4')
             row = layout.row()
-            self.layout.operator("osgt.exportbatch", icon="OBJECT_DATA", text='Exp. several osgt files')
-            row = layout.row()
+#            self.layout.operator("osgt.exportbatch", icon="OBJECT_DATA", text='Exp. several osgt files')
+#            row = layout.row()
 #            if is_windows():
 #                row = layout.row()
 #                row.label(text="We are under Windows..")
@@ -80,17 +80,17 @@ class ToolsPanelSHIFT:
         row = layout.row()        
         row.label(text="Shift values:")
         row = layout.row()
-        row.prop(context.scene, 'SRID', toggle = True)
-        row = layout.row() 
+#        row.prop(context.scene, 'SRID', toggle = True)
+#        row = layout.row() 
         row.prop(context.scene, 'BL_x_shift', toggle = True)
         row = layout.row()  
         row.prop(context.scene, 'BL_y_shift', toggle = True)
         row = layout.row()  
         row.prop(context.scene, 'BL_z_shift', toggle = True)    
         row = layout.row()
-        if scene['crs x'] is not None and scene['crs y'] is not None:
-            if scene['crs x'] > 0 or scene['crs y'] > 0:
-                self.layout.operator("shift_from.blendergis", icon="PASTEDOWN", text='from Bender GIS')
+#        if scene['crs x'] is not None and scene['crs y'] is not None:
+#            if scene['crs x'] > 0 or scene['crs y'] > 0:
+#                self.layout.operator("shift_from.blendergis", icon="PASTEDOWN", text='from Bender GIS')
 
 
 class ToolsPanelQuickUtils:

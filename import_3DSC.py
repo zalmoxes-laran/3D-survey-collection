@@ -1,10 +1,10 @@
 import bpy
+import os
 
 from bpy.types import Panel
 from bpy.types import Operator
 from bpy.types import PropertyGroup
 
-import os
 from bpy_extras.io_utils import ImportHelper
 
 from bpy.props import (BoolProperty,
@@ -60,14 +60,6 @@ def read_point_data(context, filepath, shift, name_col, x_col, y_col, z_col, sep
 
     return {'FINISHED'}
 
-
-# ImportHelper is a helper class, defines filename and
-# invoke() function which calls the file selector.
-from bpy_extras.io_utils import ImportHelper
-from bpy.props import StringProperty, BoolProperty, EnumProperty
-from bpy.types import Operator
-
-
 class ImportCoorPoints(Operator, ImportHelper):
     """Tool to import coordinate points from a txt file"""
     bl_idname = "import_test.some_data"  # important since its how bpy.ops.import_test.some_data is constructed
@@ -76,7 +68,7 @@ class ImportCoorPoints(Operator, ImportHelper):
     # ImportHelper mixin class uses this
     filename_ext = ".txt"
 
-    filter_glob = StringProperty(
+    filter_glob: StringProperty(
             default="*.txt",
             options={'HIDDEN'},
             maxlen=255,  # Max internal buffer length, longer would be clamped.
@@ -84,13 +76,13 @@ class ImportCoorPoints(Operator, ImportHelper):
 
     # List of operator properties, the attributes will be assigned
     # to the class instance from the operator settings before calling.
-    shift = BoolProperty(
+    shift: BoolProperty(
             name="Shift coordinates",
             description="Shift coordinates using the General Shift Value (GSV)",
             default=False,
             )
 
-    col_name = EnumProperty(
+    col_name: EnumProperty(
             name="Name",
             description="Column with the name",
             items=(('0', "Column 1", "Column 1"),
@@ -100,7 +92,7 @@ class ImportCoorPoints(Operator, ImportHelper):
             default='0',
             )
   
-    col_x = EnumProperty(
+    col_x: EnumProperty(
             name="X",
             description="Column with coordinate X",
             items=(('0', "Column 1", "Column 1"),
@@ -110,7 +102,7 @@ class ImportCoorPoints(Operator, ImportHelper):
             default='1',
             ) 
 
-    col_y = EnumProperty(
+    col_y: EnumProperty(
             name="Y",
             description="Column with coordinate X",
             items=(('0', "Column 1", "Column 1"),
@@ -120,7 +112,7 @@ class ImportCoorPoints(Operator, ImportHelper):
             default='2',
             )
 
-    col_z = EnumProperty(
+    col_z: EnumProperty(
             name="Z",
             description="Column with coordinate X",
             items=(('0', "Column 1", "Column 1"),
@@ -130,7 +122,7 @@ class ImportCoorPoints(Operator, ImportHelper):
             default='3',
             )     
 
-    separator = EnumProperty(
+    separator: EnumProperty(
             name="separator",
             description="Separator type",
             items=((',', "comma", "comma"),
@@ -176,7 +168,7 @@ class ImportMultipleObjs(Operator, ImportHelper):
     # ImportHelper mixin class uses this
     filename_ext = ".obj"
 
-    filter_glob = StringProperty(
+    filter_glob: StringProperty(
             default="*.obj",
             options={'HIDDEN'},
             )
@@ -186,61 +178,61 @@ class ImportMultipleObjs(Operator, ImportHelper):
 
     # List of operator properties, the attributes will be assigned
     # to the class instance from the operator settings before calling.
-    ngons_setting = BoolProperty(
+    ngons_setting: BoolProperty(
             name="NGons",
             description="Import faces with more than 4 verts as ngons",
             default=True,
             )
-    edges_setting = BoolProperty(
+    edges_setting: BoolProperty(
             name="Lines",
             description="Import lines and faces with 2 verts as edge",
             default=True,
             )
-    smooth_groups_setting = BoolProperty(
+    smooth_groups_setting: BoolProperty(
             name="Smooth Groups",
             description="Surround smooth groups by sharp edges",
             default=True,
             )
 
-    split_objects_setting = BoolProperty(
+    split_objects_setting: BoolProperty(
             name="Object",
             description="Import OBJ Objects into Blender Objects",
             default=True,
             )
-    split_groups_setting = BoolProperty(
+    split_groups_setting: BoolProperty(
             name="Group",
             description="Import OBJ Groups into Blender Objects",
             default=True,
             )
 
-    groups_as_vgroups_setting = BoolProperty(
+    groups_as_vgroups_setting: BoolProperty(
             name="Poly Groups",
             description="Import OBJ groups as vertex groups",
             default=False,
             )
 
-    image_search_setting = BoolProperty(
+    image_search_setting: BoolProperty(
             name="Image Search",
             description="Search subdirs for any associated images "
                         "(Warning, may be slow)",
             default=True,
             )
 
-    split_mode_setting = EnumProperty(
+    split_mode_setting: EnumProperty(
             name="Split",
             items=(('ON', "Split", "Split geometry, omits unused verts"),
                    ('OFF', "Keep Vert Order", "Keep vertex order from file"),
                    ),
             )
 
-    clamp_size_setting = FloatProperty(
+    clamp_size_setting: FloatProperty(
             name="Clamp Size",
             description="Clamp bounds under this value (zero to disable)",
             min=0.0, max=1000.0,
             soft_min=0.0, soft_max=1000.0,
             default=0.0,
             )
-    axis_forward_setting = EnumProperty(
+    axis_forward_setting: EnumProperty(
             name="Forward",
             items=(('X', "X Forward", ""),
                    ('Y', "Y Forward", ""),
@@ -252,7 +244,7 @@ class ImportMultipleObjs(Operator, ImportHelper):
             default='Y',
             )
 
-    axis_up_setting = EnumProperty(
+    axis_up_setting: EnumProperty(
             name="Up",
             items=(('X', "X Up", ""),
                    ('Y', "Y Up", ""),
@@ -300,8 +292,9 @@ class ImportMultipleObjs(Operator, ImportHelper):
 
         # iterate through the selected files
         for i in self.files:
-
+        
             # generate full path to file
+            print(i)
             path_to_file = (os.path.join(folder, i.name))
 
             # call obj operator and assign ui values

@@ -70,7 +70,7 @@ else:
 ##################################
 
 class InterfaceVars(PropertyGroup):
-    cc_nodes = EnumProperty(
+    cc_nodes: EnumProperty(
         items=[
             ('RGB', 'RGB', 'RGB Curve', '', 0),
             ('BC', 'BC', 'Bright/Contrast', '', 1),
@@ -83,11 +83,11 @@ classes = (
     UI.VIEW3D_PT_Shift_ToolBar,
     UI.VIEW3D_PT_Import_ToolBar,
     UI.VIEW3D_PT_Export_ToolBar,
-   UI.VIEW3D_PT_QuickUtils_ToolBar,
-   UI.VIEW3D_PT_LODgenerator,
-   UI.VIEW3D_PT_ccTool,
-   UI.VIEW3D_PT_PhotogrTool,
-   UI.VIEW3D_PT_TexPatcher,
+    UI.VIEW3D_PT_QuickUtils_ToolBar,
+    UI.VIEW3D_PT_LODgenerator,
+    UI.VIEW3D_PT_ccTool,
+    UI.VIEW3D_PT_PhotogrTool,
+    UI.VIEW3D_PT_TexPatcher,
     import_3DSC.ImportMultipleObjs,
     import_3DSC.OBJECT_OT_IMPORTPOINTS,
     import_3DSC.ImportCoorPoints,

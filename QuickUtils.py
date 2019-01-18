@@ -14,7 +14,7 @@ class OBJECT_OT_CorrectMaterial(bpy.types.Operator):
         selection = bpy.context.selected_objects
         bpy.ops.object.select_all(action='DESELECT')
         for obj in selection:
-            obj.select = True
+            obj.select_set(True)
             for i in range(0,len(obj.material_slots)):
 #                bpy.ops.object.material_slot_remove()
                 obj.active_material_index = i
@@ -296,7 +296,7 @@ class OBJECT_OT_CenterMass(bpy.types.Operator):
 
         # translate objects in SCS coordinate
         for obj in selection:
-            obj.select = True
+            obj.select_set(True)
             bpy.ops.object.origin_set(type='ORIGIN_CENTER_OF_MASS')
         return {'FINISHED'}
 

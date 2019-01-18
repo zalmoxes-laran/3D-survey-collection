@@ -38,7 +38,7 @@ def write_some_data(context, filepath, shift, rot, cam, nam):
 
     # write selected objects coordinate
     for obj in selection:
-        obj.select = True
+        obj.select_set(True)
 
         x_coor = obj.location[0]
         y_coor = obj.location[1]
@@ -88,7 +88,7 @@ class ExportCoordinates(Operator, ExportHelper):
     # ExportHelper mixin class uses this
     filename_ext = ".txt"
 
-    filter_glob = StringProperty(
+    filter_glob: StringProperty(
             default="*.txt",
             options={'HIDDEN'},
             maxlen=255,  # Max internal buffer length, longer would be clamped.
@@ -97,25 +97,25 @@ class ExportCoordinates(Operator, ExportHelper):
     # List of operator properties, the attributes will be assigned
     # to the class instance from the operator settings before calling.
 
-    nam = BoolProperty(
+    nam: BoolProperty(
             name="Add names of objects",
             description="This tool includes name",
             default=True,
             )
 
-    rot = BoolProperty(
+    rot: BoolProperty(
             name="Add coordinates of rotation",
             description="This tool includes name, position and rotation",
             default=False,
             )
 
-    cam = BoolProperty(
+    cam: BoolProperty(
             name="Export only cams",
             description="This tool includes name, position, rotation and focal lenght",
             default=False,
             )
 
-    shift = BoolProperty(
+    shift: BoolProperty(
             name="World shift coordinates",
             description="Shift coordinates using the General Shift Value (GSV)",
             default=False,
@@ -144,7 +144,7 @@ class OBJECT_OT_ExportObjButton(bpy.types.Operator):
 
 #        selection = bpy.context.selected_objects
 #        bpy.ops.object.select_all(action='DESELECT')
-        activename = bpy.path.clean_name(bpy.context.scene.objects.active.name)
+        activename = bpy.path.clean_name(bpy.context.active_object.name)
         fn = os.path.join(basedir, activename)
 
         # write active object in obj format
@@ -166,11 +166,11 @@ class OBJECT_OT_objexportbatch(bpy.types.Operator):
         bpy.ops.object.select_all(action='DESELECT')
 
         for obj in selection:
-            obj.select = True
+            obj.select_set(True)
             name = bpy.path.clean_name(obj.name)
             fn = os.path.join(basedir, name)
             bpy.ops.export_scene.obj(filepath=str(fn + '.obj'), use_selection=True, axis_forward='Y', axis_up='Z', path_mode='RELATIVE')
-            obj.select = False
+            obj.select_set(False)
         return {'FINISHED'}
 
 #_______________________________________________________________________________________________________________
@@ -191,12 +191,13 @@ class OBJECT_OT_fbxexp(bpy.types.Operator):
             print('Found previously created FBX folder. I will use it')
         if not basedir:
             raise Exception("Save the blend file")
-            
-        obj = bpy.context.scene.objects.active
+        obj = bpy.context.active_object
         name = bpy.path.clean_name(obj.name)
         fn = os.path.join(basedir, subfolder, name)
-        bpy.ops.export_scene.fbx(filepath= fn + ".fbx", check_existing=True, axis_forward='-Z', axis_up='Y', filter_glob="*.fbx", version='BIN7400', ui_tab='MAIN', use_selection=True, global_scale=1.0, apply_unit_scale=True, bake_space_transform=False, object_types={'ARMATURE', 'CAMERA', 'EMPTY', 'LAMP', 'MESH', 'OTHER'}, use_mesh_modifiers=True, mesh_smooth_type='EDGE', use_mesh_edges=False, use_tspace=False, use_custom_props=False, add_leaf_bones=True, primary_bone_axis='Y', secondary_bone_axis='X', use_armature_deform_only=False, bake_anim=True, bake_anim_use_all_bones=True, bake_anim_use_nla_strips=True, bake_anim_use_all_actions=True, bake_anim_force_startend_keying=True, bake_anim_step=1.0, bake_anim_simplify_factor=1.0, use_anim=True, use_anim_action_all=True, use_default_take=True, use_anim_optimize=True, anim_optimize_precision=6.0, path_mode='AUTO', embed_textures=False, batch_mode='OFF', use_batch_own_dir=True, use_metadata=True)
-#filepath = fn + ".fbx", filter_glob="*.fbx", version='BIN7400', use_selection=True, global_scale=100.0, axis_forward='-Z', axis_up='Y', bake_space_transform=False, object_types={'MESH','EMPTY'}, use_mesh_modifiers=False, mesh_smooth_type='EDGE', use_mesh_edges=False, use_tspace=False, use_armature_deform_only=False, bake_anim=False, bake_anim_use_nla_strips=False, bake_anim_step=1.0, bake_anim_simplify_factor=1.0, use_anim=False, use_anim_action_all=False, use_default_take=False, use_anim_optimize=False, anim_optimize_precision=6.0, path_mode='AUTO', embed_textures=False, batch_mode='OFF', use_batch_own_dir=True, use_metadata=True)
+        bpy.ops.export_scene.fbx(filepath = fn + ".fbx", check_existing=True, filter_glob="*.fbx", ui_tab='MAIN', use_selection=True, use_active_collection=False, global_scale=1.0, apply_unit_scale=True, apply_scale_options='FBX_SCALE_NONE', bake_space_transform=False, object_types={'MESH'}, use_mesh_modifiers=True, use_mesh_modifiers_render=True, mesh_smooth_type='OFF', use_mesh_edges=False, use_tspace=False, use_custom_props=False, add_leaf_bones=True, primary_bone_axis='Y', secondary_bone_axis='X', use_armature_deform_only=False, armature_nodetype='NULL', bake_anim=False, bake_anim_use_all_bones=True, bake_anim_use_nla_strips=True, bake_anim_use_all_actions=True, bake_anim_force_startend_keying=True, bake_anim_step=1.0, bake_anim_simplify_factor=1.0, path_mode='AUTO', embed_textures=False, batch_mode='OFF', use_batch_own_dir=True, use_metadata=True, axis_forward='-Z', axis_up='Y')
+
+#       bpy.ops.export_scene.fbx(filepath= fn + ".fbx", check_existing=True, axis_forward='-Z', axis_up='Y', filter_glob="*.fbx", ui_tab='MAIN', use_selection=True, global_scale=1.0, apply_unit_scale=True, bake_space_transform=False, object_types={'MESH'}, use_mesh_modifiers=True, mesh_smooth_type='EDGE', use_mesh_edges=False, use_tspace=False, use_custom_props=False, add_leaf_bones=True, primary_bone_axis='Y', secondary_bone_axis='X', use_armature_deform_only=False, bake_anim=True, bake_anim_use_all_bones=True, bake_anim_use_nla_strips=True, bake_anim_use_all_actions=True, bake_anim_force_startend_keying=True, bake_anim_step=1.0, bake_anim_simplify_factor=1.0, use_anim=True, use_anim_action_all=True, use_default_take=True, use_anim_optimize=True, anim_optimize_precision=6.0, path_mode='AUTO', embed_textures=False, batch_mode='OFF', use_batch_own_dir=True, use_metadata=True)
+#       filepath = fn + ".fbx", filter_glob="*.fbx", version='BIN7400', use_selection=True, global_scale=100.0, axis_forward='-Z', axis_up='Y', bake_space_transform=False, object_types={'MESH','EMPTY'}, use_mesh_modifiers=False, mesh_smooth_type='EDGE', use_mesh_edges=False, use_tspace=False, use_armature_deform_only=False, bake_anim=False, bake_anim_use_nla_strips=False, bake_anim_step=1.0, bake_anim_simplify_factor=1.0, use_anim=False, use_anim_action_all=False, use_default_take=False, use_anim_optimize=False, anim_optimize_precision=6.0, path_mode='AUTO', embed_textures=False, batch_mode='OFF', use_batch_own_dir=True, use_metadata=True)
 
 #        obj.select = False
         return {'FINISHED'}
@@ -224,11 +225,12 @@ class OBJECT_OT_fbxexportbatch(bpy.types.Operator):
         bpy.ops.object.select_all(action='DESELECT')
 
         for obj in selection:
-            obj.select = True
+            obj.select_set(True)
             name = bpy.path.clean_name(obj.name)
             fn = os.path.join(basedir, subfolder, name)
-            bpy.ops.export_scene.fbx(filepath = fn + ".fbx", filter_glob="*.fbx", version='BIN7400', use_selection=True, global_scale=1.0, axis_forward='-Z', axis_up='Y', bake_space_transform=False, object_types={'MESH'}, use_mesh_modifiers=False, mesh_smooth_type='FACE', use_mesh_edges=False, use_tspace=False, use_armature_deform_only=False, bake_anim=False, bake_anim_use_nla_strips=False, bake_anim_step=1.0, bake_anim_simplify_factor=1.0, use_anim=False, use_anim_action_all=False, use_default_take=False, use_anim_optimize=False, anim_optimize_precision=6.0, path_mode='AUTO', embed_textures=False, batch_mode='OFF', use_batch_own_dir=True, use_metadata=True)
-            obj.select = False
+#            bpy.ops.export_scene.fbx(filepath = fn + ".fbx", filter_glob="*.fbx", use_selection=True, global_scale=1.0, axis_forward='-Z', axis_up='Y', bake_space_transform=False, object_types={'MESH'}, use_mesh_modifiers=False, mesh_smooth_type='FACE', use_mesh_edges=False, use_tspace=False, use_armature_deform_only=False, bake_anim=False, bake_anim_use_nla_strips=False, bake_anim_step=1.0, bake_anim_simplify_factor=1.0, use_anim=False, use_anim_action_all=False, use_default_take=False, use_anim_optimize=False, anim_optimize_precision=6.0, path_mode='AUTO', embed_textures=False, batch_mode='OFF', use_batch_own_dir=True, use_metadata=True)
+            bpy.ops.export_scene.fbx(filepath = fn + ".fbx", check_existing=True, filter_glob="*.fbx", ui_tab='MAIN', use_selection=True, use_active_collection=False, global_scale=1.0, apply_unit_scale=True, apply_scale_options='FBX_SCALE_NONE', bake_space_transform=False, object_types={'MESH'}, use_mesh_modifiers=True, use_mesh_modifiers_render=True, mesh_smooth_type='OFF', use_mesh_edges=False, use_tspace=False, use_custom_props=False, add_leaf_bones=True, primary_bone_axis='Y', secondary_bone_axis='X', use_armature_deform_only=False, armature_nodetype='NULL', bake_anim=False, bake_anim_use_all_bones=True, bake_anim_use_nla_strips=True, bake_anim_use_all_actions=True, bake_anim_force_startend_keying=True, bake_anim_step=1.0, bake_anim_simplify_factor=1.0, path_mode='AUTO', embed_textures=False, batch_mode='OFF', use_batch_own_dir=True, use_metadata=True, axis_forward='-Z', axis_up='Y')
+            obj.select_set(False)
         return {'FINISHED'}
 
 #_______________________________________________________________________________________________________________
