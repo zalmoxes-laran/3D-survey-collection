@@ -158,12 +158,22 @@ class ToolsPanelLODgenerator:
 #            row.prop(obj, "name", text='')
 #            row = layout.row()
 #        row.label(text="on selected:")
-#        row = layout.row()
+
         self.layout.operator("lod0.b2osg", icon="MESH_UVSPHERE", text='LOD 0 (set as)')
         row = layout.row()
+
+        scn = context.scene
+        layout.prop(scn, 'LODnum', icon='BLENDER', toggle=True)
+
+        row = layout.row()
         row.label(text="Select LOD0 objs")
-        self.layout.operator("lod1.b2osg", icon="MESH_ICOSPHERE", text='LOD 1 (creation)')
-        self.layout.operator("lod2.b2osg", icon="MESH_CUBE", text='LOD 2 (creation)')
+
+        if scn.LODnum > 0:
+            self.layout.operator("lod1.b2osg", icon="MESH_ICOSPHERE", text='LOD 1 (creation)')
+            if scn.LODnum > 1:
+                self.layout.operator("lod2.b2osg", icon="MESH_CUBE", text='LOD 2 (creation)')
+                if scn.LODnum > 2:
+                    pass
 #        self.layout.operator("bake.b2osg", icon="QUESTION", text='just bake')
         
         row = layout.row()

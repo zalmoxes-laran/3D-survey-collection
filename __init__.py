@@ -45,6 +45,7 @@ else:
             BoolProperty,
             FloatProperty,
             EnumProperty,
+            IntProperty,
             PointerProperty,
             CollectionProperty,
             )
@@ -151,6 +152,14 @@ def register():
     
     bpy.types.WindowManager.interface_vars = bpy.props.PointerProperty(type=InterfaceVars)
 
+#def initSceneProperties(scn):
+    bpy.types.Scene.LODnum = IntProperty(
+        name = "LODs", 
+        default = 0,
+        min = 0,
+        max = 3,
+        description = "Enter desired number of LOD (Level of Detail)")
+    
     bpy.types.Scene.BL_undistorted_path = StringProperty(
       name = "Undistorted Path",
       default = "",
