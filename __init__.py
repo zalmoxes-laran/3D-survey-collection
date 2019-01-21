@@ -121,6 +121,7 @@ classes = (
     QuickUtils.OBJECT_OT_tiff2pngrelink,
     LODgenerator.OBJECT_OT_CreateGroupsLOD,
     LODgenerator.OBJECT_OT_ExportGroupsLOD,
+    LODgenerator.OBJECT_OT_LOD,
     LODgenerator.OBJECT_OT_LOD0,
     LODgenerator.OBJECT_OT_LOD1,
     LODgenerator.OBJECT_OT_LOD2,

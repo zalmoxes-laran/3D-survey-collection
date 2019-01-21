@@ -213,7 +213,8 @@ def decimate_mesh(context,obj,ratio,lod):
     bpy.ops.object.select_all(action='DESELECT')
     D = bpy.data
     obj.select_set(True)
-    context.scene.objects.active = obj
+    #context.scene.objects.active = obj
+    context.view_layer.objects.active = obj
     bpy.ops.object.editmode_toggle()
     print('Decimating the original mesh to obtain the '+lod+' mesh...')
     bpy.ops.mesh.select_all(action='DESELECT')
