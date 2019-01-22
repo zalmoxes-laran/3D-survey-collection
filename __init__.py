@@ -161,6 +161,28 @@ def register():
         max = 3,
         description = "Enter desired number of LOD (Level of Detail)")
     
+    bpy.types.Scene.LOD1_tex_res = IntProperty(
+        name = "Resolution Texture of the LOD1", 
+        default = 2048,
+        description = "Enter the resolution for the texture of the LOD1")
+
+    bpy.types.Scene.LOD2_tex_res = IntProperty(
+        name = "Resolution Texture of the LOD2", 
+        default = 512,
+        description = "Enter the resolution for the texture of the LOD2")
+
+    bpy.types.Scene.LOD1_dec_ratio = FloatProperty(
+        name = "LOD1 decimation ratio",
+        default = 0.5,
+        description = "Define the decimation ratio of the LOD 1",
+        )    
+    
+    bpy.types.Scene.LOD1_dec_ratio = FloatProperty(
+        name = "LOD2 decimation ratio",
+        default = 0.1,
+        description = "Define the decimation ratio of the LOD 2",
+        )    
+
     bpy.types.Scene.BL_undistorted_path = StringProperty(
       name = "Undistorted Path",
       default = "",

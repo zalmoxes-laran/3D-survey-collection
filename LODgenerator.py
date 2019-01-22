@@ -189,6 +189,20 @@ class OBJECT_OT_BAKE(bpy.types.Operator):
 #_____________________________________________________________________________
 
 
+def ratio_for_current_lod(lod,context):
+    if lod == 1:
+        ratio = context.scene.LOD1_dec_ratio
+    if lod == 2:
+        ratio = context.scene.LOD2_dec_ratio
+    return ratio
+
+def tex_res_for_current_lod(lod,context):
+    if lod == 1:
+        tex_res = context.scene.LOD1_tex_res
+    if lod == 2:
+        tex_res = context.scene.LOD2_tex_res
+    return tex_res
+
 class OBJECT_OT_LOD(bpy.types.Operator):
     bl_idname = "lod.b2osg"
     bl_label = "LOD"
@@ -196,6 +210,7 @@ class OBJECT_OT_LOD(bpy.types.Operator):
 
     def execute(self, context):
         context = bpy.context
+        selected_objects = bpy.context.selected_objects
         start_time = time.time()
         basedir = os.path.dirname(bpy.data.filepath)
         # si prende il numero di LOD impostato e i parametri base per LOD ovvero tex_res e decimation_ratio
@@ -203,7 +218,8 @@ class OBJECT_OT_LOD(bpy.types.Operator):
         i_lodbake = 1
         print("Il numero di lod è:" + str(context.scene.LODnum))
         while i_lodbake <= context.scene.LODnum:
-            subfolder = 'LOD'+str(i_lodbake)
+            currentLOD = 'LOD' + str(i_lodbake)
+            subfolder = currentLOD
             print(subfolder)
             if not os.path.exists(os.path.join(basedir, subfolder)):
                 os.mkdir(os.path.join(basedir, subfolder))
@@ -214,14 +230,14 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 raise Exception("Save the blend file")
 
             ob_counter = 1
-            ob_tot = len(bpy.context.selected_objects)
-            print('<<<<<<<<<<<<<< CREATION OF LOD 1 >>>>>>>>>>>>>>')
+            ob_tot = len(selected_objects)
+            print('<<<<<<<<<<<<<< CREATION OF '+ currentLOD +' >>>>>>>>>>>>>>')
             print('>>>>>> '+str(ob_tot)+' objects will be processed')
 
-            for obj in bpy.context.selected_objects:
+            for obj in selected_objects:
                 obj.data.uv_layers["MultiTex"].active_render = True
                 start_time_ob = time.time()
-                print('>>> LOD 1 >>>')
+                print('>>> '+ currentLOD + ' >>>')
                 print('>>>>>> processing the object ""'+ obj.name+'"" ('+str(ob_counter)+'/'+str(ob_tot)+')')
                 bpy.ops.object.select_all(action='DESELECT')
                 obj.select_set(True)
@@ -231,15 +247,15 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                     baseobj = baseobjwithlod.replace("_LOD0", "")
                 else:
                     baseobj = baseobjwithlod
-                print('Creating new LOD1 object..')
+                print('Creating new LOD '+ str(i_lodbake) +' object..')
                 bpy.ops.object.duplicate_move(OBJECT_OT_duplicate={"linked":False, "mode":'TRANSLATION'}, TRANSFORM_OT_translate={"value":(0, 0, 0), "constraint_axis":(False, False, False), "constraint_orientation":'GLOBAL', "mirror":False, "proportional":'DISABLED', "proportional_edit_falloff":'SMOOTH', "proportional_size":1, "snap":False, "snap_target":'CLOSEST', "snap_point":(0, 0, 0), "snap_align":False, "snap_normal":(0, 0, 0), "gpencil_strokes":False, "texture_space":False, "remove_on_cancel":False, "release_confirm":False})
 
                 for obj in bpy.context.selected_objects:
-                    obj.name = baseobj + "_LOD1"
+                    obj.name = baseobj + "_"+ currentLOD
                     newobj = obj
                 for obj in bpy.context.selected_objects:
-                    lod1name = obj.name
-                for i in range(0,len(bpy.data.objects[lod1name].material_slots)):
+                    lod_obj_name = obj.name
+                for i in range(0,len(bpy.data.objects[lod_obj_name].material_slots)):
                     bpy.ops.object.material_slot_remove()
 
                 if obj.data.uv_layers[1] and obj.data.uv_layers[1].name =='Atlas':
@@ -255,30 +271,27 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                     bpy.ops.uv.select_all(action='SELECT')
                     bpy.ops.uv.pack_islands(margin=0.001)
                     bpy.ops.object.editmode_toggle()
+                
+                # procedura di semplificazione mesh
+                decimate_mesh(context,obj,ratio_for_current_lod(i_lodbake,context),currentLOD)
 
-                decimate_mesh(context,obj,0.5,'LOD1')
-
-
-        # procedura di semplificazione mesh
-        
         # ora mesh semplificata
         #------------------------------------------------------------------
 
-
                 bpy.ops.object.select_all(action='DESELECT')
-                oggetto = bpy.data.objects[lod1name]
+                oggetto = bpy.data.objects[lod_obj_name]
                 oggetto.select_set(True)
-                print('Creating new texture atlas for LOD1....')
+                print('Creating new texture atlas for ' + currentLOD + '....')
 
-                tempimage = bpy.data.images.new(name=lod1name, width=2048, height=2048, alpha=False)
-                tempimage.filepath_raw = "//"+subfolder+'/'+lod1name+".jpg"
+                tempimage = bpy.data.images.new(name=lod_obj_name, width=tex_res_for_current_lod(i_lodbake,context), height=tex_res_for_current_lod(context,i_lodbake), alpha=False)
+                tempimage.filepath_raw = "//"+subfolder+'/'+lod_obj_name+".jpg"
                 tempimage.file_format = 'JPEG'
 
                 for uv_face in oggetto.data.uv_layers.active.data:
                     uv_face.image = tempimage
 
                 #--------------------------------------------------------------
-                print('Passing color data from LOD0 to LOD1...')
+                print('Passing color data from LOD0 to '+ currentLOD + '...')
                 bpy.context.scene.render.engine = 'BLENDER_RENDER'
                 bpy.context.scene.render.use_bake_selected_to_active = True
                 bpy.context.scene.render.bake_type = 'TEXTURE'
@@ -286,15 +299,15 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 object = bpy.data.objects[baseobjwithlod]
                 object.select = True
 
-                bpy.context.scene.objects.active = bpy.data.objects[lod1name]
+                bpy.context.scene.objects.active = bpy.data.objects[lod_obj_name]
                 #--------------------------------------------------------------
 
                 bpy.ops.object.bake_image()
                 tempimage.save()
 
-                print('Creating custom material for LOD1...')
+                print('Creating custom material for '+ currentLOD +'...')
                 bpy.ops.object.select_all(action='DESELECT')
-                oggetto = bpy.data.objects[lod1name]
+                oggetto = bpy.data.objects[lod_obj_name]
                 oggetto.select = True
                 bpy.context.scene.objects.active = oggetto
                 bpy.ops.view3d.texface_to_material()
@@ -302,7 +315,7 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 oggetto.data.name = 'SM_' + oggetto.name
         #        basedir = os.path.dirname(bpy.data.filepath)
 
-                print('Saving on obj/mtl file for LOD1...')
+                print('Saving on obj/mtl file for '+ currentLOD +'...')
                 activename = bpy.path.clean_name(bpy.context.scene.objects.active.name)
                 fn = os.path.join(basedir, subfolder, activename)
                 bpy.ops.export_scene.obj(filepath=fn + ".obj", use_selection=True, axis_forward='Y', axis_up='Z', path_mode='RELATIVE')
@@ -311,13 +324,12 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 print('>>> "'+obj.name+'" ('+str(ob_counter)+'/'+ str(ob_tot) +') object baked in '+str(time.time() - start_time_ob)+' seconds')
                 ob_counter += 1
 
-        bpy.context.scene.layers[11] = True
-        bpy.context.scene.layers[0] = False
+        #bpy.context.scene.layers[11] = True
+        #bpy.context.scene.layers[0] = False
         end_time = time.time() - start_time
         print('<<<<<<< Process done >>>>>>')
         print('>>>'+str(ob_tot)+' objects processed in '+str(end_time)+' seconds')
         return {'FINISHED'}
-
 
     #______________________________________
 
