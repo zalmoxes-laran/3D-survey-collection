@@ -282,35 +282,59 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 oggetto = bpy.data.objects[lod_obj_name]
                 oggetto.select_set(True)
                 print('Creating new texture atlas for ' + currentLOD + '....')
-
-                tempimage = bpy.data.images.new(name=lod_obj_name, width=tex_res_for_current_lod(i_lodbake,context), height=tex_res_for_current_lod(context,i_lodbake), alpha=False)
+                tex_res = tex_res_for_current_lod(i_lodbake,context)
+                tempimage = bpy.data.images.new(name=lod_obj_name, width=tex_res, height=tex_res, alpha=False)
                 tempimage.filepath_raw = "//"+subfolder+'/'+lod_obj_name+".jpg"
                 tempimage.file_format = 'JPEG'
 
-                for uv_face in oggetto.data.uv_layers.active.data:
-                    uv_face.image = tempimage
+#                for uv_face in oggetto.data.uv_layers.active.data:
+#                    uv_face.image = tempimage
+
+#                bpy.data.meshes['Amb-01-02_LOD0_SM_AMB01-02'].uv_layers['MultiTex'].data[0].uv
+
+#                for uv_layer in mesh.uv_layers:
+#                    for tri in mesh.loop_triangles:
+#                        for loop_index in tri.loops:
+#                            print(uv_layer.data[loop_index].uv)
 
                 #--------------------------------------------------------------
                 print('Passing color data from LOD0 to '+ currentLOD + '...')
-                bpy.context.scene.render.engine = 'BLENDER_RENDER'
-                bpy.context.scene.render.use_bake_selected_to_active = True
-                bpy.context.scene.render.bake_type = 'TEXTURE'
+
+                to_be_restored_render_engine = bpy.context.scene.render.engine
+                bpy.context.scene.render.engine = 'CYCLES'
+                bpy.context.scene.cycles.bake_type = 'DIFFUSE'
+                bpy.context.scene.render.bake.use_pass_direct = False
+                bpy.context.scene.render.bake.use_pass_indirect = False
+                bpy.context.scene.render.bake.use_selected_to_active = True
+
+                to_restore_samples = bpy.context.scene.cycles.samples
+                bpy.context.scene.cycles.samples = 1
+
+                to_restore_bounces = bpy.context.scene.cycles.diffuse_bounces
+                bpy.context.scene.cycles.diffuse_bounces = 1
 
                 object = bpy.data.objects[baseobjwithlod]
-                object.select = True
-
-                bpy.context.scene.objects.active = bpy.data.objects[lod_obj_name]
+                object.select_set(True)
+                bpy.context.view_layer.objects.active = bpy.data.objects[lod_obj_name]
+                
+                
                 #--------------------------------------------------------------
 
                 bpy.ops.object.bake_image()
                 tempimage.save()
 
+
+                # restore previous render settings
+                bpy.context.scene.cycles.diffuse_bounces = to_restore_bounces
+                bpy.context.scene.cycles.samples = to_restore_samples
+                bpy.context.scene.render.engine = to_be_restored_render_engine
+
                 print('Creating custom material for '+ currentLOD +'...')
                 bpy.ops.object.select_all(action='DESELECT')
                 oggetto = bpy.data.objects[lod_obj_name]
-                oggetto.select = True
-                bpy.context.scene.objects.active = oggetto
-                bpy.ops.view3d.texface_to_material()
+                oggetto.select_set(True)
+                bpy.context.view_layer.objects.active = oggetto
+#                bpy.ops.view3d.texface_to_material()
                 oggetto.active_material.name = 'M_'+ oggetto.name
                 oggetto.data.name = 'SM_' + oggetto.name
         #        basedir = os.path.dirname(bpy.data.filepath)
