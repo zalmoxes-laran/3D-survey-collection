@@ -297,20 +297,13 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 #bpy.ops.object.select_all(action='DESELECT')
                 #obj_LODnew.select_set(True)
                 print('Creating new texture atlas for ' + currentLOD + '....')
-<<<<<<< HEAD
                 tex_res = tex_res_for_current_lod(i_lodbake_counter,context)
                 tex_LODnew_name = "T_"+ obj_LODnew_name
                 tempimage = bpy.data.images.new(name=tex_LODnew_name, width=tex_res, height=tex_res, alpha=False)
                 tempimage.filepath_raw = "//"+subfolder+'/'+tex_LODnew_name+".jpg"
-=======
-
-                tempimage = bpy.data.images.new(name=lod_obj_name, width=tex_res_for_current_lod(i_lodbake,context), height=tex_res_for_current_lod(context,i_lodbake), alpha=False)
-                tempimage.filepath_raw = "//"+subfolder+'/'+lod_obj_name+".jpg"
->>>>>>> parent of 3e8cd5d... Update LODgenerator.py
                 tempimage.file_format = 'JPEG'
  #               print('La immagine creata temporanea si chiama: ' + tempimage.name)
 
-<<<<<<< HEAD
                 #--------------------------------------------------------------
                 
 
@@ -328,14 +321,9 @@ class OBJECT_OT_LOD(bpy.types.Operator):
 
                 to_restore_bounces = context.scene.cycles.diffuse_bounces
                 context.scene.cycles.diffuse_bounces = 1
-=======
-                for uv_face in oggetto.data.uv_layers.active.data:
-                    uv_face.image = tempimage
->>>>>>> parent of 3e8cd5d... Update LODgenerator.py
 
                 
                 #--------------------------------------------------------------
-<<<<<<< HEAD
 
                 print('Creating custom material for '+ currentLOD +'...')
                 bpy.ops.object.select_all(action='DESELECT')
@@ -370,31 +358,6 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 #mat.node_tree.links.new(bsdf.inputs['Base Color'], texImage.outputs['Color'])
 
                 obj_LODnew.data.name = 'SM_' + obj_LODnew.name
-=======
-                print('Passing color data from LOD0 to '+ currentLOD + '...')
-                bpy.context.scene.render.engine = 'BLENDER_RENDER'
-                bpy.context.scene.render.use_bake_selected_to_active = True
-                bpy.context.scene.render.bake_type = 'TEXTURE'
-
-                object = bpy.data.objects[baseobjwithlod]
-                object.select = True
-
-                bpy.context.scene.objects.active = bpy.data.objects[lod_obj_name]
-                #--------------------------------------------------------------
-
-                bpy.ops.object.bake_image()
-                tempimage.save()
-
-                print('Creating custom material for '+ currentLOD +'...')
-                bpy.ops.object.select_all(action='DESELECT')
-                oggetto = bpy.data.objects[lod_obj_name]
-                oggetto.select = True
-                bpy.context.scene.objects.active = oggetto
-                bpy.ops.view3d.texface_to_material()
-                oggetto.active_material.name = 'M_'+ oggetto.name
-                oggetto.data.name = 'SM_' + oggetto.name
-        #        basedir = os.path.dirname(bpy.data.filepath)
->>>>>>> parent of 3e8cd5d... Update LODgenerator.py
 
                 print('Saving on obj/mtl file for '+ currentLOD +'...')
                 activename = bpy.path.clean_name(obj_LODnew.name)
