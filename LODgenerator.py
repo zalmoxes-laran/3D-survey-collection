@@ -219,7 +219,7 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 
                 #context.area.type = "VIEW_3D"
                 print(context.area.type)
-                bpy.ops.object.bake()
+                bpy.ops.object.bake(type='DIFFUSE')
                 #bpy.ops.object.bake(save_mode='EXTERNAL')
 
                 #bpy.ops.object.bake(type='DIFFUSE', filepath=filepathimage, use_selected_to_active=True, use_clear=True, save_mode=EXTERNAL)
