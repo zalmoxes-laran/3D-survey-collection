@@ -297,80 +297,17 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 #bpy.ops.object.select_all(action='DESELECT')
                 #obj_LODnew.select_set(True)
                 print('Creating new texture atlas for ' + currentLOD + '....')
-<<<<<<< HEAD
-                tex_res = tex_res_for_current_lod(i_lodbake_counter,context)
-                tex_LODnew_name = "T_"+ obj_LODnew_name
-                tempimage = bpy.data.images.new(name=tex_LODnew_name, width=tex_res, height=tex_res, alpha=False)
-                tempimage.filepath_raw = "//"+subfolder+'/'+tex_LODnew_name+".jpg"
-=======
 
                 tempimage = bpy.data.images.new(name=lod_obj_name, width=tex_res_for_current_lod(i_lodbake,context), height=tex_res_for_current_lod(context,i_lodbake), alpha=False)
                 tempimage.filepath_raw = "//"+subfolder+'/'+lod_obj_name+".jpg"
->>>>>>> parent of 3e8cd5d... Update LODgenerator.py
                 tempimage.file_format = 'JPEG'
  #               print('La immagine creata temporanea si chiama: ' + tempimage.name)
 
-<<<<<<< HEAD
-                #--------------------------------------------------------------
-                
-
-                to_be_restored_render_engine = context.scene.render.engine
-                context.scene.render.engine = 'CYCLES'
-
-                context.scene.cycles.bake_type = 'DIFFUSE'
-                context.scene.render.bake.use_pass_direct = False
-                context.scene.render.bake.use_pass_indirect = False
-                context.scene.render.bake.use_pass_color = True
-                context.scene.render.bake.use_selected_to_active = True
-
-                to_restore_samples = context.scene.cycles.samples
-                context.scene.cycles.samples = 1
-
-                to_restore_bounces = context.scene.cycles.diffuse_bounces
-                context.scene.cycles.diffuse_bounces = 1
-=======
                 for uv_face in oggetto.data.uv_layers.active.data:
                     uv_face.image = tempimage
->>>>>>> parent of 3e8cd5d... Update LODgenerator.py
 
                 
                 #--------------------------------------------------------------
-<<<<<<< HEAD
-
-                print('Creating custom material for '+ currentLOD +'...')
-                bpy.ops.object.select_all(action='DESELECT')
-                obj_LODnew.select_set(True)
-                context.view_layer.objects.active = obj_LODnew
-
-                mat, texImage, bsdf = create_material_from_image(context,tempimage,obj_LODnew,False)
-
-                print('Passing color data from LOD0 to '+ currentLOD + '...')
-
-
-                bpy.ops.object.select_all(action='DESELECT')
-                obj_LODnew.select_set(True)
-                obj_LOD0.select_set(True)
-                obj_LOD0_LODnew_selected = context.selected_objects
-                
-                context.view_layer.objects.active = obj_LODnew
-                for ob_parziali in obj_LOD0_LODnew_selected:
-                    print('un oggetto selezionato: '+ob_parziali.name)
-                print('Invece oggetto attivo è: '+ context.view_layer.objects.active.name)
-                
-                #bpy.ops.object.bake_image()
-                
-                bpy.context = context
-                bpy.ops.object.bake()
-                tempimage.save()
-                # restore previous render settings
-                #context.scene.cycles.diffuse_bounces = to_restore_bounces
-                #context.scene.cycles.samples = to_restore_samples
-                #context.scene.render.engine = to_be_restored_render_engine
-
-                #mat.node_tree.links.new(bsdf.inputs['Base Color'], texImage.outputs['Color'])
-
-                obj_LODnew.data.name = 'SM_' + obj_LODnew.name
-=======
                 print('Passing color data from LOD0 to '+ currentLOD + '...')
                 bpy.context.scene.render.engine = 'BLENDER_RENDER'
                 bpy.context.scene.render.use_bake_selected_to_active = True
@@ -394,7 +331,6 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 oggetto.active_material.name = 'M_'+ oggetto.name
                 oggetto.data.name = 'SM_' + oggetto.name
         #        basedir = os.path.dirname(bpy.data.filepath)
->>>>>>> parent of 3e8cd5d... Update LODgenerator.py
 
                 print('Saving on obj/mtl file for '+ currentLOD +'...')
                 activename = bpy.path.clean_name(obj_LODnew.name)
