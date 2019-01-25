@@ -123,8 +123,6 @@ classes = (
     LODgenerator.OBJECT_OT_ExportGroupsLOD,
     LODgenerator.OBJECT_OT_LOD,
     LODgenerator.OBJECT_OT_LOD0,
-    LODgenerator.OBJECT_OT_LOD1,
-    LODgenerator.OBJECT_OT_LOD2,
     LODgenerator.OBJECT_OT_RemoveGroupsLOD,
     PhotogrTool.OBJECT_OT_applypaintcam,
     PhotogrTool.OBJECT_OT_BetterCameras,
@@ -177,7 +175,7 @@ def register():
         description = "Define the decimation ratio of the LOD 1",
         )    
     
-    bpy.types.Scene.LOD1_dec_ratio = FloatProperty(
+    bpy.types.Scene.LOD2_dec_ratio = FloatProperty(
         name = "LOD2 decimation ratio",
         default = 0.1,
         description = "Define the decimation ratio of the LOD 2",
