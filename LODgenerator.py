@@ -40,22 +40,7 @@ class OBJECT_OT_LOD0(bpy.types.Operator):
                 if obj.data.uv_layers[0].name =='MultiTex' and obj.data.uv_layers[1].name =='Atlas':
                     pass
             else:
-                mesh = obj.data
-                mesh.uv_layers.active_index = 0
-                multitex_uvmap = mesh.uv_layers.active
-                multitex_uvmap_name = multitex_uvmap.name
-                multitex_uvmap.name = 'MultiTex'
-                atlas_uvmap = mesh.uv_layers.new()
-                atlas_uvmap.name = 'Atlas'
-                mesh.uv_layers.active_index = 1
-                bpy.ops.object.editmode_toggle()
-                bpy.ops.mesh.select_all(action='SELECT')
-                bpy.ops.mesh.remove_doubles()
-                bpy.ops.uv.select_all(action='SELECT')
-                bpy.ops.uv.pack_islands(margin=0.001)
-                bpy.ops.object.editmode_toggle()
-                mesh.uv_layers.active_index = 0
-
+                create_double_UV(obj)
         return {'FINISHED'}
 
 #_____________________________________________________________________________
@@ -114,10 +99,6 @@ class OBJECT_OT_LOD(bpy.types.Operator):
 
             for obj_LOD0 in selected_objects:
                 
-                #da ricontrollare !!!!!!!!!!!!!!!!!!!!!!!!!!
-                obj_LOD0.data.uv_layers["MultiTex"].active_render = True
-                #da ricontrollare !!!!!!!!!!!!!!!!!!!!!!!!!!
-                
                 start_time_ob = time.time()
 
                 print('>>> '+ currentLOD + ' >>>')
@@ -148,16 +129,19 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 if obj_LODnew.data.uv_layers[1] and obj_LODnew.data.uv_layers[1].name =='Atlas':
                     print('Found Atlas UV mapping layer. I will use it.')
                     uv_layers = obj_LODnew.data.uv_layers
-                    uv_layers = obj_LODnew.data.uv_layers
+                    #uv_layers = obj_LODnew.data.uv_layers
                     uv_layers.remove(uv_layers[0])
                 else:
                     print('Creating new UV mapping layer.')
-                    bpy.ops.object.editmode_toggle()
-                    bpy.ops.mesh.select_all(action='SELECT')
-                    bpy.ops.mesh.remove_doubles()
-                    bpy.ops.uv.select_all(action='SELECT')
-                    bpy.ops.uv.pack_islands(margin=0.001)
-                    bpy.ops.object.editmode_toggle()
+                    create_double_UV(obj_LODnew)
+                    #bpy.ops.object.editmode_toggle()
+                    #bpy.ops.mesh.select_all(action='SELECT')
+                    #bpy.ops.mesh.remove_doubles()
+                    #bpy.ops.uv.select_all(action='SELECT')
+                    #bpy.ops.uv.pack_islands(margin=0.001)
+                    #bpy.ops.object.editmode_toggle()
+
+                obj_LOD0.data.uv_layers["MultiTex"].active_render = True
                 
                 # mesh decimation
                 decimate_mesh(context,obj_LODnew,ratio_for_current_lod(i_lodbake_counter,context),currentLOD)

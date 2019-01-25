@@ -291,6 +291,24 @@ def select_a_node(mat, type):
 # texture_node = nodes.get('Image Texture')
 # if texture_node is None:
 
+def create_double_UV(obj):
+    mesh = obj.data
+    mesh.uv_layers.active_index = 0
+    multitex_uvmap = mesh.uv_layers.active
+    multitex_uvmap_name = multitex_uvmap.name
+    multitex_uvmap.name = 'MultiTex'
+    atlas_uvmap = mesh.uv_layers.new()
+    atlas_uvmap.name = 'Atlas'
+    mesh.uv_layers.active_index = 1
+    bpy.ops.object.editmode_toggle()
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.remove_doubles()
+    bpy.ops.uv.select_all(action='SELECT')
+    bpy.ops.uv.pack_islands(margin=0.001)
+    bpy.ops.object.editmode_toggle()
+    mesh.uv_layers.active_index = 0
+    return
+
 def bake_tex_set(type):
     scene = bpy.context.scene
     scene.render.engine = 'CYCLES'
