@@ -644,4 +644,7 @@ def create_material_from_image(context,image,oggetto,connect):
         oggetto.data.materials[0] = mat
     else:
         oggetto.data.materials.append(mat)
+    
+    mat.node_tree.nodes.active = texImage
+
     return mat, texImage, bsdf

@@ -221,18 +221,18 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 bpy.ops.object.bake()
                 tempimage.save()
                 # restore previous render settings
-                #context.scene.cycles.diffuse_bounces = to_restore_bounces
-                #context.scene.cycles.samples = to_restore_samples
-                #context.scene.render.engine = to_be_restored_render_engine
+                context.scene.cycles.diffuse_bounces = to_restore_bounces
+                context.scene.cycles.samples = to_restore_samples
+                context.scene.render.engine = to_be_restored_render_engine
 
                 mat.node_tree.links.new(bsdf.inputs['Base Color'], texImage.outputs['Color'])
 
                 obj_LODnew.data.name = 'SM_' + obj_LODnew.name
 
-                print('Saving on obj/mtl file for '+ currentLOD +'...')
-                activename = bpy.path.clean_name(obj_LODnew.name)
-                fn = os.path.join(basedir, subfolder, activename)
-                bpy.ops.export_scene.obj(filepath=fn + ".obj", use_selection=True, axis_forward='Y', axis_up='Z', path_mode='RELATIVE')
+                #print('Saving on obj/mtl file for '+ currentLOD +'...')
+                #activename = bpy.path.clean_name(obj_LODnew.name)
+                #fn = os.path.join(basedir, subfolder, activename)
+                #bpy.ops.export_scene.obj(filepath=fn + ".obj", use_selection=True, axis_forward='Y', axis_up='Z', path_mode='RELATIVE')
 
                 #bpy.ops.object.move_to_layer(layers=(False, False, False, False, False, False, False, False, False, False, False, True, False, False, False, False, False, False, False, False))
                 print('>>> "'+obj_LODnew.name+'" ('+str(ob_counter)+'/'+ str(ob_tot) +') object baked in '+str(time.time() - start_time_ob)+' seconds')
