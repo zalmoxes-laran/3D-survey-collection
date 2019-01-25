@@ -172,6 +172,7 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 tex_LODnew_name = "T_"+ obj_LODnew_name
                 tempimage = bpy.data.images.new(name=tex_LODnew_name, width=tex_res, height=tex_res, alpha=False)
                 tempimage.filepath_raw = "//"+subfolder+'/'+tex_LODnew_name+".jpg"
+                filepathimage = "//"+subfolder+'/'+tex_LODnew_name+".jpg"
                 tempimage.file_format = 'JPEG'
  #               print('La immagine creata temporanea si chiama: ' + tempimage.name)
 
@@ -219,6 +220,10 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 #context.area.type = "VIEW_3D"
                 print(context.area.type)
                 bpy.ops.object.bake()
+                #bpy.ops.object.bake(save_mode='EXTERNAL')
+
+                #bpy.ops.object.bake(type='DIFFUSE', filepath=filepathimage, use_selected_to_active=True, use_clear=True, save_mode=EXTERNAL)
+
                 tempimage.save()
                 # restore previous render settings
                 context.scene.cycles.diffuse_bounces = to_restore_bounces
@@ -230,9 +235,9 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 obj_LODnew.data.name = 'SM_' + obj_LODnew.name
 
                 #print('Saving on obj/mtl file for '+ currentLOD +'...')
-                #activename = bpy.path.clean_name(obj_LODnew.name)
-                #fn = os.path.join(basedir, subfolder, activename)
-                #bpy.ops.export_scene.obj(filepath=fn + ".obj", use_selection=True, axis_forward='Y', axis_up='Z', path_mode='RELATIVE')
+                activename = bpy.path.clean_name(obj_LODnew.name)
+                fn = os.path.join(basedir, subfolder, activename)
+                bpy.ops.export_scene.obj(filepath=fn + ".obj", use_selection=True, axis_forward='Y', axis_up='Z', path_mode='RELATIVE')
 
                 #bpy.ops.object.move_to_layer(layers=(False, False, False, False, False, False, False, False, False, False, False, True, False, False, False, False, False, False, False, False))
                 print('>>> "'+obj_LODnew.name+'" ('+str(ob_counter)+'/'+ str(ob_tot) +') object baked in '+str(time.time() - start_time_ob)+' seconds')
