@@ -162,7 +162,7 @@ class ToolsPanelLODgenerator:
 
         scn = context.scene
 
-        self.layout.operator("lod0.b2osg", icon="MESH_UVSPHERE", text='LOD 0 (set as)')
+        self.layout.operator("lod0.creation", icon="MESH_UVSPHERE", text='LOD 0 (set as)')
         row = layout.row()
 
         layout.prop(scn, 'LODnum', icon='BLENDER', toggle=True)

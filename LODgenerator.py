@@ -22,7 +22,7 @@ def getChildren(myObject):
     return children
 
 class OBJECT_OT_LOD0(bpy.types.Operator):
-    bl_idname = "lod0.b2osg"
+    bl_idname = "lod0.creation"
     bl_label = "LOD0"
     bl_options = {"REGISTER", "UNDO"}
 
@@ -57,134 +57,6 @@ class OBJECT_OT_LOD0(bpy.types.Operator):
                 mesh.uv_layers.active_index = 0
 
         return {'FINISHED'}
-
-#_____________________________________________________________________________
-
-class OBJECT_OT_BAKE(bpy.types.Operator):
-    bl_idname = "bake.b2osg"
-    bl_label = "bake"
-    bl_options = {"REGISTER", "UNDO"}
-
-    def execute(self, context):
-        context = bpy.context
-        start_time = time.time()
-        basedir = os.path.dirname(bpy.data.filepath)
-        subfolder = 'BAKE'
-        if not os.path.exists(os.path.join(basedir, subfolder)):
-            os.mkdir(os.path.join(basedir, subfolder))
-            print('There is no BAKE folder. Creating one...')
-        else:
-            print('Found previously created BAKE folder. I will use it')
-        if not basedir:
-            raise Exception("Save the blend file")
-
-        ob_counter = 1
-        ob_tot = len(bpy.context.selected_objects)
-        print('<<<<<<<<<<<<<< CREATION OF BAKE >>>>>>>>>>>>>>')
-        print('>>>>>> '+str(ob_tot)+' objects will be processed')
-
-        for obj in bpy.context.selected_objects:
-            obj.data.uv_layers["MultiTex"].active_render = True
-            start_time_ob = time.time()
-            print('>>> BAKE >>>')
-            print('>>>>>> processing the object ""'+ obj.name+'"" ('+str(ob_counter)+'/'+str(ob_tot)+')')
-            bpy.ops.object.select_all(action='DESELECT')
-            obj.select_set(True)
-            bpy.context.view_layer.objects.active = obj
-            baseobjwithlod = obj.name
-            if '_LOD0' in baseobjwithlod:
-                baseobj = baseobjwithlod.replace("_LOD0", "")
-            else:
-                baseobj = baseobjwithlod
-            print('Creating new BAKE object..')
-            bpy.ops.object.duplicate_move(OBJECT_OT_duplicate={"linked":False, "mode":'TRANSLATION'}, TRANSFORM_OT_translate={"value":(0, 0, 0), "constraint_axis":(False, False, False), "constraint_orientation":'GLOBAL', "mirror":False, "proportional":'DISABLED', "proportional_edit_falloff":'SMOOTH', "proportional_size":1, "snap":False, "snap_target":'CLOSEST', "snap_point":(0, 0, 0), "snap_align":False, "snap_normal":(0, 0, 0), "gpencil_strokes":False, "texture_space":False, "remove_on_cancel":False, "release_confirm":False})
-
-            for obj in bpy.context.selected_objects:
-                obj.name = baseobj + "_BAKE"
-                newobj = obj
-            for obj in bpy.context.selected_objects:
-                lod1name = obj.name
-            for i in range(0,len(bpy.data.objects[lod1name].material_slots)):
-                bpy.ops.object.material_slot_remove()
-
-            if obj.data.uv_layers[1] and obj.data.uv_layers[1].name =='Atlas':
-                print('Found Atlas UV mapping layer. I will use it.')
-                uv_layers = obj.data.uv_layers
-                uv_layers = obj.data.uv_layers
-                uv_layers.remove(uv_layers[0])
-            else:
-                print('Creating new UV mapping layer.')
-                bpy.ops.object.editmode_toggle()
-                bpy.ops.mesh.select_all(action='SELECT')
-                bpy.ops.mesh.remove_doubles()
-                bpy.ops.uv.select_all(action='SELECT')
-                bpy.ops.uv.pack_islands(margin=0.001)
-                bpy.ops.object.editmode_toggle()
-
-#            decimate_mesh(context,obj,0.5,'BAKE')
-
-
-    # procedura di semplificazione mesh
-    
-    # ora mesh semplificata
-    #------------------------------------------------------------------
-
-
-            bpy.ops.object.select_all(action='DESELECT')
-            oggetto = bpy.data.objects[lod1name]
-            oggetto.select = True
-            print('Creating new texture atlas for BAKE....')
-
-            tempimage = bpy.data.images.new(name=lod1name, width=2048, height=2048, alpha=False)
-            tempimage.filepath_raw = "//"+subfolder+'/'+lod1name+".jpg"
-            tempimage.file_format = 'JPEG'
-
-            for uv_face in oggetto.data.uv_layers.active.data:
-                uv_face.image = tempimage
-
-            #--------------------------------------------------------------
-            print('Passing color data from original to BAKE...')
-            bpy.context.scene.render.engine = 'BLENDER_RENDER'
-            bpy.context.scene.render.use_bake_selected_to_active = True
-            bpy.context.scene.render.bake_type = 'TEXTURE'
-
-            object = bpy.data.objects[baseobjwithlod]
-            object.select = True
-
-            bpy.context.scene.objects.active = bpy.data.objects[lod1name]
-            #--------------------------------------------------------------
-
-            bpy.ops.object.bake_image()
-            tempimage.save()
-
-            print('Creating custom material for BAKE...')
-            bpy.ops.object.select_all(action='DESELECT')
-            oggetto = bpy.data.objects[lod1name]
-            oggetto.select = True
-            bpy.context.scene.objects.active = oggetto
-            bpy.ops.view3d.texface_to_material()
-            oggetto.active_material.name = 'M_'+ oggetto.name
-            oggetto.data.name = 'SM_' + oggetto.name
-    #        basedir = os.path.dirname(bpy.data.filepath)
-
-            print('Saving on obj/mtl file for BAKE...')
-            activename = bpy.path.clean_name(bpy.context.scene.objects.active.name)
-            fn = os.path.join(basedir, subfolder, activename)
-            bpy.ops.export_scene.obj(filepath=fn + ".obj", use_selection=True, axis_forward='Y', axis_up='Z', path_mode='RELATIVE')
-
-            bpy.ops.object.move_to_layer(layers=(False, False, False, False, False, False, False, False, False, False, False, True, False, False, False, False, False, False, False, False))
-            print('>>> "'+obj.name+'" ('+str(ob_counter)+'/'+ str(ob_tot) +') object baked in '+str(time.time() - start_time_ob)+' seconds')
-            ob_counter += 1
-
-        bpy.context.scene.layers[11] = True
-        bpy.context.scene.layers[0] = False
-        end_time = time.time() - start_time
-        print('<<<<<<< Process done >>>>>>')
-        print('>>>'+str(ob_tot)+' objects processed in '+str(end_time)+' seconds')
-        return {'FINISHED'}
-
-        return {'FINISHED'}
-
 
 #_____________________________________________________________________________
 
