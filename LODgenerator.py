@@ -60,7 +60,6 @@ class OBJECT_OT_LOD0(bpy.types.Operator):
 
 #_____________________________________________________________________________
 
-
 def ratio_for_current_lod(lod,context):
     if lod == 1:
         ratio = context.scene.LOD1_dec_ratio
@@ -194,7 +193,6 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 to_restore_bounces = context.scene.cycles.diffuse_bounces
                 context.scene.cycles.diffuse_bounces = 1
 
-                
                 #--------------------------------------------------------------
 
                 print('Creating custom material for '+ currentLOD +'...')
@@ -205,7 +203,6 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 mat, texImage, bsdf = create_material_from_image(context,tempimage,obj_LODnew,False)
 
                 print('Passing color data from LOD0 to '+ currentLOD + '...')
-
 
                 bpy.ops.object.select_all(action='DESELECT')
                 obj_LODnew.select_set(True)
@@ -219,7 +216,8 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 
                 #bpy.ops.object.bake_image()
                 
-                bpy.context = context
+                #context.area.type = "VIEW_3D"
+                print(context.area.type)
                 bpy.ops.object.bake()
                 tempimage.save()
                 # restore previous render settings
@@ -227,7 +225,7 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 #context.scene.cycles.samples = to_restore_samples
                 #context.scene.render.engine = to_be_restored_render_engine
 
-                #mat.node_tree.links.new(bsdf.inputs['Base Color'], texImage.outputs['Color'])
+                mat.node_tree.links.new(bsdf.inputs['Base Color'], texImage.outputs['Color'])
 
                 obj_LODnew.data.name = 'SM_' + obj_LODnew.name
 

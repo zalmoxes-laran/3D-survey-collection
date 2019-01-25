@@ -152,13 +152,6 @@ class ToolsPanelLODgenerator:
         layout = self.layout
         obj = context.object
         row = layout.row()
-#        if obj:
-#            row.label(text="Override name:")
-#            row = layout.row()
-#            row.prop(obj, "name", text='')
-#            row = layout.row()
-#        row.label(text="on selected:")
-
 
         scn = context.scene
 
