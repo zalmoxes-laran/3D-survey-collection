@@ -22,6 +22,7 @@ def getChildren(myObject):
     return children
 
 class OBJECT_OT_LOD0(bpy.types.Operator):
+    """Set selected objs as LOD0. It creates an additional ATLAS Map"""
     bl_idname = "lod0.creation"
     bl_label = "LOD0"
     bl_options = {"REGISTER", "UNDO"}
@@ -50,6 +51,8 @@ def ratio_for_current_lod(lod,context):
         ratio = context.scene.LOD1_dec_ratio
     if lod == 2:
         ratio = context.scene.LOD2_dec_ratio
+    if lod == 3:
+        ratio = context.scene.LOD3_dec_ratio
     return ratio
 
 def tex_res_for_current_lod(lod,context):
@@ -57,9 +60,12 @@ def tex_res_for_current_lod(lod,context):
         tex_res = context.scene.LOD1_tex_res
     if lod == 2:
         tex_res = context.scene.LOD2_tex_res
+    if lod == 3:
+        tex_res = context.scene.LOD3_tex_res
     return tex_res
 
 class OBJECT_OT_LOD(bpy.types.Operator):
+    """Creates the desired LODs and export them as obj(s) in LOD(x) subfolders"""
     bl_idname = "lod.creation"
     bl_label = "LOD"
     bl_options = {"REGISTER", "UNDO"}
@@ -84,7 +90,6 @@ class OBJECT_OT_LOD(bpy.types.Operator):
         while i_lodbake_counter <= LODnum:
             currentLOD = 'LOD' + str(i_lodbake_counter)
             subfolder = currentLOD
-            #print(subfolder)
             
             if not os.path.exists(os.path.join(basedir, subfolder)):
                 os.mkdir(os.path.join(basedir, subfolder))
@@ -121,7 +126,6 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 obj_LODnew.select_set(True)
                 obj_LODnew.name = obj_base_name + "_" + currentLOD
                 obj_LODnew_name = obj_LODnew.name
-#                print('Il modello appena creato in LOD1 è '+str(obj_LODnew_name))
 
                 for i in range(0,len(bpy.data.objects[obj_LODnew_name].material_slots)):
                     bpy.ops.object.material_slot_remove()
@@ -129,28 +133,19 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 if obj_LODnew.data.uv_layers[1] and obj_LODnew.data.uv_layers[1].name =='Atlas':
                     print('Found Atlas UV mapping layer. I will use it.')
                     uv_layers = obj_LODnew.data.uv_layers
-                    #uv_layers = obj_LODnew.data.uv_layers
                     uv_layers.remove(uv_layers[0])
                 else:
                     print('Creating new UV mapping layer.')
                     create_double_UV(obj_LODnew)
-                    #bpy.ops.object.editmode_toggle()
-                    #bpy.ops.mesh.select_all(action='SELECT')
-                    #bpy.ops.mesh.remove_doubles()
-                    #bpy.ops.uv.select_all(action='SELECT')
-                    #bpy.ops.uv.pack_islands(margin=0.001)
-                    #bpy.ops.object.editmode_toggle()
 
                 obj_LOD0.data.uv_layers["MultiTex"].active_render = True
                 
                 # mesh decimation
                 decimate_mesh(context,obj_LODnew,ratio_for_current_lod(i_lodbake_counter,context),currentLOD)
 
-        # now the mesh is decimated
-        #------------------------------------------------------------------
+                # now the mesh is decimated
+                #------------------------------------------------------------------
 
-                #bpy.ops.object.select_all(action='DESELECT')
-                #obj_LODnew.select_set(True)
                 print('Creating new texture atlas for ' + currentLOD + '....')
                 tex_res = tex_res_for_current_lod(i_lodbake_counter,context)
                 tex_LODnew_name = "T_"+ obj_LODnew_name
@@ -158,10 +153,9 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 tempimage.filepath_raw = "//"+subfolder+'/'+tex_LODnew_name+".jpg"
                 filepathimage = "//"+subfolder+'/'+tex_LODnew_name+".jpg"
                 tempimage.file_format = 'JPEG'
- #               print('La immagine creata temporanea si chiama: ' + tempimage.name)
 
+                # annotate current cycles render settings to maintain things clean
                 #--------------------------------------------------------------
-                
 
                 to_be_restored_render_engine = context.scene.render.engine
                 context.scene.render.engine = 'CYCLES'
@@ -178,68 +172,54 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 to_restore_bounces = context.scene.cycles.diffuse_bounces
                 context.scene.cycles.diffuse_bounces = 1
 
+                # creating a new material
                 #--------------------------------------------------------------
-
                 print('Creating custom material for '+ currentLOD +'...')
                 bpy.ops.object.select_all(action='DESELECT')
                 obj_LODnew.select_set(True)
                 context.view_layer.objects.active = obj_LODnew
-
                 mat, texImage, bsdf = create_material_from_image(context,tempimage,obj_LODnew,False)
 
+                # baking textures
+                #--------------------------------------------------------------
                 print('Passing color data from LOD0 to '+ currentLOD + '...')
 
                 bpy.ops.object.select_all(action='DESELECT')
                 obj_LODnew.select_set(True)
                 obj_LOD0.select_set(True)
                 obj_LOD0_LODnew_selected = context.selected_objects
-                
                 context.view_layer.objects.active = obj_LODnew
-                for ob_parziali in obj_LOD0_LODnew_selected:
-                    print('un oggetto selezionato: '+ob_parziali.name)
-                print('Invece oggetto attivo è: '+ context.view_layer.objects.active.name)
-                
-                #bpy.ops.object.bake_image()
-                
-                #context.area.type = "VIEW_3D"
-                print(context.area.type)
                 bpy.ops.object.bake(type='DIFFUSE')
-                #bpy.ops.object.bake(save_mode='EXTERNAL')
-
-                #bpy.ops.object.bake(type='DIFFUSE', filepath=filepathimage, use_selected_to_active=True, use_clear=True, save_mode=EXTERNAL)
-
                 tempimage.save()
-                # restore previous render settings
+
+                # annotate current cycles render settings to maintain things clean
+                #-----------------------------------------------------------------
                 context.scene.cycles.diffuse_bounces = to_restore_bounces
                 context.scene.cycles.samples = to_restore_samples
                 context.scene.render.engine = to_be_restored_render_engine
-
                 mat.node_tree.links.new(bsdf.inputs['Base Color'], texImage.outputs['Color'])
-
                 obj_LODnew.data.name = 'SM_' + obj_LODnew.name
 
-                #print('Saving on obj/mtl file for '+ currentLOD +'...')
+                # Saving on obj/mtl file for currentLOD
+                #-----------------------------------------------------------------
+                print('Saving on obj/mtl file for '+ currentLOD +'...')
                 activename = bpy.path.clean_name(obj_LODnew.name)
                 fn = os.path.join(basedir, subfolder, activename)
                 bpy.ops.export_scene.obj(filepath=fn + ".obj", use_selection=True, axis_forward='Y', axis_up='Z', path_mode='RELATIVE')
-
-                #bpy.ops.object.move_to_layer(layers=(False, False, False, False, False, False, False, False, False, False, False, True, False, False, False, False, False, False, False, False))
+                
                 print('>>> "'+obj_LODnew.name+'" ('+str(ob_counter)+'/'+ str(ob_tot) +') object baked in '+str(time.time() - start_time_ob)+' seconds')
                 ob_counter += 1
 
             i_lodbake_counter += 1
-        #context.scene.layers[11] = True
-        #context.scene.layers[0] = False
         end_time = time.time() - start_time
         print('<<<<<<< Process done >>>>>>')
         print('>>>'+str(ob_tot)+' objects processed in '+str(end_time)+' seconds')
         return {'FINISHED'}
 
-#______________________________________
-
-
+#_______________________________________________________________________________________________
 
 class OBJECT_OT_ExportGroupsLOD(bpy.types.Operator):
+    """LOD cluster(s) export to FBX"""
     bl_idname = "exportfbx.grouplod"
     bl_label = "Export Group LOD"
     bl_options = {"REGISTER", "UNDO"}
@@ -281,6 +261,7 @@ class OBJECT_OT_ExportGroupsLOD(bpy.types.Operator):
 
 
 class OBJECT_OT_RemoveGroupsLOD(bpy.types.Operator):
+    """Removes LOD cluster(s)"""
     bl_idname = "remove.grouplod"
     bl_label = "Remove Group LOD"
     bl_options = {"REGISTER", "UNDO"}
@@ -305,6 +286,7 @@ class OBJECT_OT_RemoveGroupsLOD(bpy.types.Operator):
 
 
 class OBJECT_OT_CreateGroupsLOD(bpy.types.Operator):
+    """Creates LOD cluster(s): empty objects with nested LODs"""
     bl_idname = "create.grouplod"
     bl_label = "Create Group LOD"
     bl_options = {"REGISTER", "UNDO"}

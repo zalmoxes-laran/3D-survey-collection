@@ -151,33 +151,64 @@ class ToolsPanelLODgenerator:
     def draw(self, context):
         layout = self.layout
         obj = context.object
-        row = layout.row()
+        scene = context.scene
 
-        scn = context.scene
-
-        self.layout.operator("lod0.creation", icon="MESH_UVSPHERE", text='LOD 0 (set as)')
-        row = layout.row()
-
-        layout.prop(scn, 'LODnum', icon='BLENDER', toggle=True)
-
-        self.layout.operator("lod.creation", icon="MESH_UVSPHERE", text='LOD generation')
-        row = layout.row()
-
-        #row = layout.row()
-        row.label(text="Select LOD0 objs")
-        
-        row = layout.row()
-        if obj:
-            row.label(text="Resulting files: ")
+        if obj:#.type==['MESH']:
+            self.layout.operator("lod0.creation", icon="MESH_UVSPHERE", text='LOD 0 (set as)')
             row = layout.row()
-            row.label(text= "LOD1/LOD2_"+ obj.name + ".obj" )
+
+            split = layout.split()
+            # First column
+            col = split.column()
+            col.prop(scene, 'LODnum', icon='BLENDER', toggle=True)
+            # Second column, aligned
+            col = split.column(align=True)
+            #col.operator("lod.creation", icon="MOD_MULTIRES", text='')
+            col.operator("lod.creation", text='create')
+            
+            if scene.LODnum >= 1:
+                split = layout.split()
+                # First column
+                col = split.column()
+                col.label(text="Geometry")
+                #col.label(text="ratio")
+                col.prop(scene, 'LOD1_dec_ratio', icon='BLENDER', toggle=True, text="")
+                # Second column, aligned
+                col = split.column()
+                col.label(text="Texture")
+                #col.label(text="resolution")
+                col.prop(scene, 'LOD1_tex_res', icon='BLENDER', toggle=True, text="")
+                if scene.LODnum >= 2:
+                    split = layout.split()
+                    # First column
+                    col = split.column()
+                    col.prop(scene, 'LOD2_dec_ratio', icon='BLENDER', toggle=True, text="")
+                    col = split.column()
+                    # Second column, aligned
+                    col.prop(scene, 'LOD2_tex_res', icon='BLENDER', toggle=True, text="")
+                    if scene.LODnum >= 3:
+                        split = layout.split()
+                        # First column
+                        col = split.column()
+                        col.prop(scene, 'LOD3_dec_ratio', icon='BLENDER', toggle=True, text="")
+                        col = split.column()
+                        # Second column, aligned
+                        col.prop(scene, 'LOD3_tex_res', icon='BLENDER', toggle=True, text="")
+
             row = layout.row()
-        self.layout.operator("create.grouplod", icon="QUESTION", text='Create LOD cluster(s)')
-        row = layout.row()
-        self.layout.operator("remove.grouplod", icon="CANCEL", text='Remove LOD cluster(s)')
-        row = layout.row()
-        self.layout.operator("exportfbx.grouplod", icon="MESH_GRID", text='FBX Export LOD cluster(s)')
-        row = layout.row()
+            row.label(text="LOD clusters")
+            
+            split = layout.split()
+            # First column
+            col = split.column()
+            col.operator("create.grouplod", icon="PRESET", text='')
+            # Second column, aligned
+            col = split.column(align=True)
+            col.operator("remove.grouplod", icon="CANCEL", text='')
+            
+            row = layout.row()
+            row.label(text="LOD cluster(s) export:")
+            self.layout.operator("exportfbx.grouplod", icon="MESH_GRID", text='FBX')
 
 
 class ToolsPanel_ccTool:
