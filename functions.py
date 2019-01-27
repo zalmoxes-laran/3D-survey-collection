@@ -187,6 +187,17 @@ def tex_to_mat():
 
 #        self.layout.operator("cam.visibility", icon="RENDER_REGION", text='Cam visibility')
 
+
+#Recursivly transverse layer_collection for a particular name
+def recurLayerCollection(layerColl, collName):
+    found = None
+    if (layerColl.name == collName):
+        return layerColl
+    for layer in layerColl.children:
+        found = recurLayerCollection(layer, collName)
+        if found:
+            return found
+
 def check_children_plane(cam_ob):
     check = False
     for obj in cam_ob.children:

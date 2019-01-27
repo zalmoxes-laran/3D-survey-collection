@@ -119,7 +119,23 @@ class OBJECT_OT_LOD(bpy.types.Operator):
 
                 print('Creating new LOD'+ str(i_lodbake_counter) +' object..')
                 bpy.ops.object.duplicate_move(OBJECT_OT_duplicate={"linked":False, "mode":'TRANSLATION'}, TRANSFORM_OT_translate={"value":(0, 0, 0), "constraint_axis":(False, False, False), "constraint_orientation":'GLOBAL', "mirror":False, "proportional":'DISABLED', "proportional_edit_falloff":'SMOOTH', "proportional_size":1, "snap":False, "snap_target":'CLOSEST', "snap_point":(0, 0, 0), "snap_align":False, "snap_normal":(0, 0, 0), "gpencil_strokes":False, "texture_space":False, "remove_on_cancel":False, "release_confirm":False})
+                
                 obj_LODnew = context.view_layer.objects.active
+
+                LOD0layerCol = context.view_layer.active_layer_collection
+                LOD0Col = bpy.data.collections.get(LOD0layerCol.name)
+
+                if bpy.data.collections.get(currentLOD) is None:
+                    currentLODCol = bpy.data.collections.new(currentLOD)
+                    currentLODCol.name = currentLOD
+                    context.scene.collection.children.link(currentLODCol)
+                else:
+                    currentLODCol = bpy.data.collections.get(currentLOD)
+
+                # link the object to collection
+                currentLODCol.objects.link(obj_LODnew)
+                # unlink from previous collection
+                LOD0Col.objects.unlink(obj_LODnew)
 
                 bpy.ops.object.select_all(action='DESELECT')
                 context.view_layer.objects.active = obj_LODnew
@@ -303,16 +319,18 @@ class OBJECT_OT_CreateGroupsLOD(bpy.types.Operator):
                 baseobj = baseobjwithlod.replace("_LOD0", "")
                 print('Found LOD0 object:' + baseobjwithlod)
                 local_bbox_center = 0.125 * sum((Vector(b) for b in obj.bound_box), Vector())
-                global_bbox_center = obj.matrix_world * local_bbox_center
+                global_bbox_center = obj.matrix_world @ local_bbox_center
                 emptyofname = 'GLOD_' + baseobj
                 obempty = bpy.data.objects.new( emptyofname, None )
-                bpy.context.scene.objects.link( obempty )
-                obempty.empty_draw_size = 2
-                obempty.empty_draw_type = 'PLAIN_AXES'
+                bpy.context.collection.objects.link(obempty)
+
+                #bpy.context.scene.objects.link( obempty )
+                obempty.empty_display_size = 2
+                obempty.empty_display_type = 'PLAIN_AXES'
                 obempty.location = global_bbox_center
                 bpy.ops.object.select_all(action='DESELECT')
-                obempty.select = True
-                bpy.context.scene.objects.active = obempty
+                obempty.select_set(True)
+                bpy.context.view_layer.objects.active = obempty
                 obempty['fbx_type'] = 'LodGroup'
 #                bpy.ops.wm.properties_edit(data_path="object", property="Fbx_Type", value="LodGroup", min=0, max=1, use_soft_limits=False, soft_min=0, soft_max=1, description="")
 
@@ -320,8 +338,8 @@ class OBJECT_OT_CreateGroupsLOD(bpy.types.Operator):
                 child = selectLOD(listobjects, num, baseobj)
                 while child is not None:
                     bpy.ops.object.select_all(action='DESELECT')
-                    child.select = True
-                    obempty.select = True
+                    child.select_set(True)
+                    obempty.select_set(rue)
                     bpy.context.scene.objects.active = obempty
                     bpy.ops.object.parent_set(type='OBJECT', keep_transform=False)
 #                    child.parent= obempty
