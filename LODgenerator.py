@@ -324,7 +324,6 @@ class OBJECT_OT_CreateGroupsLOD(bpy.types.Operator):
                 obempty = bpy.data.objects.new( emptyofname, None )
                 bpy.context.collection.objects.link(obempty)
 
-                #bpy.context.scene.objects.link( obempty )
                 obempty.empty_display_size = 2
                 obempty.empty_display_type = 'PLAIN_AXES'
                 obempty.location = global_bbox_center
@@ -332,20 +331,23 @@ class OBJECT_OT_CreateGroupsLOD(bpy.types.Operator):
                 obempty.select_set(True)
                 bpy.context.view_layer.objects.active = obempty
                 obempty['fbx_type'] = 'LodGroup'
-#                bpy.ops.wm.properties_edit(data_path="object", property="Fbx_Type", value="LodGroup", min=0, max=1, use_soft_limits=False, soft_min=0, soft_max=1, description="")
 
                 num = 0
                 child = selectLOD(listobjects, num, baseobj)
+                print(child)
+                print(baseobj)
+                print(str(num))
                 while child is not None:
-                    bpy.ops.object.select_all(action='DESELECT')
-                    child.select_set(True)
-                    obempty.select_set(rue)
-                    bpy.context.scene.objects.active = obempty
-                    bpy.ops.object.parent_set(type='OBJECT', keep_transform=False)
-#                    child.parent= obempty
-#                    child.location.x = child.location.x - obempty.location.x
-#                    child.location.y = child.location.y - obempty.location.y
+                    child.parent = obempty
+                    child.matrix_parent_inverse = obempty.matrix_world.inverted()
+                    #oldway to do this:
+                    #bpy.ops.object.select_all(action='DESELECT')
+                    #child.select_set(True)
+                    #obempty.select_set(True)
+                    #bpy.context.view_layer.objects.active = obempty
+                    #bpy.ops.object.parent_set(type='OBJECT', keep_transform=False)
                     num += 1
+                    print(str(num))
                     child = selectLOD(listobjects, num, baseobj)
         return {'FINISHED'}
 
