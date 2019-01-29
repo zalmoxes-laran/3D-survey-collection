@@ -24,10 +24,11 @@ class ToolsPanelImport:
         layout = self.layout
         obj = context.object
 
+        ßrow = layout.row()
+        self.layout.operator("import_points.txt", icon="STICKY_UVS_DISABLE", text='Coordinates')
         row = layout.row()
-        self.layout.operator("import_scene.multiple_objs", icon="WORLD_DATA", text='Import multiple objs')
-        row = layout.row()
-        self.layout.operator("import_points.txt", icon="WORLD_DATA", text='Import txt points')
+        self.layout.operator("import_scene.multiple_objs", icon="DUPLICATE", text='Multiple objs')
+ 
 
 class ToolsPanelExport:
     bl_label = "Exporters"
@@ -39,24 +40,37 @@ class ToolsPanelExport:
         obj = context.object
         row = layout.row()
         if obj is not None:
-            self.layout.operator("export.coordname", icon="WORLD_DATA", text='Coordinates')
+            self.layout.operator("export.coordname", icon="STICKY_UVS_DISABLE", text='Coordinates')
             row = layout.row()
-            row.label(text="Active object is: " + obj.name)
-            row = layout.row()
-            row.label(text="Override")
-            row = layout.row()
-            row.prop(obj, "name")
-            row = layout.row()
-            self.layout.operator("export.object", icon="OBJECT_DATA", text='Exp. one obj')
-            row = layout.row()
-            row.label(text="Resulting file: " + obj.name + ".obj")
-            row = layout.row()
-            self.layout.operator("obj.exportbatch", icon="OBJECT_DATA", text='Exp. several obj')
-            row = layout.row()
-            self.layout.operator("fbx.exportbatch", icon="OBJECT_DATA", text='Exp. several fbx UE4')
-            row = layout.row()
-            self.layout.operator("fbx.exp", icon="OBJECT_DATA", text='Exp. fbx UE4')
-            row = layout.row()
+            #row.label(text=obj.name)
+            #row = layout.row()
+            #row.label(text="Override")
+            #row = layout.row()
+
+            
+            #layout.separator()
+            box = layout.box()
+            row = box.row()
+            row.operator("export.object", icon="OBJECT_DATA", text='One obj')
+            row = box.row()
+            row.operator("fbx.exp", icon="OBJECT_DATA", text='One fbx UE4')
+            row = box.row() 
+            row.label(text= "-> "+obj.name + ".obj/.fbx")
+            #row = box.row()
+            #row.prop(obj, "name", text="")
+
+            box = layout.box()
+            row = box.row()
+
+            row.operator("obj.exportbatch", icon="DUPLICATE", text='Several obj')
+            row = box.row() 
+            row.label(text= "-> /objectname.obj")
+            row = box.row()
+            row.operator("fbx.exportbatch", icon="DUPLICATE", text='Several fbx UE4')
+            row = box.row() 
+            row.label(text= "-> /FBX/objectname.fbx")
+            #row = layout.row()
+
 #            self.layout.operator("osgt.exportbatch", icon="OBJECT_DATA", text='Exp. several osgt files')
 #            row = layout.row()
 #            if is_windows():
@@ -212,7 +226,7 @@ class ToolsPanelLODgenerator:
 
 
 class ToolsPanel_ccTool:
-    bl_label = "Color Correction tool (cycles)"
+    bl_label = "Color Correction tool"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_options = {'DEFAULT_CLOSED'}
@@ -222,45 +236,45 @@ class ToolsPanel_ccTool:
         obj = context.object
         scene = context.scene
         row = layout.row()
-        if bpy.context.scene.render.engine != 'CYCLES':
-            row.label(text="Please, activate cycles engine !")
-        else:
-            if scene.objects.active:
-                if obj.type not in ['MESH']:
-                    select_a_mesh(layout)
-                else:    
-                    row.label(text="Step by step procedure")
-                    row = layout.row()
-                    row.label(text="for selected object(s):")
-                    self.layout.operator("bi2cycles.material", icon="SMOOTH", text='Create cycles nodes')
-                    self.layout.operator("create.ccnode", icon="ASSET_MANAGER", text='Create correction node')
-                    
-                    activeobj = scene.objects.active
-                    if get_nodegroupname_from_obj(obj) is not None:
+        #if bpy.context.scene.render.engine != 'CYCLES':
+        #    row.label(text="Please, activate cycles engine !")
+        #else:
+        if context.scene.render_layer.objects.active:
+            if obj.type not in ['MESH']:
+                select_a_mesh(layout)
+            else:    
+                row.label(text="Step by step procedure")
+                row = layout.row()
+                row.label(text="for selected object(s):")
+                self.layout.operator("bi2cycles.material", icon="SMOOTH", text='Create cycles nodes')
+                self.layout.operator("create.ccnode", icon="ASSET_MANAGER", text='Create correction node')
+                
+                activeobj = scene.objects.active
+                if get_nodegroupname_from_obj(obj) is not None:
 #                    layout = self.layout
-                        row = self.layout.row()
-                        row.prop(context.window_manager.interface_vars, 'cc_nodes', expand=True)
-                        nodegroupname = get_nodegroupname_from_obj(obj)
-                        node_to_visualize = context.window_manager.interface_vars.cc_nodes
-                        if node_to_visualize == 'RGB':
-                            node = get_cc_node_in_obj_mat(nodegroupname, "RGB")
-                        if node_to_visualize == 'BC':
-                            node = get_cc_node_in_obj_mat(nodegroupname, "BC")
-                        if node_to_visualize == 'HS':
-                            node = get_cc_node_in_obj_mat(nodegroupname, "HS")               
-                        row = layout.row()
-                        row.label(text="Active cc node: "+node_to_visualize)# + nodegroupname)
-                        row = layout.row()
-                        row.label(text=nodegroupname)
-                        # set "node" context pointer for the panel layout
-                        layout.context_pointer_set("node", node)
+                    row = self.layout.row()
+                    row.prop(context.window_manager.interface_vars, 'cc_nodes', expand=True)
+                    nodegroupname = get_nodegroupname_from_obj(obj)
+                    node_to_visualize = context.window_manager.interface_vars.cc_nodes
+                    if node_to_visualize == 'RGB':
+                        node = get_cc_node_in_obj_mat(nodegroupname, "RGB")
+                    if node_to_visualize == 'BC':
+                        node = get_cc_node_in_obj_mat(nodegroupname, "BC")
+                    if node_to_visualize == 'HS':
+                        node = get_cc_node_in_obj_mat(nodegroupname, "HS")               
+                    row = layout.row()
+                    row.label(text="Active cc node: "+node_to_visualize)# + nodegroupname)
+                    row = layout.row()
+                    row.label(text=nodegroupname)
+                    # set "node" context pointer for the panel layout
+                    layout.context_pointer_set("node", node)
 
-                        if hasattr(node, "draw_buttons_ext"):
-                            node.draw_buttons_ext(context, layout)
-                        elif hasattr(node, "draw_buttons"):
-                            node.draw_buttons(context, layout)
+                    if hasattr(node, "draw_buttons_ext"):
+                        node.draw_buttons_ext(context, layout)
+                    elif hasattr(node, "draw_buttons"):
+                        node.draw_buttons(context, layout)
 
-                        # XXX this could be filtered further to exclude socket types which don't have meaningful input values (e.g. cycles shader)
+                    # XXX this could be filtered further to exclude socket types which don't have meaningful input values (e.g. cycles shader)
 #                        value_inputs = [socket for socket in node.inputs if socket.enabled and not socket.is_linked]
 #                        if value_inputs:
 #                            layout.separator()
@@ -269,20 +283,20 @@ class ToolsPanel_ccTool:
 #                                row = layout.row()
 #                                socket.draw(context, row, node, iface_(socket.name, socket.bl_rna.translation_context))                    
 #                    
-                    
-                    self.layout.operator("create.newset", icon="FILE_TICK", text='Create new texture set')
-                    row = layout.row()
-                    self.layout.operator("bake.cyclesdiffuse", icon="TPAINT_HLT", text='Bake CC to texture set')
-                    row = layout.row()
-                    self.layout.operator("savepaint.cam", icon="IMAGE_COL", text='Save new textures')
-                    self.layout.operator("applynewtexset.material", icon="AUTOMERGE_ON", text='Use new tex set')
-                    self.layout.operator("applyoritexset.material", icon="RECOVER_LAST", text='Use original tex set')
-                    
-                    self.layout.operator("removeccnode.material", icon="CANCEL", text='remove cc node')
-                    self.layout.operator("removeorimage.material", icon="CANCEL", text='remove ori image')
-                    row = layout.row() 
-            else:
-                select_a_mesh(layout)
+                
+                self.layout.operator("create.newset", icon="FILE_TICK", text='Create new texture set')
+                row = layout.row()
+                self.layout.operator("bake.cyclesdiffuse", icon="TPAINT_HLT", text='Bake CC to texture set')
+                row = layout.row()
+                self.layout.operator("savepaint.cam", icon="IMAGE_COL", text='Save new textures')
+                self.layout.operator("applynewtexset.material", icon="AUTOMERGE_ON", text='Use new tex set')
+                self.layout.operator("applyoritexset.material", icon="RECOVER_LAST", text='Use original tex set')
+                
+                self.layout.operator("removeccnode.material", icon="CANCEL", text='remove cc node')
+                self.layout.operator("removeorimage.material", icon="CANCEL", text='remove ori image')
+                row = layout.row() 
+        else:
+            select_a_mesh(layout)
 
 
 class ToolsPanelPhotogrTool:
