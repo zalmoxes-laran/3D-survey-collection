@@ -178,8 +178,7 @@ class ToolsPanelLODgenerator:
             # Second column, aligned
             col = split.column(align=True)
             #col.operator("lod.creation", icon="MOD_MULTIRES", text='')
-            col.operator("lod.creation", text='create')
-            
+            col.operator("lod.creation", text='generate')
             if scene.LODnum >= 1:
                 split = layout.split()
                 # First column
@@ -224,7 +223,6 @@ class ToolsPanelLODgenerator:
             row.label(text="LOD cluster(s) export:")
             self.layout.operator("exportfbx.grouplod", icon="MESH_GRID", text='FBX')
 
-
 class ToolsPanel_ccTool:
     bl_label = "Color Correction tool"
     bl_space_type = 'VIEW_3D'
@@ -239,17 +237,17 @@ class ToolsPanel_ccTool:
         #if bpy.context.scene.render.engine != 'CYCLES':
         #    row.label(text="Please, activate cycles engine !")
         #else:
-        if context.scene.render_layer.objects.active:
+        if context.active_object:
             if obj.type not in ['MESH']:
                 select_a_mesh(layout)
             else:    
                 row.label(text="Step by step procedure")
                 row = layout.row()
                 row.label(text="for selected object(s):")
-                self.layout.operator("bi2cycles.material", icon="SMOOTH", text='Create cycles nodes')
-                self.layout.operator("create.ccnode", icon="ASSET_MANAGER", text='Create correction node')
+                self.layout.operator("bi2cycles.material", icon="MOD_PARTICLE_INSTANCE", text='Create cycles nodes')
+                self.layout.operator("create.ccnode", icon="SEQ_HISTOGRAM", text='Create correction node')
                 
-                activeobj = scene.objects.active
+                activeobj = context.active_object
                 if get_nodegroupname_from_obj(obj) is not None:
 #                    layout = self.layout
                     row = self.layout.row()

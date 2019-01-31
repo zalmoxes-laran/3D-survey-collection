@@ -517,7 +517,7 @@ def create_correction_nodegroup(name):
 def bi2cycles():
     
     for obj in bpy.context.selected_objects:
-        active_object_name = bpy.context.scene.objects.active.name
+        active_object_name = bpy.context.active_object.name
             
         for matslot in obj.material_slots:
             mat = matslot.material
