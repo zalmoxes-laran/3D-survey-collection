@@ -4,6 +4,7 @@ from bpy.types import Panel
 from bpy.types import Operator
 from bpy.types import PropertyGroup
 
+from .functions import *
 
 import os
 from bpy_extras.io_utils import ImportHelper
@@ -244,7 +245,7 @@ class ToolsPanel_ccTool:
                 row.label(text="Step by step procedure")
                 row = layout.row()
                 row.label(text="for selected object(s):")
-                self.layout.operator("bi2cycles.material", icon="MOD_PARTICLE_INSTANCE", text='Create cycles nodes')
+                #self.layout.operator("bi2cycles.material", icon="MOD_PARTICLE_INSTANCE", text='Create cycles nodes')
                 self.layout.operator("create.ccnode", icon="SEQ_HISTOGRAM", text='Create correction node')
                 
                 activeobj = context.active_object

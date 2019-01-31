@@ -34,7 +34,7 @@ def grad(rad):
 
 def get_nodegroupname_from_obj(obj):
 #    if 'cc_node' in [node.node_tree.name for node in obj.material_slots[0].material.node_tree.nodes]:
-    if obj.material_slots[0].material.node_tree.nodes['cc_node']:
+    if obj.material_slots[0].material.node_tree.nodes['cc_node'] is not None:
         nodegroupname = obj.material_slots[0].material.node_tree.nodes['cc_node'].node_tree.name
     else:
         nodegroupname = None
@@ -475,50 +475,50 @@ def dict2list(dict):
     return list
 
 def create_correction_nodegroup(name):
-
     # create a group
 #    active_object_name = bpy.context.scene.objects.active.name
-    test_group = bpy.data.node_groups.new(name, 'ShaderNodeTree')
-#    test_group.label = label
+    cc_nodegroup = bpy.data.node_groups.new(name, 'ShaderNodeTree')
+#    cc_nodegroup.label = label
 
     # create group inputs
-    group_inputs = test_group.nodes.new('NodeGroupInput')
+    group_inputs = cc_nodegroup.nodes.new('NodeGroupInput')
     group_inputs.location = (-750,0)
-    test_group.inputs.new('NodeSocketColor','tex')
+    cc_nodegroup.inputs.new('NodeSocketColor','tex')
 
     # create group outputs
-    group_outputs = test_group.nodes.new('NodeGroupOutput')
+    group_outputs = cc_nodegroup.nodes.new('NodeGroupOutput')
     group_outputs.location = (300,0)
-    test_group.outputs.new('NodeSocketColor','cortex')
+    cc_nodegroup.outputs.new('NodeSocketColor','cortex')
 
     # create three math nodes in a group
-    bricon = test_group.nodes.new('ShaderNodeBrightContrast')
+    bricon = cc_nodegroup.nodes.new('ShaderNodeBrightContrast')
     bricon.location = (-220, -100)
     bricon.label = 'bricon'
 
-    sathue = test_group.nodes.new('ShaderNodeHueSaturation')
+    sathue = cc_nodegroup.nodes.new('ShaderNodeHueSaturation')
     sathue.location = (0, -100)
     sathue.label = 'sathue'
 
-    RGBcurve = test_group.nodes.new('ShaderNodeRGBCurve')
+    RGBcurve = cc_nodegroup.nodes.new('ShaderNodeRGBCurve')
     RGBcurve.location = (-500, -100)
     RGBcurve.label = 'RGBcurve'
 
     # link nodes together
-    test_group.links.new(sathue.inputs[4], bricon.outputs[0])
-    test_group.links.new(bricon.inputs[0], RGBcurve.outputs[0])
+    cc_nodegroup.links.new(sathue.inputs[4], bricon.outputs[0])
+    cc_nodegroup.links.new(bricon.inputs[0], RGBcurve.outputs[0])
 
     # link inputs
-    test_group.links.new(group_inputs.outputs['tex'], RGBcurve.inputs[1])
+    cc_nodegroup.links.new(group_inputs.outputs['tex'], RGBcurve.inputs[1])
 
     #link output
-    test_group.links.new(sathue.outputs[0], group_outputs.inputs['cortex'])
+    cc_nodegroup.links.new(sathue.outputs[0], group_outputs.inputs['cortex'])
 
+
+
+############ QUESTA PARTE NON DOVREBBE PIU' SERVIRE NEL BLENDER 2.8 ############
 def bi2cycles():
-    
     for obj in bpy.context.selected_objects:
         active_object_name = bpy.context.active_object.name
-            
         for matslot in obj.material_slots:
             mat = matslot.material
             image = mat.texture_slots[0].texture.image
@@ -543,24 +543,21 @@ def bi2cycles():
             links.new(mainNode.outputs[0], output.inputs[0])
 #            colcor.name = "colcornode"
 
-def create_cc_node():#(ob,context):
-    active_object_name = bpy.context.scene.objects.active.name
-    create_correction_nodegroup(active_object_name)
-    
-    for obj in bpy.context.selected_objects:
-        for matslot in obj.material_slots:
-            mat = matslot.material
-#            cc_image_node, cc_node, original_node, diffuse_node, source_paint_node = node_retriever(mat, "all")
-            links = mat.node_tree.links
-            nodes = mat.node_tree.nodes
-            mainNode = node_retriever(mat, "diffuse")
-            teximg = node_retriever(mat, "original")
-            colcor = nodes.new(type="ShaderNodeGroup")
-            colcor.node_tree = (bpy.data.node_groups[active_object_name])
-            colcor.location = (-800, -50)
-            colcor.name = "cc_node"
-            links.new(teximg.outputs[0], colcor.inputs[0])
-            links.new(colcor.outputs[0], mainNode.inputs[0])
+####################################################################################
+
+def cc_node_to_mat(mat, cc_nodegroup):#(ob,context):
+
+    #cc_image_node, cc_node, original_node, diffuse_node, source_paint_node = node_retriever(mat, "all")
+    links = mat.node_tree.links
+    nodes = mat.node_tree.nodes
+    mainNode = node_retriever(mat, "diffuse")
+    teximg = node_retriever(mat, "original")
+    colcor = nodes.new(type="ShaderNodeGroup")
+    colcor.node_tree = cc_nodegroup#(bpy.data.node_groups[active_object_name])
+    colcor.location = (-800, -50)
+    colcor.name = "cc_node"
+    links.new(teximg.outputs[0], colcor.inputs[0])
+    links.new(colcor.outputs[0], mainNode.inputs[0])
 
 def remove_node(mat, node_to_remove):
     node = node_retriever(mat, node_to_remove)
