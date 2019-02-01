@@ -255,23 +255,22 @@ class ToolsPanel_ccTool:
                     row.prop(context.window_manager.interface_vars, 'cc_nodes', expand=True)
                     nodegroupname = get_nodegroupname_from_obj(obj)
                     node_to_visualize = context.window_manager.interface_vars.cc_nodes
-                    if node_to_visualize == 'RGB':
-                        node = get_cc_node_in_obj_mat(nodegroupname, "RGB")
-                    if node_to_visualize == 'BC':
-                        node = get_cc_node_in_obj_mat(nodegroupname, "BC")
-                    if node_to_visualize == 'HS':
-                        node = get_cc_node_in_obj_mat(nodegroupname, "HS")               
-                    row = layout.row()
-                    row.label(text="Active cc node: "+node_to_visualize)# + nodegroupname)
+                    #if node_to_visualize == 'RGB':
+                    #    node = get_cc_node_in_obj_mat(nodegroupname, "RGB")
+                    #if node_to_visualize == 'BC':
+                    #    node = get_cc_node_in_obj_mat(nodegroupname, "BC")
+                    #if node_to_visualize == 'HS':
+                    #    node = get_cc_node_in_obj_mat(nodegroupname, "HS")               
+                    #row = layout.row()
+                    #row.label(text="Active cc node: "+node_to_visualize)# + nodegroupname)
                     row = layout.row()
                     row.label(text=nodegroupname)
-                    # set "node" context pointer for the panel layout
-                    layout.context_pointer_set("node", node)
+                    #layout.context_pointer_set("node", node)
 
-                    if hasattr(node, "draw_buttons_ext"):
-                        node.draw_buttons_ext(context, layout)
-                    elif hasattr(node, "draw_buttons"):
-                        node.draw_buttons(context, layout)
+                    #if hasattr(node, "draw_buttons_ext"):
+                    #    node.draw_buttons_ext(context, layout)
+                    #elif hasattr(node, "draw_buttons"):
+                    #    node.draw_buttons(context, layout)
 
                     # XXX this could be filtered further to exclude socket types which don't have meaningful input values (e.g. cycles shader)
 #                        value_inputs = [socket for socket in node.inputs if socket.enabled and not socket.is_linked]
@@ -287,7 +286,7 @@ class ToolsPanel_ccTool:
                 row = layout.row()
                 self.layout.operator("bake.cyclesdiffuse", icon="TPAINT_HLT", text='Bake CC to texture set')
                 row = layout.row()
-                self.layout.operator("savepaint.cam", icon="IMAGE_COL", text='Save new textures')
+                self.layout.operator("savepaint.cam", icon="WORKSPACE", text='Save new textures')
                 self.layout.operator("applynewtexset.material", icon="AUTOMERGE_ON", text='Use new tex set')
                 self.layout.operator("applyoritexset.material", icon="RECOVER_LAST", text='Use original tex set')
                 

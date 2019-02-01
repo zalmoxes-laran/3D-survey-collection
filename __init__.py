@@ -135,6 +135,12 @@ classes = (
     PhotogrTool.OBJECT_OT_nikond3200scene,
     PhotogrTool.OBJECT_OT_NoBetterCameras,
     PhotogrTool.OBJECT_OT_paintcam,
+    ccTool.OBJECT_OT_createccnode,
+    ccTool.OBJECT_OT_createnewset,
+    ccTool.OBJECT_OT_bakecyclesdiffuse,
+    ccTool.OBJECT_OT_applynewtexset,
+    ccTool.OBJECT_OT_removeccnode,
+    ccTool.OBJECT_OT_removeorimage,
     TexPatcher.OBJECT_OT_applyoritexset,
     TexPatcher.OBJECT_OT_applysptexset,
     TexPatcher.OBJECT_OT_exitsetup,
@@ -143,7 +149,6 @@ classes = (
     TexPatcher.OBJECT_OT_textransfer,
     InterfaceVars
 )
-
 
 def register():
     for cls in classes:

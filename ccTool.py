@@ -43,7 +43,7 @@ class OBJECT_OT_createccnode(bpy.types.Operator):
     def execute(self, context):
 
         bpy.context.scene.render.engine = 'CYCLES'
-        active_object_name = bpy.context.scene.objects.active.name
+        active_object_name = context.active_object.name
         cc_nodegroup = create_correction_nodegroup(active_object_name)
         for obj in bpy.context.selected_objects:
             for matslot in obj.material_slots:

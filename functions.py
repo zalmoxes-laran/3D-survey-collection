@@ -34,10 +34,10 @@ def grad(rad):
 
 def get_nodegroupname_from_obj(obj):
 #    if 'cc_node' in [node.node_tree.name for node in obj.material_slots[0].material.node_tree.nodes]:
-    if obj.material_slots[0].material.node_tree.nodes['cc_node'] is not None:
-        nodegroupname = obj.material_slots[0].material.node_tree.nodes['cc_node'].node_tree.name
-    else:
+    if obj.material_slots[0].material.node_tree.nodes.find('cc_node') == -1 :
         nodegroupname = None
+    else:
+        nodegroupname = obj.material_slots[0].material.node_tree.nodes['cc_node'].name
     return nodegroupname
 
 #if 'Material Output' in [node.name for node in bpy.data.materials['your_material_name'].node_tree.nodes]:
@@ -52,7 +52,6 @@ def get_cc_node_in_obj_mat(nodegroupname,type):
         type_name = 'Hue Saturation Value'
     node = bpy.data.node_groups[nodegroupname].nodes[type_name]
     return node
-
 
 def set_up_lens(obj,sens_width,sens_lenght,lens):
     obj.select_set(True)
@@ -478,8 +477,9 @@ def create_correction_nodegroup(name):
     # create a group
 #    active_object_name = bpy.context.scene.objects.active.name
     cc_nodegroup = bpy.data.node_groups.new(name, 'ShaderNodeTree')
+    #cc_nodegroup.name = "cc_node" 
 #    cc_nodegroup.label = label
-
+    
     # create group inputs
     group_inputs = cc_nodegroup.nodes.new('NodeGroupInput')
     group_inputs.location = (-750,0)
@@ -512,6 +512,8 @@ def create_correction_nodegroup(name):
 
     #link output
     cc_nodegroup.links.new(sathue.outputs[0], group_outputs.inputs['cortex'])
+
+    return cc_nodegroup
 
 
 
@@ -546,15 +548,25 @@ def bi2cycles():
 ####################################################################################
 
 def cc_node_to_mat(mat, cc_nodegroup):#(ob,context):
-
+    print("Voglio attaccare al materiale "+ mat.name + " il nodo gruppo: " + cc_nodegroup.name)
     #cc_image_node, cc_node, original_node, diffuse_node, source_paint_node = node_retriever(mat, "all")
     links = mat.node_tree.links
     nodes = mat.node_tree.nodes
-    mainNode = node_retriever(mat, "diffuse")
-    teximg = node_retriever(mat, "original")
+    mainNode = node_retriever(mat, "Principled BSDF")
+    mainNode.name = "diffuse"
+
+    teximg = node_retriever(mat, "Image Texture")
+    teximg.name = "original"
+    
+    print("Ho letto il materiale ed ho trovato una immagine di nome: " + teximg.image.name)
     colcor = nodes.new(type="ShaderNodeGroup")
-    colcor.node_tree = cc_nodegroup#(bpy.data.node_groups[active_object_name])
-    colcor.location = (-800, -50)
+ #   colcor.node_tree = cc_nodegroup
+    print(cc_nodegroup)
+    colcor.node_tree = cc_nodegroup
+    x_img = teximg.location[0]
+    x_dif = mainNode.location[0]
+    x = (x_img+x_dif)/2
+    colcor.location = (x, -50)
     colcor.name = "cc_node"
     links.new(teximg.outputs[0], colcor.inputs[0])
     links.new(colcor.outputs[0], mainNode.inputs[0])
