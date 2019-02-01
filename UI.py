@@ -255,6 +255,7 @@ class ToolsPanel_ccTool:
                     row.prop(context.window_manager.interface_vars, 'cc_nodes', expand=True)
                     nodegroupname = get_nodegroupname_from_obj(obj)
                     node_to_visualize = context.window_manager.interface_vars.cc_nodes
+                    #print(node_to_visualize)
                     #if node_to_visualize == 'RGB':
                     #    node = get_cc_node_in_obj_mat(nodegroupname, "RGB")
                     #if node_to_visualize == 'BC':

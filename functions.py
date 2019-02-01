@@ -563,10 +563,11 @@ def cc_node_to_mat(mat, cc_nodegroup):#(ob,context):
  #   colcor.node_tree = cc_nodegroup
     print(cc_nodegroup)
     colcor.node_tree = cc_nodegroup
-    x_img = teximg.location[0]
-    x_dif = mainNode.location[0]
-    x = (x_img+x_dif)/2
-    colcor.location = (x, -50)
+#    x_img = teximg.location[0]
+#    x_dif = mainNode.location[0]
+    x = (teximg.location[0]+mainNode.location[0])/2
+    y = (teximg.location[1]+mainNode.location[1])/2
+    colcor.location = (x, y)
     colcor.name = "cc_node"
     links.new(teximg.outputs[0], colcor.inputs[0])
     links.new(colcor.outputs[0], mainNode.inputs[0])
