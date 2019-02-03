@@ -137,7 +137,7 @@ class OBJECT_OT_NoBetterCameras(bpy.types.Operator):
 
 #______________________________________________________________
 
-class CreateCameraImagePlane(bpy.types.Operator):
+class OBJECT_OT_CreateCameraImagePlane(bpy.types.Operator):
     """Create image plane for camera"""
     bl_idname= "object.createcameraimageplane"
     bl_label="Camera Image Plane"

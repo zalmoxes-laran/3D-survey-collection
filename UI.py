@@ -225,7 +225,7 @@ class ToolsPanelLODgenerator:
             self.layout.operator("exportfbx.grouplod", icon="MESH_GRID", text='FBX')
 
 class ToolsPanel_ccTool:
-    bl_label = "Color Correction tool"
+    bl_label = "Color Correction"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_options = {'DEFAULT_CLOSED'}
@@ -242,64 +242,81 @@ class ToolsPanel_ccTool:
             if obj.type not in ['MESH']:
                 select_a_mesh(layout)
             else:    
-                row.label(text="Step by step procedure")
-                row = layout.row()
-                row.label(text="for selected object(s):")
+
+                # per ora tengo questa riga per eventuale gestione di file provenienti dalla 2.79:
                 #self.layout.operator("bi2cycles.material", icon="MOD_PARTICLE_INSTANCE", text='Create cycles nodes')
-                self.layout.operator("create.ccnode", icon="SEQ_HISTOGRAM", text='Create correction node')
                 
                 activeobj = context.active_object
-                if get_nodegroupname_from_obj(obj) is not None:
-#                    layout = self.layout
-                    row = self.layout.row()
-                    row.prop(context.window_manager.interface_vars, 'cc_nodes', expand=True)
-                    nodegroupname = get_nodegroupname_from_obj(obj)
-                    node_to_visualize = context.window_manager.interface_vars.cc_nodes
+                if get_nodegroupname_from_obj(obj) is None:
+                    layout.operator("create.ccsetup", icon="SEQ_HISTOGRAM", text='create cc setup')
+                else:
                     #print(node_to_visualize)
-                    #if node_to_visualize == 'RGB':
-                    #    node = get_cc_node_in_obj_mat(nodegroupname, "RGB")
-                    #if node_to_visualize == 'BC':
-                    #    node = get_cc_node_in_obj_mat(nodegroupname, "BC")
-                    #if node_to_visualize == 'HS':
-                    #    node = get_cc_node_in_obj_mat(nodegroupname, "HS")               
-                    #row = layout.row()
-                    #row.label(text="Active cc node: "+node_to_visualize)# + nodegroupname)
                     row = layout.row()
-                    row.label(text=nodegroupname)
-                    #layout.context_pointer_set("node", node)
+                    layout.operator("removeccnode.material", icon="CANCEL", text='remove cc setup')
+                    row = layout.row()
 
-                    #if hasattr(node, "draw_buttons_ext"):
-                    #    node.draw_buttons_ext(context, layout)
-                    #elif hasattr(node, "draw_buttons"):
-                    #    node.draw_buttons(context, layout)
+                    nodegroupname = get_nodegroupname_from_obj(obj)
+                    row.label(text="cc node: "+ nodegroupname)
 
-                    # XXX this could be filtered further to exclude socket types which don't have meaningful input values (e.g. cycles shader)
-#                        value_inputs = [socket for socket in node.inputs if socket.enabled and not socket.is_linked]
-#                        if value_inputs:
-#                            layout.separator()
-#                            layout.label("Inputs:")
-#                            for socket in value_inputs:
-#                                row = layout.row()
-#                                socket.draw(context, row, node, iface_(socket.name, socket.bl_rna.translation_context))                    
-#                    
-                
-                self.layout.operator("create.newset", icon="FILE_TICK", text='Create new texture set')
-                row = layout.row()
-                self.layout.operator("bake.cyclesdiffuse", icon="TPAINT_HLT", text='Bake CC to texture set')
-                row = layout.row()
-                self.layout.operator("savepaint.cam", icon="WORKSPACE", text='Save new textures')
-                self.layout.operator("applynewtexset.material", icon="AUTOMERGE_ON", text='Use new tex set')
-                self.layout.operator("applyoritexset.material", icon="RECOVER_LAST", text='Use original tex set')
-                
-                self.layout.operator("removeccnode.material", icon="CANCEL", text='remove cc node')
-                self.layout.operator("removeorimage.material", icon="CANCEL", text='remove ori image')
+                    row = layout.row()
+                    row.prop(context.window_manager.interface_vars, 'cc_nodes', expand=True)
+                    node_to_visualize = context.window_manager.interface_vars.cc_nodes
+
+                    row = layout.row()
+
+                    if node_to_visualize == 'RGB':
+                        node = get_cc_node_in_obj_mat(nodegroupname, 'RGB')
+                        row.label(text=node.name)# + nodegroupname)
+                        layout.context_pointer_set("node", node)
+                        node.draw_buttons_ext(context, layout)
+
+                    if node_to_visualize == 'BC':
+                        node = get_cc_node_in_obj_mat(nodegroupname, 'BC')
+                        row.label(text=node.name)# + nodegroupname)
+                        row = layout.row()
+                        row.prop(node.inputs[1], 'default_value', icon='BLENDER', toggle=True, text='Bright')
+                        row = layout.row()
+                        row.prop(node.inputs[2], 'default_value', icon='BLENDER', toggle=True, text='Contrast')
+
+                    if node_to_visualize == 'HS':
+                        node = get_cc_node_in_obj_mat(nodegroupname, 'HS')
+                        row.label(text=node.name)# + nodegroupname)
+                        row = layout.row()
+                        row.prop(node.inputs[0], 'default_value', icon='BLENDER', toggle=True, text='Hue')
+                        row = layout.row()
+                        row.prop(node.inputs[1], 'default_value', icon='BLENDER', toggle=True, text='Saturation')
+                        row = layout.row()
+                        row.prop(node.inputs[2], 'default_value', icon='BLENDER', toggle=True, text='Value')
+
+
+                    row = layout.row()
+                    row = layout.row()
+
+                    row.prop(context.window_manager.ccToolViewVar, 'cc_view', expand=True)
+                    view_mode = context.window_manager.ccToolViewVar.cc_view
+
+                    row = layout.row()
+
+                    layout.operator("set.cc_view", icon="HIDE_OFF", text='Set view mode')
+
+                    split = layout.split()
+                    # First column
+                    col = split.column()
+                    col.operator("bake.cyclesdiffuse", icon="TPAINT_HLT", text='bake')
+
+                    # Second column, aligned
+                    col = split.column(align=True)
+                    col.operator("savepaint.cam", icon="WORKSPACE", text='save')
+                    row = layout.row()
+
+                    layout.operator("applyccsetup.material", icon="FILE_TICK", text='apply cc')
                 row = layout.row() 
         else:
             select_a_mesh(layout)
 
 
 class ToolsPanelPhotogrTool:
-    bl_label = "Photogrammetry tool"
+    bl_label = "Photogrammetry paint"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_options = {'DEFAULT_CLOSED'}
@@ -310,45 +327,42 @@ class ToolsPanelPhotogrTool:
         cam_ob = None
         cam_ob = scene.camera
 
-        if scene.render.engine != 'BLENDER_RENDER':
-            row = layout.row()
-            row.label(text="Please, activate BI engine !")
-        elif cam_ob is None:
+        if cam_ob is None:
             row = layout.row()
             row.label(text="Please, add a Cam to see tools here")
             
         else:
             obj = context.object
-            obj_selected = scene.objects.active
+            obj_selected = context.view_layer.objects.active
             cam_cam = scene.camera.data
             row = layout.row()
-            row.label(text="Set up scene", icon='RADIO')
+            row.label(text="Set up scene", icon='EXPERIMENTAL')
             row = layout.row()
-            self.layout.operator("isometric.scene", icon="RENDER_REGION", text='Isometric scene')
-            self.layout.operator("canon6d.scene", icon="RENDER_REGION", text='CANON 6D scene')
-            self.layout.operator("nikond3200.scene", icon="RENDER_REGION", text='NIKON D3200 scene')
-            if scene.objects.active:
+            self.layout.operator("isometric.scene", icon="PLUS", text='Isometric scene')
+            self.layout.operator("canon6d.scene", icon="PLUS", text='CANON 6D scene')
+            self.layout.operator("nikond3200.scene", icon="PLUS", text='NIKON D3200 scene')
+            if obj_selected:
                 if obj.type in ['MESH']:
                     pass
                 elif obj.type in ['CAMERA']:
                     row = layout.row()
-                    row.label(text="Set selected cams as:", icon='RENDER_STILL')
-                    self.layout.operator("nikond320018mm.camera", icon="RENDER_REGION", text='Nikon d3200 18mm')
-                    self.layout.operator("canon6d35mm.camera", icon="RENDER_REGION", text='Canon6D 35mm')
-                    self.layout.operator("canon6d24mm.camera", icon="RENDER_REGION", text='Canon6D 24mm')
-                    self.layout.operator("canon6d14mm.camera", icon="RENDER_REGION", text='Canon6D 14mm')
+                    row.label(text="Set selected cams as:", icon='PLUS')
+                    self.layout.operator("nikond320018mm.camera", icon="PLUS", text='Nikon d3200 18mm')
+                    self.layout.operator("canon6d35mm.camera", icon="PLUS", text='Canon6D 35mm')
+                    self.layout.operator("canon6d24mm.camera", icon="PLUS", text='Canon6D 24mm')
+                    self.layout.operator("canon6d14mm.camera", icon="PLUS", text='Canon6D 14mm')
                     row = layout.row()
-                    row.label(text="Visual mode for selected cams:", icon='NODE_SEL')
-                    self.layout.operator("better.cameras", icon="NODE_SEL", text='Better Cams')
-                    self.layout.operator("nobetter.cameras", icon="NODE_SEL", text='Disable Better Cams')
+                    row.label(text="Visual mode for selected cams:", icon='PLUS')
+                    self.layout.operator("better.cameras", icon="PLUS", text='Better Cams')
+                    self.layout.operator("nobetter.cameras", icon="PLUS", text='Disable Better Cams')
                     row = layout.row()
                     row = layout.row()
                 else:
                     row = layout.row()
-                    row.label(text="Please select a mesh or a cam", icon='OUTLINER_DATA_CAMERA')
+                    row.label(text="Please select a mesh or a cam", icon='PLUS')
  
             row = layout.row()
-            row.label(text="Painting Toolbox", icon='TPAINT_HLT')
+            row.label(text="Painting Toolbox", icon='PLUS')
             row = layout.row()
             row.label(text="Folder with undistorted images:")
             row = layout.row()
@@ -357,7 +371,7 @@ class ToolsPanelPhotogrTool:
 
             if cam_ob is not None:
                 row.label(text="Active Cam: " + cam_ob.name)
-                self.layout.operator("object.createcameraimageplane", icon="IMAGE_COL", text='Photo to camera')
+                self.layout.operator("object.createcameraimageplane", icon="PLUS", text='Photo to camera')
                 row = layout.row()
                 row = layout.row()
                 row.prop(cam_cam, "lens")
@@ -367,20 +381,20 @@ class ToolsPanelPhotogrTool:
                 if is_cam_ob_plane:
                     if obj.type in ['MESH']:
                         row.label(text="Active object: " + obj.name)
-                        self.layout.operator("paint.cam", icon="IMAGE_COL", text='Paint active from cam')
+                        self.layout.operator("paint.cam", icon="PLUS", text='Paint active from cam')
                 else:
                     row = layout.row()
                     row.label(text="Please, set a photo to camera", icon='TPAINT_HLT')
                 
-                self.layout.operator("applypaint.cam", icon="IMAGE_COL", text='Apply paint')
-                self.layout.operator("savepaint.cam", icon="IMAGE_COL", text='Save modified texs')
+                self.layout.operator("applypaint.cam", icon="PLUS", text='Apply paint')
+                self.layout.operator("savepaint.cam", icon="PLUS", text='Save modified texs')
                 row = layout.row()
             else:
                 row.label(text="!!! Import some cams to start !!!")
 
 
 class ToolsPanelTexPatcher:
-    bl_label = "Texture patcher (Cycles)"
+    bl_label = "Texture patcher"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_options = {'DEFAULT_CLOSED'}

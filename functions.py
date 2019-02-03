@@ -37,7 +37,8 @@ def get_nodegroupname_from_obj(obj):
     if obj.material_slots[0].material.node_tree.nodes.find('cc_node') == -1 :
         nodegroupname = None
     else:
-        nodegroupname = obj.material_slots[0].material.node_tree.nodes['cc_node'].name
+        nodegroupname = obj.material_slots[0].material.node_tree.nodes['cc_node'].node_tree.name
+        #nodegroupname = obj.material_slots[0].material.node_tree.nodes['cc_node'].node_tree
     return nodegroupname
 
 #if 'Material Output' in [node.name for node in bpy.data.materials['your_material_name'].node_tree.nodes]:
@@ -320,7 +321,9 @@ def create_double_UV(obj):
     return
 
 def bake_tex_set(type):
-    scene = bpy.context.scene
+    context = bpy.context
+    scene = context.scene
+    selected_objs = context.selected_objects
     scene.render.engine = 'CYCLES'
     tot_time = 0
     ob_counter = 1
@@ -336,7 +339,7 @@ def bake_tex_set(type):
     scene.render.bake.use_clear = True
     start_time = time.time()
     if type == "source":
-        if len(bpy.context.selected_objects) > 1:
+        if len(selected_objs) > 1:
             ob = scene.objects.active
             print('checking presence of a destination texture set..')
             for matslot in ob.material_slots:
@@ -349,34 +352,36 @@ def bake_tex_set(type):
             return
         tot_time += (time.time() - start_time)
     if type == "cc":
-        tot_selected_ob = len(bpy.context.selected_objects)
-        for ob in bpy.context.selected_objects:
+        tot_selected_ob = len(selected_objs)
+        for ob in selected_objs:
             print('start baking "'+ob.name+'" (object '+str(ob_counter)+'/'+str(tot_selected_ob)+')')
             bpy.ops.object.select_all(action='DESELECT')
-            ob.select = True
-            bpy.context.scene.objects.active = ob
+            ob.select_set(True)
+            context.view_layer.objects.active = ob
             for matslot in ob.material_slots:
                 mat = matslot.material
                 select_a_node(mat,"cc_image")
-#                is_node = select_a_node(mat,"cc_image")
-#                if is_node == False:
-#                    print("The material " + mat.name +" lacks a cc_image node. I'm creating it..")
-#                    create_new_tex_set(mat, "cc_image")
             bpy.ops.object.bake(type='DIFFUSE', pass_filter={'COLOR'}, use_selected_to_active=False, use_clear=True, save_mode='INTERNAL')
             tot_time += (time.time() - start_time)
             print("--- %s seconds ---" % (time.time() - start_time))
             ob_counter += 1
+    for ob in selected_objs:
+        ob.select_set(True)
     print("--- JOB complete in %s seconds ---" % tot_time)
 
-def remove_ori_image(mat):
+
+def remove_cc_setup(mat):
     nodes = mat.node_tree.nodes
     links = mat.node_tree.links
-    orimagenode = node_retriever(mat, "original")
+    diffusenode = node_retriever(mat, "diffuse")
+    ccnode = node_retriever(mat, "cc_node")
     newimagenode = node_retriever(mat, "cc_image")
-    nodes.remove(orimagenode)
-    if newimagenode is not None:
-        newimagenode.name = "original"
-        newimagenode.location = (-1100, -50)
+    orimagenode = node_retriever(mat, "original")
+
+    nodes.remove(newimagenode)
+    nodes.remove(ccnode)
+
+    links.new(orimagenode.outputs[0], diffusenode.inputs[0])
 
 def set_texset(mat, type):
     nodes = mat.node_tree.nodes
@@ -390,16 +395,16 @@ def substring_after(s, delim):
 
 def create_new_tex_set(mat, type):
     #retrieve image specs and position from material
-    o_image = mat.texture_slots[0].texture.image
-    x_image = mat.texture_slots[0].texture.image.size[0]
-    y_image = mat.texture_slots[0].texture.image.size[1]
-    o_imagepath = mat.texture_slots[0].texture.image.filepath
+    o_image_node = node_retriever(mat, "original")
+    o_image = o_image_node.image
+    x_image = o_image.size[0]
+    y_image = o_image.size[1]
+    o_imagepath = o_image.filepath
     o_imagepath_abs = bpy.path.abspath(o_imagepath)
     o_imagedir, o_filename = os.path.split(o_imagepath_abs)
     o_filename_no_ext = os.path.splitext(o_filename)[0]
-
-    nodes = mat.node_tree.nodes
-    node_tree = bpy.data.materials[mat.name].node_tree
+    node_tree = mat.node_tree
+    nodes = node_tree.nodes
     if type == "cc_image":
         if o_filename_no_ext.startswith("cc_"):
             print(substring_after(o_filename, "cc_"))
@@ -407,6 +412,7 @@ def create_new_tex_set(mat, type):
         else:
             t_image_name = "cc_"+o_filename_no_ext
             print(substring_after(o_filename, "cc_"))
+
     if type == "source_paint_node":
         t_image_name = "sp_"+o_filename_no_ext
     
@@ -428,7 +434,7 @@ def create_new_tex_set(mat, type):
     # node_tree.nodes.select_all(action='DESELECT')
     tteximg.select = True
     node_tree.nodes.active = tteximg
-    mat.texture_slots[0].texture.image = t_image
+ #   mat.texture_slots[0].texture.image = t_image
 
 # provide to thsi function a material and a node type and it will send you back the name of the node. With the option "all" you will get a dictionary of the nodes
 def node_retriever(mat, type):
@@ -617,6 +623,8 @@ def getnextobjname(name):
 #    print(nextname)
     return nextname
 
+
+
 def newimage2selpoly(ob, nametex):
 #    objectname = ob.name
     print("I'm creating texture: T_"+nametex+".png")
@@ -665,6 +673,13 @@ def desiredmatnumber(ob):
 
     return desmatnumber
 
+
+def set_texset_obj(context):
+    view_mode = context.window_manager.ccToolViewVar.cc_view
+    for obj in context.selected_objects:
+        for matslot in obj.material_slots:
+            mat = matslot.material
+            set_texset(mat, view_mode)
 
 def create_material_from_image(context,image,oggetto,connect):
 

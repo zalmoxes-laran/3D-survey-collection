@@ -80,6 +80,16 @@ class InterfaceVars(PropertyGroup):
         default='RGB'
     )
 
+class ccToolViewVar(PropertyGroup):
+    cc_view: EnumProperty(
+        items=[
+            ('original', 'original', 'original texture', '', 0),
+            ('cc_node', 'cc_node', 'dynamic editing', '', 1),
+            ('cc_image', 'cc_image', 'final texture', '', 2),
+        ],
+        default='cc_node'
+    )
+
 classes = (
     UI.VIEW3D_PT_Shift_ToolBar,
     UI.VIEW3D_PT_Import_ToolBar,
@@ -135,19 +145,20 @@ classes = (
     PhotogrTool.OBJECT_OT_nikond3200scene,
     PhotogrTool.OBJECT_OT_NoBetterCameras,
     PhotogrTool.OBJECT_OT_paintcam,
-    ccTool.OBJECT_OT_createccnode,
-    ccTool.OBJECT_OT_createnewset,
+    PhotogrTool.OBJECT_OT_CreateCameraImagePlane,
+    ccTool.OBJECT_OT_createccsetup,
     ccTool.OBJECT_OT_bakecyclesdiffuse,
-    ccTool.OBJECT_OT_applynewtexset,
-    ccTool.OBJECT_OT_removeccnode,
-    ccTool.OBJECT_OT_removeorimage,
+    ccTool.OBJECT_OT_removeccsetup,
+    ccTool.OBJECT_OT_applyccsetup,
+    ccTool.OBJECT_OT_setccview,
     TexPatcher.OBJECT_OT_applyoritexset,
     TexPatcher.OBJECT_OT_applysptexset,
     TexPatcher.OBJECT_OT_exitsetup,
     TexPatcher.OBJECT_OT_paintsetup,
     TexPatcher.OBJECT_OT_removepaintsetup,
     TexPatcher.OBJECT_OT_textransfer,
-    InterfaceVars
+    InterfaceVars,
+    ccToolViewVar
 )
 
 def register():
@@ -155,6 +166,8 @@ def register():
         bpy.utils.register_class(cls)
     
     bpy.types.WindowManager.interface_vars = bpy.props.PointerProperty(type=InterfaceVars)
+    bpy.types.WindowManager.ccToolViewVar = bpy.props.PointerProperty(type=ccToolViewVar)
+
 
 #def initSceneProperties(scn):
     bpy.types.Scene.LODnum = IntProperty(

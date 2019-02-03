@@ -7,41 +7,55 @@ import nodeitems_utils
 from bpy.types import Header, Menu, Panel
 
 
-class OBJECT_OT_removeccnode(bpy.types.Operator):
+class OBJECT_OT_removeccsetup(bpy.types.Operator):
     """Remove cc node for selected objects"""
     bl_idname = "removeccnode.material"
-    bl_label = "Remove  cycles cc node for selected object"
+    bl_label = "Remove cycles cc node for selected object"
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
         for obj in bpy.context.selected_objects:
             for matslot in obj.material_slots:
                 mat = matslot.material
-                remove_node(mat, "cc_node")
+                remove_cc_setup(mat)
+
         return {'FINISHED'}
     
-class OBJECT_OT_removeorimage(bpy.types.Operator):
-    """Remove oiginal image for selected objects"""
-    bl_idname = "removeorimage.material"
-    bl_label = "Remove oiginal image for selected objects"
+class OBJECT_OT_applyccsetup(bpy.types.Operator):
+    """Apply color correction images to materials and discard the originals (they will NOT be erased from the HD"""
+    bl_idname = "applyccsetup.material"
+    bl_label = "Apply color correction images to materials"
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
         for obj in bpy.context.selected_objects:
             for matslot in obj.material_slots:
                 mat = matslot.material
-                remove_ori_image(mat)
+                nodes = mat.node_tree.nodes
+                links = mat.node_tree.links
+                diffusenode = node_retriever(mat, "diffuse")
+                orimagenode = node_retriever(mat, "original")
+                newimagenode = node_retriever(mat, "cc_image")
+                cc_node = node_retriever(mat, "cc_node")
+                print(orimagenode)
+                nodes.remove(orimagenode)
+                nodes.remove(cc_node)
+
+                newimagenode.name = "original"
+                newimagenode.location = (-1100, -50)
+
+                links.new(newimagenode.outputs[0], diffusenode.inputs[0])
+                bpy.ops.image.save_dirty()
+
         return {'FINISHED'}
 
-
-class OBJECT_OT_createccnode(bpy.types.Operator):
+#-------------------------------------------------------------
+class OBJECT_OT_createccsetup(bpy.types.Operator):
     """Create a color correction node for selected objects"""
-    bl_idname = "create.ccnode"
+    bl_idname = "create.ccsetup"
     bl_label = "Create cycles materials for selected object"
     bl_options = {'REGISTER', 'UNDO'}
-
     def execute(self, context):
-
         bpy.context.scene.render.engine = 'CYCLES'
         active_object_name = context.active_object.name
         cc_nodegroup = create_correction_nodegroup(active_object_name)
@@ -49,27 +63,25 @@ class OBJECT_OT_createccnode(bpy.types.Operator):
             for matslot in obj.material_slots:
                 mat = matslot.material
                 cc_node_to_mat(mat,cc_nodegroup)
+                create_new_tex_set(mat,"cc_image")
+
+                context.window_manager.ccToolViewVar.cc_view = "cc_node"
+                #set_texset_obj(context)
 
         return {'FINISHED'}
-
 #-------------------------------------------------------------
-
-class OBJECT_OT_createnewset(bpy.types.Operator):
-    """Create new texture set for corrected mats"""
-    bl_idname = "create.newset"
-    bl_label = "Create new texture set for corrected mats (cc_ + previous tex name)"
+class OBJECT_OT_setccview(bpy.types.Operator):
+    """Set view mode"""
+    bl_idname = "set.cc_view"
+    bl_label = "Set view mode"
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        bpy.context.scene.render.engine = 'CYCLES'
-        for obj in bpy.context.selected_objects:
-            for matslot in obj.material_slots:
-                mat = matslot.material
-                create_new_tex_set(mat,"cc_image")
+        set_texset_obj(context)
+ 
         return {'FINISHED'}
 
 #-------------------------------------------------------------
-
 
 class OBJECT_OT_bakecyclesdiffuse(bpy.types.Operator):
     """Color correction to new texture set"""
@@ -78,43 +90,12 @@ class OBJECT_OT_bakecyclesdiffuse(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
+        context.window_manager.ccToolViewVar.cc_view = "cc_node"
+        set_texset_obj(context)
         bake_tex_set("cc")
-        
+        context.window_manager.ccToolViewVar.cc_view = "cc_image"
+        set_texset_obj(context)
+
         return {'FINISHED'}
 
 ####-----------------------------------------------------------
-
-
-class OBJECT_OT_applyoritexset(bpy.types.Operator):
-    """Use original textures in mats"""
-    bl_idname = "applyoritexset.material"
-    bl_label = "Use original textures in mats"
-    bl_options = {'REGISTER', 'UNDO'}
-
-    def execute(self, context):
-
-        bpy.context.scene.render.engine = 'CYCLES'
-
-        for obj in bpy.context.selected_objects:
-            for matslot in obj.material_slots:
-                mat = matslot.material
-                set_texset(mat, "original")
-                
-        return {'FINISHED'}
-    
-class OBJECT_OT_applynewtexset(bpy.types.Operator):
-    """Use new textures in mats"""
-    bl_idname = "applynewtexset.material"
-    bl_label = "Use new textures in mats"
-    bl_options = {'REGISTER', 'UNDO'}
-
-    def execute(self, context):
-
-        bpy.context.scene.render.engine = 'CYCLES'
-
-        for obj in bpy.context.selected_objects:
-            for matslot in obj.material_slots:
-                mat = matslot.material
-                set_texset(mat, "cc_image")
-                
-        return {'FINISHED'}
