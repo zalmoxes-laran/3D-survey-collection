@@ -10,6 +10,7 @@ from .functions import *
 #    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_GAME'}
 #    draw = Menu.draw_preset
 
+
 class VIEW3D_OT_tex_to_material(bpy.types.Operator):
     """Create texture materials for images assigned in UV editor"""
     bl_idname = "view3d.tex_to_material"

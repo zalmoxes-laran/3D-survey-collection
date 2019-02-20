@@ -70,6 +70,15 @@ else:
 # register
 ##################################
 
+
+bpy.types.Scene.PT_cameras = EnumProperty(
+    items = [('Canon 6D', 'Un', 'One'), 
+             ('Zwei', 'Deux', 'Two'),
+             ('Drei', 'Trois', 'Three')],
+    name = "Camera")
+scn['MyEnum'] = 2
+
+
 class InterfaceVars(PropertyGroup):
     cc_nodes: EnumProperty(
         items=[
