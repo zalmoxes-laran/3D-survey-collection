@@ -2,8 +2,6 @@
 # CC-BY-NC 2018 EMANUEL DEMETRESCU
 # emanuel.demetrescu@gmail.com
 
-#Created by EMANUEL DEMETRESCU
-
 #    This program is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by
 #    the Free Software Foundation, either version 3 of the License, or
@@ -71,12 +69,12 @@ else:
 ##################################
 
 
-bpy.types.Scene.PT_cameras = EnumProperty(
-    items = [('Canon 6D', 'Un', 'One'), 
-             ('Zwei', 'Deux', 'Two'),
-             ('Drei', 'Trois', 'Three')],
-    name = "Camera")
-scn['MyEnum'] = 2
+# bpy.types.Scene.PT_cameras = EnumProperty(
+#     items = [('Canon 6D', 'Un', 'One'), 
+#              ('Zwei', 'Deux', 'Two'),
+#              ('Drei', 'Trois', 'Three')],
+#     name = "Camera")
+# scn['MyEnum'] = 2
 
 
 class InterfaceVars(PropertyGroup):
@@ -103,11 +101,11 @@ classes = (
     UI.VIEW3D_PT_Shift_ToolBar,
     UI.VIEW3D_PT_Import_ToolBar,
     UI.VIEW3D_PT_Export_ToolBar,
-    UI.VIEW3D_PT_QuickUtils_ToolBar,
+    #UI.VIEW3D_PT_QuickUtils_ToolBar,
     UI.VIEW3D_PT_LODgenerator,
     UI.VIEW3D_PT_ccTool,
-    UI.VIEW3D_PT_PhotogrTool,
-    UI.VIEW3D_PT_TexPatcher,
+    #UI.VIEW3D_PT_PhotogrTool,
+    #UI.VIEW3D_PT_TexPatcher,
     import_3DSC.ImportMultipleObjs,
     import_3DSC.OBJECT_OT_IMPORTPOINTS,
     import_3DSC.ImportCoorPoints,
