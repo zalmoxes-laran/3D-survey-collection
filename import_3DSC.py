@@ -9,10 +9,13 @@ from bpy_extras.io_utils import ImportHelper
 
 from bpy.props import (BoolProperty,
                        FloatProperty,
+                       IntProperty,
                        StringProperty,
                        EnumProperty,
                        CollectionProperty
                        )
+
+from .import_Agisoft_xml import *
 
 # import points section ----------------------------------------------------------
 
@@ -139,21 +142,6 @@ class ImportCoorPoints(Operator, ImportHelper):
 def menu_func_import(self, context):
     self.layout.operator(ImportCoorPoints.bl_idname, text="Coordinate points Import Operator")
 
-
-#def register():
-#    bpy.utils.register_class(ImportCoorPoints)
-#    bpy.types.INFO_MT_file_import.append(menu_func_import)
-
-
-#def unregister():
-#    bpy.utils.unregister_class(ImportCoorPoints)
-#    bpy.types.INFO_MT_file_import.remove(menu_func_import)
-
-
-#if __name__ == "__main__":
-#    register()
-
-    # test call
     bpy.ops.import_test.some_data('INVOKE_DEFAULT')
 
 
@@ -308,3 +296,70 @@ class ImportMultipleObjs(Operator, ImportHelper):
                                 split_mode = self.split_mode_setting)#,
 
         return {'FINISHED'}
+
+
+# import agisoft xml section ----------------------------------------------------------
+
+class OBJECT_OT_IMPORTAGIXML(Operator):
+    """Import cams from an xml file"""
+    bl_idname = "import_cams.agixml"
+    bl_label = "ImportAgiXML"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        bpy.ops.import_cam.agixml('INVOKE_DEFAULT')
+        return {'FINISHED'}
+
+
+def read_agixml_data(context, filepath, shift, chunk, allchunks):
+    print("reading agisoft xml file...")
+    load_create_cameras(filepath)
+    
+
+    return {'FINISHED'}
+
+class ImportCamAgiXML(Operator, ImportHelper):
+    """Tool to import cams and cams parameters from an Agisoft xml file"""
+    bl_idname = "import_cam.agixml"  # important since its how bpy.ops.import_test.some_data is constructed
+    bl_label = "Import Agisoft XML cams"
+
+    # ImportHelper mixin class uses this
+    filename_ext = ".xml"
+
+    filter_glob: StringProperty(
+            default="*.xml",
+            options={'HIDDEN'},
+            maxlen=255,  # Max internal buffer length, longer would be clamped.
+            )
+
+    # List of operator properties, the attributes will be assigned
+    # to the class instance from the operator settings before calling.
+    shift: BoolProperty(
+            name="Shift coordinates",
+            description="Shift coordinates using the General Shift Value (GSV)",
+            default=False,
+            )
+
+    allchunks: BoolProperty(
+            name="from all chunks",
+            description="Import cams from all the chunks",
+            default=False,
+            )
+
+    PSchunks: IntProperty(
+            name="chunk number",
+            default=1,
+            description="number of chunk",
+            )
+
+
+    def execute(self, context):
+        return read_agixml_data(context, self.filepath, self.shift, self.PSchunks, self.allchunks)
+
+# Only needed if you want to add into a dynamic menu
+def menu_func_import(self, context):
+    self.layout.operator(ImportCoorPoints.bl_idname, text="Coordinate points Import Operator")
+
+    bpy.ops.import_cam.agixml('INVOKE_DEFAULT')
+
+

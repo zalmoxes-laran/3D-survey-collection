@@ -29,6 +29,8 @@ class ToolsPanelImport:
         self.layout.operator("import_points.txt", icon="STICKY_UVS_DISABLE", text='Coordinates')
         row = layout.row()
         self.layout.operator("import_scene.multiple_objs", icon="DUPLICATE", text='Multiple objs')
+        row = layout.row()
+        self.layout.operator("import_cam.agixml", icon="DUPLICATE", text='Agisoft xml cams')
  
 
 class ToolsPanelExport:

@@ -55,6 +55,7 @@ else:
     from . import (
             UI,
             import_3DSC,
+            import_Agisoft_xml,
             export_3DSC,
             functions,
             shift,
@@ -110,6 +111,8 @@ classes = (
     import_3DSC.OBJECT_OT_IMPORTPOINTS,
     import_3DSC.ImportCoorPoints,
     export_3DSC.ExportCoordinates,
+    import_3DSC.OBJECT_OT_IMPORTAGIXML,
+    import_3DSC.ImportCamAgiXML,
     export_3DSC.OBJECT_OT_ExportButtonName,
     export_3DSC.OBJECT_OT_ExportObjButton,
     export_3DSC.OBJECT_OT_fbxexp,
