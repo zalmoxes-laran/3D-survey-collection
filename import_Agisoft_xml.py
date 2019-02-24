@@ -5,19 +5,58 @@ import xml.etree.ElementTree as ET
 from bpy_extras.io_utils import axis_conversion
 from bpy_extras.io_utils import ImportHelper
 
-def createcamera(name, transform_matrix, collection_name):
+def createcamera(name, transform_matrix, collection_name, root, sensor_id):
     scene = bpy.context.scene
     cam = bpy.data.cameras.new(name)
     cam_ob = bpy.data.objects.new(name, cam)
     cam_ob.matrix_local = transform_matrix
-    
+    (sensor_label, sensor_width, sensor_height, focal_length) = find_sensor(root, sensor_id)
+    cam.sensor_height = sensor_height
+    print(str(sensor_height))
+    cam.sensor_width = sensor_width
+    cam.lens = focal_length
     scene.collection.children[collection_name].objects.link(cam_ob)
+
+    
 
 def setup_collection(collection_name):
     if bpy.data.collections.get(collection_name) is None:
         newcol = bpy.data.collections.new(collection_name)
         bpy.context.scene.collection.children.link(newcol)
     
+
+def find_sensor(root, sensor_id):
+        for sen in root.iter('sensor'):
+                if sen.get('id') == sensor_id:
+                        #sensor_id = sen.get('id')
+                        sensor_label = sen.get('label')
+                        for res in sen.findall('resolution'):
+                                img_width = float(res.attrib["width"])
+                                print(str(img_width))
+                                img_heigth = float(res.attrib["height"])
+                        for prop in sen.findall('property'):
+                                n = prop.attrib["name"]
+                                v = prop.attrib["value"]
+                                if(n == "pixel_width"):
+                                        sensor_p_width = float(v)
+                                elif(n == "pixel_height"):
+                                        sensor_p_height = float(v)
+                                elif(n == "focal_length"):
+                                        focal_length = float(v)
+                                        print(str(focal_length))
+                                #elif(n == "fixed"):
+                                #        self.props[n] = v
+                                #elif(n == "layer_index"):
+                                #        self.props[n] = v
+                                else:
+                                        pass
+                        
+                        sensor_width = img_width*sensor_p_width
+                        print(str(sensor_width))
+                        sensor_height = img_heigth*sensor_p_height
+                                        
+                return sensor_label, sensor_width, sensor_height, focal_length
+
 def load_create_cameras(filepath):
 
     tree = ET.parse(filepath)
@@ -29,6 +68,7 @@ def load_create_cameras(filepath):
         image_name = cam.get('label')
         cam_name = os.path.splitext(image_name)[0]
         sensor = cam.get('sensor_id')
+
         for transform in cam.findall('transform'):
             transform_coord = transform.text
             list_coord = transform_coord.split(' ')
@@ -38,4 +78,4 @@ def load_create_cameras(filepath):
             matrix = matrix @ conversion_matrix
         #print(image_name+' '+ cam_name)
         #print(matrix)
-        createcamera(cam_name, matrix, collection_name)
+        createcamera(cam_name, matrix, collection_name, root, sensor)
