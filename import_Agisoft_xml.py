@@ -55,7 +55,7 @@ def find_sensor(root, sensor_id):
                         print(str(sensor_width))
                         sensor_height = img_heigth*sensor_p_height
                                         
-                return sensor_label, sensor_width, sensor_height, focal_length
+                        return sensor_label, sensor_width, sensor_height, focal_length
 
 def load_create_cameras(filepath):
 
