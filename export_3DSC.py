@@ -219,7 +219,7 @@ class OBJECT_OT_fbxexportbatch(bpy.types.Operator):
         else:
             print('Found previously created FBX folder. I will use it')
         if not basedir:
-            raise Exception("Save the blend file")
+            raise Exception("Save the blend file before to export")
 
         selection = bpy.context.selected_objects
         bpy.ops.object.select_all(action='DESELECT')
