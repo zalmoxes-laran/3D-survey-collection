@@ -50,7 +50,6 @@ class ToolsPanelExport:
             #row.label(text="Override")
             #row = layout.row()
 
-            
             #layout.separator()
             box = layout.box()
             row = box.row()
@@ -61,10 +60,8 @@ class ToolsPanelExport:
             row.label(text= "-> "+obj.name + ".obj/.fbx")
             #row = box.row()
             #row.prop(obj, "name", text="")
-
             box = layout.box()
             row = box.row()
-
             row.operator("obj.exportbatch", icon="DUPLICATE", text='Several obj')
             row = box.row() 
             row.label(text= "-> /objectname.obj")
