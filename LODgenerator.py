@@ -83,14 +83,14 @@ class OBJECT_OT_LOD(bpy.types.Operator):
             raise Exception("Save the blend file")
         # si prende il numero di LOD impostato e i parametri base per LOD ovvero tex_res e decimation_ratio
         # iniziamo con un contatore i_lodbake_counter che parte da 0
-        
+
         print("Number of LOD(s) to be created is: " + str(LODnum))
 
         # si producono ciclicamente i livelli di dettaglio ad esaurire i LOD richiesti dall'utente nell'UI (normalmente da 1 a 3 LOD)
         while i_lodbake_counter <= LODnum:
             currentLOD = 'LOD' + str(i_lodbake_counter)
             subfolder = currentLOD
-            
+
             if not os.path.exists(os.path.join(basedir, subfolder)):
                 os.mkdir(os.path.join(basedir, subfolder))
                 print('There is no '+ subfolder +' folder. Creating one...')
@@ -98,12 +98,12 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 print('Found previously created '+ subfolder +' folder. I will use it')
 
             ob_counter = 1
-            
+
             print('<<<<<<<<<<<<<< CREATION OF '+ currentLOD +' >>>>>>>>>>>>>>')
             print('>>>>>> '+str(ob_tot)+' objects will be processed')
 
             for obj_LOD0 in selected_objects:
-                
+
                 start_time_ob = time.time()
 
                 print('>>> '+ currentLOD + ' >>>')
@@ -155,7 +155,7 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                     create_double_UV(obj_LODnew)
 
                 obj_LOD0.data.uv_layers["MultiTex"].active_render = True
-                
+
                 # mesh decimation
                 decimate_mesh(context,obj_LODnew,ratio_for_current_lod(i_lodbake_counter,context),currentLOD)
 
@@ -181,6 +181,7 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 context.scene.render.bake.use_pass_indirect = False
                 context.scene.render.bake.use_pass_color = True
                 context.scene.render.bake.use_selected_to_active = True
+                context.scene.render.bake.cage_extrusion = 0.1
 
                 to_restore_samples = context.scene.cycles.samples
                 context.scene.cycles.samples = 1
@@ -222,7 +223,7 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 activename = bpy.path.clean_name(obj_LODnew.name)
                 fn = os.path.join(basedir, subfolder, activename)
                 bpy.ops.export_scene.obj(filepath=fn + ".obj", use_selection=True, axis_forward='Y', axis_up='Z', path_mode='RELATIVE')
-                
+
                 print('>>> "'+obj_LODnew.name+'" ('+str(ob_counter)+'/'+ str(ob_tot) +') object baked in '+str(time.time() - start_time_ob)+' seconds')
                 ob_counter += 1
 
@@ -350,4 +351,3 @@ class OBJECT_OT_CreateGroupsLOD(bpy.types.Operator):
                     print(str(num))
                     child = selectLOD(listobjects, num, baseobj)
         return {'FINISHED'}
-
