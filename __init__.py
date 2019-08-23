@@ -38,6 +38,8 @@ if "bpy" in locals():
 else:
     import math
     import bpy
+    import bpy.props as prop
+
     from bpy.props import (
             StringProperty,
             BoolProperty,
@@ -76,6 +78,24 @@ else:
 #              ('Drei', 'Trois', 'Three')],
 #     name = "Camera")
 # scn['MyEnum'] = 2
+
+class PANOListItem(bpy.types.PropertyGroup):
+    """ Group of properties representing an item in the list """
+
+    name : StringProperty(
+           name="Name",
+           description="A name for this item",
+           default="Untitled")
+
+    icon : StringProperty(
+           name="code for icon",
+           description="",
+           default="GROUP_UVS")
+
+class PANO_UL_List(bpy.types.UIList):
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+        scene = context.scene
+        layout.label(item.name, icon = item.icon)
 
 
 class InterfaceVars(PropertyGroup):
@@ -168,7 +188,15 @@ classes = (
     TexPatcher.OBJECT_OT_removepaintsetup,
     TexPatcher.OBJECT_OT_textransfer,
     InterfaceVars,
-    ccToolViewVar
+    ccToolViewVar,
+    UI.REMOVE_pano,
+    UI.VIEW_pano,
+    UI.VIEW_alignquad,
+    UI.VIEW_setlens,
+    UI.PANO_import,
+    UI.VIEW3D_PT_SetupPanel, 
+    PANO_UL_List,
+    PANOListItem,
 )
 
 def register():
@@ -244,6 +272,31 @@ def register():
       default = 0.0,
       description = "Define the shift on the z axis",
       )
+
+# panoramic
+    bpy.types.Scene.pano_list = CollectionProperty(type = PANOListItem)
+    bpy.types.Scene.pano_list_index = IntProperty(name = "Index for my_list", default = 0)
+    bpy.types.Scene.PANO_file = StringProperty(
+    name = "TXT",
+    default = "",
+    description = "Define the path to the PANO file",
+    subtype = 'FILE_PATH'
+    )
+
+    bpy.types.Scene.PANO_dir = StringProperty(
+    name = "DIR",
+    default = "",
+    description = "Define the path to the PANO file",
+    subtype = 'DIR_PATH'
+    )
+
+    bpy.types.Scene.PANO_cam_lens = IntProperty(
+    name = "Cam Lens",
+    default = 21,
+    description = "Define the lens of the cameras",
+#      subtype = 'FILE_PATH'
+    )
+
 
 def unregister():
     for cls in classes:
