@@ -774,7 +774,7 @@ def e2d(float_value):
     fac = 180/pi
     return (float_value/fac)
 
-def create_tex_from_file(ItemName,path_dir,extension):
+def create_tex_from_file(ItemName,path_dir):
     realpath = path_dir + ItemName #+ '.' + extension
     try:
         img = bpy.data.images.load(realpath)
@@ -783,7 +783,7 @@ def create_tex_from_file(ItemName,path_dir,extension):
     # Create image texture from image
     diffTex = bpy.data.textures.new('TEX_'+ItemName, type = 'IMAGE')
     diffTex.image = img
-    return diffTex
+    return diffTex, img
 
 def create_mat(ob):
     context = bpy.context

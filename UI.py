@@ -683,8 +683,10 @@ class PANO_import(bpy.types.Operator):
             scale = Vector( (-1, 1) )
             pivot = Vector( (0.5, 0.5) )
             ScaleUV( uvMap, scale, pivot )
-            newmat = create_mat(just_created_obj)
-            diffTex = create_tex_from_file(ItemName,scene.PANO_dir,extension)
+            #newmat = create_mat(just_created_obj)
+            diffTex, img = create_tex_from_file(ItemName,scene.PANO_dir)
+            newmat, texImage, bsdf = create_material_from_image(context,img,just_created_obj,True)
+            
             assign_tex2mat(diffTex,newmat)
             scene.pano_list.add()
             scene.pano_list[pano_list_index_counter].name = just_created_obj.name
