@@ -19,7 +19,7 @@
 bl_info = {
     "name": "3D Survey Collection",
     "author": "Emanuel Demetrescu",
-    "version": (1,4.0),
+    "version": (1,4.1),
     "blender": (2, 80, 0),
     "location": "3D View > Toolbox",
     "description": "A collection of tools for 3D Survey activities",
@@ -79,7 +79,7 @@ else:
 #     name = "Camera")
 # scn['MyEnum'] = 2
 
-class PANOListItem(bpy.types.PropertyGroup):
+class PANOListItem(PropertyGroup):
     """ Group of properties representing an item in the list """
 
     name : StringProperty(
