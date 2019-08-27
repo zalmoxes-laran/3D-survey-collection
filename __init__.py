@@ -95,7 +95,7 @@ class PANOListItem(PropertyGroup):
 class PANO_UL_List(bpy.types.UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         scene = context.scene
-        layout.label(item.name, icon = item.icon)
+        layout.label(text = item.name, icon = item.icon)
 
 
 class InterfaceVars(PropertyGroup):

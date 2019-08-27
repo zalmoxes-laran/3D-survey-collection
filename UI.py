@@ -572,7 +572,7 @@ class VIEW_pano(bpy.types.Operator):
         area = next(area for area in bpy.context.screen.areas if area.type == 'VIEW_3D')
         area.spaces[0].region_3d.view_perspective = 'CAMERA'
         current_pano = data.objects[scene.pano_list[pano_list_index].name]
-        scene.objects.active = current_pano
+        context.view_layer.objects.active = current_pano
         bpy.ops.object.select_all(action='DESELECT')
 #        current_pano.select = True
         return {'FINISHED'}
@@ -668,31 +668,40 @@ class PANO_import(bpy.types.Operator):
             for model in data.objects:
                 if model.name == remove_extension(ItemName) or model.name == "CAM_"+remove_extension(ItemName):
                     data.objects.remove(model)
-            sph = bpy.ops.mesh.primitive_uv_sphere_add(calc_uvs=True, radius=2, location=(pos_x,pos_y,pos_z))
+            sph = bpy.ops.mesh.primitive_uv_sphere_add(calc_uvs=True, radius=0.2, location=(pos_x,pos_y,pos_z))
             just_created_obj = context.active_object
             just_created_obj.name = remove_extension(ItemName)
-            just_created_obj.rotation_euler[2] = e2d(-90)
-            bpy.ops.object.transform_apply(rotation = True)
-#            just_created_obj.rotation_euler[0] = e2d(-(rot_x-90))
-            just_created_obj.rotation_euler[0] = e2d(-(rot_x))
+            
+            just_created_obj.rotation_euler[0] = e2d(rot_x-90.0)
+            bpy.ops.object.transform_apply(rotation = True, location = False)
+
+            just_created_obj.rotation_euler[2] = (e2d(rot_y+90.0))*-1
+            bpy.ops.object.transform_apply(rotation = True, location = False)
+
             just_created_obj.rotation_euler[1] = e2d(rot_z)
-#            just_created_obj.rotation_euler[2] = e2d(180+rot_y)
-            just_created_obj.rotation_euler[2] = e2d(rot_y)
+            bpy.ops.object.transform_apply(rotation = True, location = False)
+
+
+
             uvMapName = 'UVMap'
             obj, uvMap = GetObjectAndUVMap( just_created_obj.name, uvMapName )
             scale = Vector( (-1, 1) )
             pivot = Vector( (0.5, 0.5) )
             ScaleUV( uvMap, scale, pivot )
-            #newmat = create_mat(just_created_obj)
-            diffTex, img = create_tex_from_file(ItemName,scene.PANO_dir)
-            newmat, texImage, bsdf = create_material_from_image(context,img,just_created_obj,True)
             
-            assign_tex2mat(diffTex,newmat)
+            diffTex, img = create_tex_from_file(ItemName,scene.PANO_dir)
+            mat = create_mat(just_created_obj)
+            setup_mat_panorama_3DSC(mat.name, img)
+
+            
+            #newmat, texImage, bsdf = create_material_from_image(context,img,just_created_obj,True)
+            
+            #assign_tex2mat(diffTex,newmat)
             scene.pano_list.add()
             scene.pano_list[pano_list_index_counter].name = just_created_obj.name
 #            scene.pano_list[pano_list_index_counter].icon = qui possiamo mettere una regola
             flipnormals()
             create_cam(just_created_obj.name,pos_x,pos_y,pos_z)
             pano_list_index_counter += 1
-        scene.update()
+        #scene.update()
         return {'FINISHED'}

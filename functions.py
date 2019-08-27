@@ -760,8 +760,6 @@ def set_rotation_to_bubble(context,object,pano):
     bpy.ops.object.visual_transform_apply()
     bpy.ops.object.constraints_clear()
 
-
-
 def PANO_list_clear(context):
     scene = context.scene
     scene.pano_list.update()
@@ -785,27 +783,50 @@ def create_tex_from_file(ItemName,path_dir):
     diffTex.image = img
     return diffTex, img
 
+def setup_mat_panorama_3DSC(matname, img):
+    scene = bpy.context.scene
+    mat = bpy.data.materials[matname]
+    #mat.diffuse_color[0] = R
+    #mat.diffuse_color[1] = G
+    #mat.diffuse_color[2] = B
+    #mat.show_transparent_back = False
+    mat.use_backface_culling = True
+    mat.use_nodes = True
+    mat.node_tree.nodes.clear()
+    #mat.use_backface_culling = True
+    mat.blend_method = "ADD"#scene.proxy_blend_mode
+    links = mat.node_tree.links
+    nodes = mat.node_tree.nodes
+    output = nodes.new('ShaderNodeOutputMaterial')
+    output.location = (0, 0)
+    mainNode = nodes.new('ShaderNodeEmission')
+    #mainNode.inputs['Color'].default_value = (R,G,B,scene.proxy_display_alpha)
+    mainNode.location = (-600, 50)
+    mainNode.name = "diffuse"
+    #mixNode = nodes.new('ShaderNodeMixShader')
+    #mixNode.location = (-400,-50)
+    #transpNode = nodes.new('ShaderNodeBsdfTransparent')
+    #transpNode.location = (-800,-200)
+    #mixNode.name = "mixnode"
+    #mixNode.inputs[0].default_value = scene.proxy_display_alpha
+    teximgNode = nodes.new('ShaderNodeTexImage')
+    teximgNode.image = img
+    teximgNode.location = (-1200, 50)
+    links.new(mainNode.outputs[0], output.inputs[0])
+    links.new(teximgNode.outputs[0], mainNode.inputs[0])
+    #links.new(transpNode.outputs[0], mixNode.inputs[2])
+    #links.new(mixNode.outputs[0], output.inputs[0])
+
+
 def create_mat(ob):
     context = bpy.context
     scene = context.scene
-
-    ob = scene.objects.active
+    ob = context.active_object
     mat = bpy.data.materials.new(name="MAT_"+ob.name) #set new material to variable
     ob.data.materials.append(mat)
-    mat.use_transparency = True
-    mat.alpha = 0.75 #add the material to the object
+    #mat.use_transparency = True
+    #mat.alpha = 0.75 #add the material to the object
     return mat
-
-def assign_tex2mat(DiffTex,newmat):
-    mtex = newmat.texture_slots.add()
-    mtex.texture = DiffTex
-    mtex.texture_coords = 'UV'
-    mtex.use_map_color_diffuse = True
-    mtex.use_map_color_emission = True
-    mtex.emission_color_factor = 0.5
-    mtex.use_map_density = True
-    mtex.mapping = 'FLAT'
-    mtex.alpha_factor = 0
 
 def readfile(filename):
     f=open(filename,'r') # open file for reading
@@ -827,13 +848,16 @@ def flipnormals():
 
 def create_cam(name,pos_x,pos_y,pos_z):
   # create camera data
+    context = bpy.context
     cam_data = bpy.data.cameras.new('CAM_'+name)
-    cam_data.draw_size = 0.15
+    cam_data.display_size = 0.15
     cam_data.lens = bpy.context.scene.PANO_cam_lens
     # create object camera data and insert the camera data
     cam_ob = bpy.data.objects.new('CAM_'+name, cam_data)
     # link into scene
-    bpy.context.scene.objects.link(cam_ob)
+    coll = context.view_layer.active_layer_collection.collection
+    coll.objects.link(cam_ob)
+    #bpy.context.scene.objects.link(cam_ob)
     cam_ob.location.x = pos_x
     cam_ob.location.y = pos_y
     cam_ob.location.z = pos_z
