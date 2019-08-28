@@ -1,4 +1,5 @@
 import bpy
+import mathutils
 
 from bpy.types import Panel
 from bpy.types import Operator
@@ -7,7 +8,7 @@ from bpy.types import PropertyGroup
 from .functions import *
 
 import os
-from bpy_extras.io_utils import ImportHelper
+from bpy_extras.io_utils import ImportHelper, axis_conversion
 
 from bpy.props import (BoolProperty,
                        FloatProperty,
@@ -665,23 +666,35 @@ class PANO_import(bpy.types.Operator):
             rot_x = float(p0[4])
             rot_y = float(p0[5])
             rot_z = float(p0[6])
+            r11 = float(p0[7])
+            r12 = float(p0[8])
+            r13 = float(p0[9])
+            r21 = float(p0[10])
+            r22 = float(p0[11])
+            r23 = float(p0[12])
+            r31 = float(p0[13])
+            r32 = float(p0[14])
+            r33 = float(p0[15])
+
             for model in data.objects:
                 if model.name == remove_extension(ItemName) or model.name == "CAM_"+remove_extension(ItemName):
                     data.objects.remove(model)
             sph = bpy.ops.mesh.primitive_uv_sphere_add(calc_uvs=True, radius=0.2, location=(pos_x,pos_y,pos_z))
             just_created_obj = context.active_object
             just_created_obj.name = remove_extension(ItemName)
-            
-            just_created_obj.rotation_euler[0] = e2d(rot_x-90.0)
-            bpy.ops.object.transform_apply(rotation = True, location = False)
 
-            just_created_obj.rotation_euler[2] = (e2d(rot_y+90.0))*-1
-            bpy.ops.object.transform_apply(rotation = True, location = False)
+            matrix_xzy = mathutils.Matrix([[r11,r12,r13,0.0],[r21,r22,r23,0.0],[r31,r32,r33,0.0],[pos_x,pos_y,pos_z,1.0]])
+            print(str(matrix_xzy))
 
-            just_created_obj.rotation_euler[1] = e2d(rot_z)
-            bpy.ops.object.transform_apply(rotation = True, location = False)
+            matrix_xyz = matrix_xzy @ axis_conversion(from_forward='Z', from_up='Y', to_forward='-Y', to_up='Z').to_4x4()
 
+            just_created_obj.matrix_basis = matrix_xyz
 
+            just_created_obj.location[0] = pos_x
+            just_created_obj.location[1] = pos_y
+            just_created_obj.location[2] = pos_z
+
+            print(str(matrix_xzy))
 
             uvMapName = 'UVMap'
             obj, uvMap = GetObjectAndUVMap( just_created_obj.name, uvMapName )
