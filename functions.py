@@ -4,6 +4,7 @@ import time
 import bmesh
 import platform
 from random import randint, choice
+import re
 
 #per panorami
 import math
@@ -773,7 +774,8 @@ def e2d(float_value):
     return (float_value/fac)
 
 def create_tex_from_file(ItemName,path_dir):
-    realpath = path_dir + ItemName #+ '.' + extension
+    realpath = os.path.join(path_dir,ItemName)
+    #realpath = path_dir + ItemName #+ '.' + extension
     try:
         img = bpy.data.images.load(realpath)
     except:
@@ -782,6 +784,23 @@ def create_tex_from_file(ItemName,path_dir):
     diffTex = bpy.data.textures.new('TEX_'+ItemName, type = 'IMAGE')
     diffTex.image = img
     return diffTex, img
+
+def create_pano_ubermat():
+    if not bpy.data.materials["uberpano"]:
+        mat = bpy.data.materials.new(name="uberpano")
+    else:
+        mat = bpy.data.materials["uberpano"]
+    nodes = mat.node_tree.nodes
+    for n in nodes:
+        if not n.name.startswith("map_"):
+            
+
+
+
+
+
+
+
 
 def setup_mat_panorama_3DSC(matname, img):
     scene = bpy.context.scene
@@ -862,3 +881,35 @@ def create_cam(name,pos_x,pos_y,pos_z):
     cam_ob.location.y = pos_y
     cam_ob.location.z = pos_z
     cam_ob.rotation_euler.x = e2d(90)
+
+def read_pano_dir(context):
+    scene = context.scene
+    sPath = scene.PANO_dir
+    folder_list = []
+    minimum_sChildPath = ""
+    folder_presence = False
+    min_len = 100
+    for sChild in os.listdir(sPath):                
+            sChildPath = os.path.join(sPath,sChild)
+            #print(str(sChild))
+            
+            if os.path.isdir(sChildPath):
+                folder_presence = True
+                folder_list.append(sChild)
+                currentnumber = getnumber_in_name(str(sChild))
+                if currentnumber < min_len:
+                    print(str(currentnumber))
+                    min_len = currentnumber
+                    
+    if folder_presence is False:
+        pass
+    print(str(minimum_sChildPath))
+    scene.RES_pano = min_len
+    scene["RES_pano_folder_list"] = sorted(folder_list, key = getnumber_in_name)
+    return
+
+def getnumber_in_name(string):
+    temp = re.findall(r'\d+', str(string)) 
+    numbers = list(map(int, temp))
+    lastnumber = int(numbers[len(numbers)-1])
+    return lastnumber

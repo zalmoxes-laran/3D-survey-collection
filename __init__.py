@@ -66,6 +66,7 @@ else:
             ccTool,
             PhotogrTool,
             TexPatcher,
+            PanoramaSuite,
             )
 
 # register
@@ -92,11 +93,11 @@ class PANOListItem(PropertyGroup):
            description="",
            default="GROUP_UVS")
 
+
 class PANO_UL_List(bpy.types.UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         scene = context.scene
         layout.label(text = item.name, icon = item.icon)
-
 
 class InterfaceVars(PropertyGroup):
     cc_nodes: EnumProperty(
@@ -127,6 +128,7 @@ classes = (
     UI.VIEW3D_PT_ccTool,
     #UI.VIEW3D_PT_PhotogrTool,
     #UI.VIEW3D_PT_TexPatcher,
+    UI.VIEW3D_PT_SetupPanel, 
     import_3DSC.ImportMultipleObjs,
     import_3DSC.OBJECT_OT_IMPORTPOINTS,
     import_3DSC.ImportCoorPoints,
@@ -189,12 +191,11 @@ classes = (
     TexPatcher.OBJECT_OT_textransfer,
     InterfaceVars,
     ccToolViewVar,
-    UI.REMOVE_pano,
-    UI.VIEW_pano,
-    UI.VIEW_alignquad,
-    UI.VIEW_setlens,
-    UI.PANO_import,
-    UI.VIEW3D_PT_SetupPanel, 
+    PanoramaSuite.REMOVE_pano,
+    PanoramaSuite.VIEW_pano,
+    PanoramaSuite.VIEW_alignquad,
+    PanoramaSuite.VIEW_setlens,
+    PanoramaSuite.PANO_import,
     PANO_UL_List,
     PANOListItem,
 )
@@ -272,6 +273,12 @@ def register():
       default = 0.0,
       description = "Define the shift on the z axis",
       )
+
+    bpy.types.Scene.RES_pano = IntProperty(
+        name = "Resolution of Panoramic image for bubbles", 
+        default = 1,
+        description = "Resolution of Panoramic image for bubbles")
+
 
 # panoramic
     bpy.types.Scene.pano_list = CollectionProperty(type = PANOListItem)
