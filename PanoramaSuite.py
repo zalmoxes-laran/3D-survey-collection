@@ -82,6 +82,17 @@ class PANO_import(bpy.types.Operator):
         #scene.update()
         return {'FINISHED'}
 
+class ubermat_create(bpy.types.Operator):
+    bl_idname = "ubermat_create.pano"
+    bl_label = "Create ubermaterial from panoramas"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+
+        create_pano_ubermat()
+
+        return {'FINISHED'}
+
 class REMOVE_pano(bpy.types.Operator):
     bl_idname = "remove.pano"
     bl_label = "Remove selected Pano"

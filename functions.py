@@ -786,20 +786,123 @@ def create_tex_from_file(ItemName,path_dir):
     return diffTex, img
 
 def create_pano_ubermat():
-    if not bpy.data.materials["uberpano"]:
-        mat = bpy.data.materials.new(name="uberpano")
+    context = bpy.context
+    scene = context.scene
+    obj_mat = context.view_layer.objects.active
+    if obj_mat.name in scene.pano_list:
+        raise NameError("The active object %s is a panorama, skip the process" % obj_mat.name)
+        return
     else:
-        mat = bpy.data.materials["uberpano"]
-    nodes = mat.node_tree.nodes
-    for n in nodes:
-        if not n.name.startswith("map_"):
+        mat = bpy.data.materials.get("uberpano")
+        if mat is None:
+            mat = bpy.data.materials.new(name='uberpano')
+            mat.use_nodes = True
+            print(mat.name)
+        else:
+            mat = bpy.data.materials['uberpano']
+            print("The material %s still exists" % mat.name)
+        nodes = mat.node_tree.nodes
+        links = mat.node_tree.links
+        for n in nodes:
+            if not n.name.startswith('map_'):
+                nodes.remove(n)
+        vector_node_pano = nodes.new('ShaderNodeTexCoord')
+        vector_node_pano.name = "vectornode"
+        vector_node_pano.location = (-450,0)
+        UV_node_pano = nodes.new('ShaderNodeUVMap')
+        UV_node_pano.name = "UVnode"
+        UV_node_pano.location = (-450,-250)
+        UV_node_pano.uv_map = obj_mat.data.uv_layers.active.name
+        current_y_location = 0
+        for pano in scene.pano_list:
+            current_pano_name = pano.name
+            
+            current_x_location = 0
+            mapping_node_pano = nodes.new('ShaderNodeMapping')
+            mapping_node_pano.name = "mn_"+current_pano_name
+            mapping_node_pano.location = (current_x_location,current_y_location)
+            mapping_node_pano.vector_type = 'TEXTURE'
+            current_pano_ob = select_obj_from_panoitem(current_pano_name)
+            i = 0
+            while i < 3:
+                mapping_node_pano.translation[i] = current_pano_ob.location[i]
+                mapping_node_pano.rotation[i] = current_pano_ob.rotation_euler[i]
+                print(str(current_pano_ob.name))
+                i += 1
+            links.new(vector_node_pano.outputs[2], mapping_node_pano.inputs[0])
+            
+            current_x_location += 500
+            pano_tex_node = nodes.new('ShaderNodeTexEnvironment')
+            pano_tex_node.location = (current_x_location, current_y_location)
+            pano_tex_node.name = "tn_"+current_pano_name
+            links.new(mapping_node_pano.outputs[0], pano_tex_node.inputs[0])
+
+            current_file_pano_name = current_pano_name+"-"+str(scene.RES_pano)+"k.jpg"
+            current_dir_pano_name = str(scene.RES_pano)+"k"
+            path = os.path.join(scene.PANO_dir,current_dir_pano_name,current_file_pano_name) 
+            pano_tex_node.image = image_from_path(path)
+
+
+            current_x_location +=400
+            pano_mask_node = nodes.new('ShaderNodeTexImage')
+            pano_mask_node.location = (current_x_location, current_y_location)
+            pano_mask_node.name = "mk_"+current_pano_name
+
+            current_dir_blend = os.path.dirname(bpy.data.filepath)
+            if not current_dir_blend:
+                raise Exception("Blend file is not saved")
+            current_pano_subfolder_4maps = ("mp_"+obj_mat.name)
+            new_map_img_filename = ("mp_"+obj_mat.name+"_"+current_pano_name+".jpg")
+            new_map_dir_path = create_folder_in_path(current_pano_subfolder_4maps,current_dir_blend)
+            new_map_img_path = os.path.join(new_map_dir_path,new_map_img_filename) 
+            
+            tempimage = bpy.data.images.new(name=new_map_img_filename, width=2048, height=2048, alpha=False)
+            tempimage.filepath_raw = new_map_img_path
+            tempimage.file_format = 'JPEG'
+            tempimage.save()
+
+            pano_mask_node.image = tempimage
+            links.new(UV_node_pano.outputs[0], pano_mask_node.inputs[0])
+
+            current_x_location +=400
+            pano_rgb_node = nodes.new('ShaderNodeRGBCurve')
+            pano_rgb_node.location = (current_x_location, current_y_location)
+            pano_rgb_node.name = "cc_"+current_pano_name
+            links.new(pano_mask_node.outputs[1], pano_rgb_node.inputs[0])
+            links.new(pano_tex_node.outputs[0], pano_rgb_node.inputs[1])
+
+            current_x_location +=400
+            pano_mix_node = nodes.new('ShaderNodeMixRGB')
+            pano_mix_node.location = (current_x_location, current_y_location)
+            pano_mix_node.name = "mx_"+current_pano_name
+            links.new(pano_rgb_node.outputs[0], pano_mix_node.inputs[2])
+            links.new(pano_mask_node.outputs[0], pano_mix_node.inputs[0])
+
+            current_y_location -= 350
             
 
+def create_folder_in_path(foldername,path):
+    folderpath = os.path.join(path, foldername)
+    if not os.path.exists(folderpath):
+        os.mkdir(folderpath)
+        print("There is no "+ foldername +" folder. Creating one...")
+    else:
+        print('Found previously created '+ foldername +' folder. I will use it')
+    return folderpath
 
+def image_from_path(path):
+    #path = "path_to_the_image"
+    try:
+        img = bpy.data.images.load(path)
+    except:
+        raise NameError("Cannot load image %s" % path)
+    return img
 
-
-
-
+def select_obj_from_panoitem(panoname):
+    for ob in bpy.data.objects:
+        if panoname == ob.name:
+            found_ob = ob
+    return found_ob 
 
 
 def setup_mat_panorama_3DSC(matname, img):

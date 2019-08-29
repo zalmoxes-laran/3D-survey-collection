@@ -495,6 +495,10 @@ class PANOToolsPanel:
         row = layout.row()
         self.layout.operator("import.pano", icon="GROUP_UVS", text='Read/Refresh PANO file')
         row = layout.row()
+        self.layout.operator("ubermat_create.pano", icon="MATERIAL", text='')
+        row = layout.row()
+
+
 #        self.layout.operator("uslist_icon.update", icon="PARTICLE_DATA", text='Only icons refresh')
 #        row = layout.row()
         layout.alignment = 'LEFT'
@@ -515,8 +519,6 @@ class PANOToolsPanel:
         row = layout.row()
         self.layout.operator("remove.pano", icon="ERROR", text='Remove the Pano')
         
-        
-
         row = layout.row()
         row = layout.row()
         self.layout.operator("align.quad", icon="OUTLINER_OB_FORCE_FIELD", text='Align quad')
