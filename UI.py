@@ -497,6 +497,8 @@ class PANOToolsPanel:
         row = layout.row()
         self.layout.operator("ubermat_create.pano", icon="MATERIAL", text='')
         row = layout.row()
+        self.layout.operator("ubermat_update.pano", icon="MATERIAL", text='')
+        row = layout.row()
 
 
 #        self.layout.operator("uslist_icon.update", icon="PARTICLE_DATA", text='Only icons refresh')

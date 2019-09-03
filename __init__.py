@@ -197,6 +197,7 @@ classes = (
     PanoramaSuite.VIEW_setlens,
     PanoramaSuite.PANO_import,
     PanoramaSuite.ubermat_create,
+    PanoramaSuite.ubermat_update,
     PANO_UL_List,
     PANOListItem,
 )

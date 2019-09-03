@@ -68,6 +68,16 @@ def get_cc_node_in_obj_mat(nodegroupname,type):
     node = bpy.data.node_groups[nodegroupname].nodes[type_name]
     return node
 
+def get_cc_node_in_mat(mat,type):
+    if type == 'RGB':
+        type_name = 'RGB Curves'
+    if type == 'BC':
+        type_name = 'Bright/Contrast'
+    if type == 'HS':
+        type_name = 'Hue Saturation Value'
+    node = mat.nodes
+    return node
+
 def set_up_lens(obj,sens_width,sens_lenght,lens):
     obj.select_set(True)
     obj.data.lens = lens
@@ -785,7 +795,7 @@ def create_tex_from_file(ItemName,path_dir):
     diffTex.image = img
     return diffTex, img
 
-def create_pano_ubermat():
+def create_pano_ubermat(regenerate_maps):
     context = bpy.context
     scene = context.scene
     obj_mat = context.view_layer.objects.active
@@ -813,7 +823,10 @@ def create_pano_ubermat():
         nodes = mat.node_tree.nodes
         links = mat.node_tree.links
         for n in nodes:
-            if not n.name.startswith('map_'):
+            if regenerate_maps is True:
+                if not n.name.startswith('mk_'):
+                    nodes.remove(n)
+            else:
                 nodes.remove(n)
         vector_node_pano = nodes.new('ShaderNodeTexCoord')
         vector_node_pano.name = "vectornode"
@@ -840,7 +853,7 @@ def create_pano_ubermat():
                 mapping_node_pano.rotation[i] = current_pano_ob.rotation_euler[i]
                 print(str(current_pano_ob.name))
                 i += 1
-            mapping_node_pano.rotation[2] = (mapping_node_pano.rotation[2]-1.5708)
+            #mapping_node_pano.rotation[2] = (mapping_node_pano.rotation[2]-1.5708)
             links.new(vector_node_pano.outputs[3], mapping_node_pano.inputs[0])
             
             current_x_location += 500
@@ -868,10 +881,13 @@ def create_pano_ubermat():
                 pano_tex_node.image = bpy.data.images[current_file_pano_name]
                 
             current_x_location +=400
-            pano_mask_node = nodes.new('ShaderNodeTexImage')
+            if regenerate_maps is True:
+                pano_mask_node = nodes.new('ShaderNodeTexImage')
+                pano_mask_node.name = "mk_"+current_pano_name
+            else:
+                pano_mask_node = nodes.nodes.get("mk_"+current_pano_name)
             pano_mask_node.location = (current_x_location, current_y_location)
-            pano_mask_node.name = "mk_"+current_pano_name
-
+            
             current_dir_blend = os.path.dirname(bpy.data.filepath)
             if not current_dir_blend:
                 raise Exception("Blend file is not saved")

@@ -89,7 +89,20 @@ class ubermat_create(bpy.types.Operator):
 
     def execute(self, context):
 
-        create_pano_ubermat()
+        create_pano_ubermat(True)
+
+
+        return {'FINISHED'}
+
+class ubermat_update(bpy.types.Operator):
+    bl_idname = "ubermat_update.pano"
+    bl_label = "Update ubermaterial from panoramas"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+
+        create_pano_ubermat(False)
+        
 
         return {'FINISHED'}
 
