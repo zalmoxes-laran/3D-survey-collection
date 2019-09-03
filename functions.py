@@ -789,18 +789,27 @@ def create_pano_ubermat():
     context = bpy.context
     scene = context.scene
     obj_mat = context.view_layer.objects.active
+    obj_mat_mat_name = obj_mat.name+"uberpano" 
     if obj_mat.name in scene.pano_list:
-        raise NameError("The active object %s is a panorama, skip the process" % obj_mat.name)
+        raise NameError("The active object %s is a panorama, skip the process, please select an object you want to create a panoramic material for" % obj_mat.name)
         return
     else:
-        mat = bpy.data.materials.get("uberpano")
+        mat = bpy.data.materials.get(obj_mat_mat_name)
+
         if mat is None:
-            mat = bpy.data.materials.new(name='uberpano')
+            mat = bpy.data.materials.new(name=obj_mat_mat_name)
             mat.use_nodes = True
             print(mat.name)
         else:
-            mat = bpy.data.materials['uberpano']
+            mat = bpy.data.materials[obj_mat_mat_name]
             print("The material %s still exists" % mat.name)
+        # Assign it to object
+        if obj_mat.data.materials:
+            # assign to 1st material slot
+            obj_mat.data.materials[0] = mat
+        else:
+            # no slots
+            obj_mat.data.materials.append(mat)
         nodes = mat.node_tree.nodes
         links = mat.node_tree.links
         for n in nodes:
@@ -813,10 +822,12 @@ def create_pano_ubermat():
         UV_node_pano.name = "UVnode"
         UV_node_pano.location = (-450,-250)
         UV_node_pano.uv_map = obj_mat.data.uv_layers.active.name
+
         current_y_location = 0
+        iteration_num = 1
         for pano in scene.pano_list:
             current_pano_name = pano.name
-            
+
             current_x_location = 0
             mapping_node_pano = nodes.new('ShaderNodeMapping')
             mapping_node_pano.name = "mn_"+current_pano_name
@@ -829,7 +840,8 @@ def create_pano_ubermat():
                 mapping_node_pano.rotation[i] = current_pano_ob.rotation_euler[i]
                 print(str(current_pano_ob.name))
                 i += 1
-            links.new(vector_node_pano.outputs[2], mapping_node_pano.inputs[0])
+            mapping_node_pano.rotation[2] = (mapping_node_pano.rotation[2]-1.5708)
+            links.new(vector_node_pano.outputs[3], mapping_node_pano.inputs[0])
             
             current_x_location += 500
             pano_tex_node = nodes.new('ShaderNodeTexEnvironment')
@@ -838,11 +850,23 @@ def create_pano_ubermat():
             links.new(mapping_node_pano.outputs[0], pano_tex_node.inputs[0])
 
             current_file_pano_name = current_pano_name+"-"+str(scene.RES_pano)+"k.jpg"
-            current_dir_pano_name = str(scene.RES_pano)+"k"
-            path = os.path.join(scene.PANO_dir,current_dir_pano_name,current_file_pano_name) 
-            pano_tex_node.image = image_from_path(path)
-
-
+            
+            #pano_tex_image = image_from_path(path)
+            found = False
+            for im in bpy.data.images:
+                if im.name == current_file_pano_name:
+                    found = True
+                    print("got a previous image")
+                else:
+                    pass
+            
+            if found is False:
+                current_dir_pano_name = str(scene.RES_pano)+"k"
+                path = os.path.join(scene.PANO_dir,current_dir_pano_name,current_file_pano_name)
+                pano_tex_node.image = image_from_path(path)
+            else:
+                pano_tex_node.image = bpy.data.images[current_file_pano_name]
+                
             current_x_location +=400
             pano_mask_node = nodes.new('ShaderNodeTexImage')
             pano_mask_node.location = (current_x_location, current_y_location)
@@ -877,9 +901,26 @@ def create_pano_ubermat():
             pano_mix_node.name = "mx_"+current_pano_name
             links.new(pano_rgb_node.outputs[0], pano_mix_node.inputs[2])
             links.new(pano_mask_node.outputs[0], pano_mix_node.inputs[0])
+            if iteration_num == 1:
+                links.new(pano_rgb_node.outputs[0], pano_mix_node.inputs[1])
+            else:
+                links.new(last_pano_mix_node.outputs[0], pano_mix_node.inputs[1])
 
+            last_pano_mix_node = pano_mix_node
+            iteration_num +=1
             current_y_location -= 350
-            
+
+        current_x_location +=400
+        current_y_location = 0
+        pano_emission_node = nodes.new('ShaderNodeEmission')
+        pano_emission_node.location = (current_x_location, current_y_location)
+        pano_emission_node.name = "emission_node"
+        links.new(last_pano_mix_node.outputs[0], pano_emission_node.inputs[0])
+        current_x_location +=400
+        pano_output_node = nodes.new('ShaderNodeOutputMaterial')
+        pano_output_node.location = (current_x_location, current_y_location)
+        links.new(pano_emission_node.outputs[0], pano_output_node.inputs[0])
+
 
 def create_folder_in_path(foldername,path):
     folderpath = os.path.join(path, foldername)

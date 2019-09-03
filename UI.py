@@ -540,5 +540,5 @@ class PANOToolsPanel:
 class VIEW3D_PT_SetupPanel(Panel, PANOToolsPanel):
     bl_category = "3DSC"
     bl_idname = "VIEW3D_PT_SetupPanel"
-    bl_context = "objectmode"
+    #bl_context = "objectmode"
 
