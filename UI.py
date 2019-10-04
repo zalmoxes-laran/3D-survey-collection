@@ -50,7 +50,6 @@ class ToolsPanelExport:
             #row = layout.row()
             #row.label(text="Override")
             #row = layout.row()
-
             #layout.separator()
             box = layout.box()
             row = box.row()
@@ -80,7 +79,6 @@ class ToolsPanelExport:
         else:
             row.label(text="Select object(s) to see tools here.")
             row = layout.row()
-
 
 class ToolsPanelSHIFT:
     bl_label = "Shifting"
@@ -118,44 +116,41 @@ class ToolsPanelQuickUtils:
         layout = self.layout
         obj = context.object
         scene = context.scene
-        row = layout.row()
-        self.layout.operator("center.mass", icon="DOT", text='Center of Mass')
-        row = layout.row()
-        self.layout.operator("correct.material", icon="NODE", text='Correct Photoscan mats')
-        row = layout.row()
-        self.layout.operator("local.texture", icon="TEXTURE", text='Local texture mode ON')
-        row = layout.row()
 
-#   Here I need to remove this feature since it is no more usefull
-#        self.layout.operator("light.off", icon="LIGHT", text='Deactivate lights')
-#        row = layout.row()
-        self.layout.operator("create.personalgroups", icon="GROUP", text='Create per-object groups')
-        row = layout.row()
-        self.layout.operator("remove.alluvexcept1", icon="GROUP", text='Only UV0 will survive')
-        row = layout.row()
-        self.layout.operator("remove.fromallgroups", icon="LIBRARY_DATA_BROKEN", text='Remove from all groups')
-        row = layout.row()
-        self.layout.operator("multimaterial.layout", icon="IMGDISPLAY", text='Multimaterial layout')
-        row = layout.row()
-        self.layout.operator("lod0poly.reducer", icon="IMGDISPLAY", text='LOD0 mesh decimator')
+        # row = layout.row()
+        # self.layout.operator("center.mass", icon="DOT", text='Center of Mass')
+        # row = layout.row()
+        # self.layout.operator("correct.material", icon="NODE", text='Correct Photoscan mats')
+        # row = layout.row()
+        # self.layout.operator("local.texture", icon="TEXTURE", text='Local texture mode ON')
+        # row = layout.row()
+        # self.layout.operator("create.personalgroups", icon="GROUP", text='Create per-object groups')
+        # row = layout.row()
+        # self.layout.operator("remove.alluvexcept1", icon="GROUP", text='Only UV0 will survive')
+        # row = layout.row()
+        # self.layout.operator("remove.fromallgroups", icon="LIBRARY_DATA_BROKEN", text='Remove from all groups')
+        # row = layout.row()
+        # self.layout.operator("multimaterial.layout", icon="IMGDISPLAY", text='Multimaterial layout')
+        # row = layout.row()
+        # self.layout.operator("lod0poly.reducer", icon="IMGDISPLAY", text='LOD0 mesh decimator')
         row = layout.row()
         self.layout.operator("project.segmentation", icon="SCULPTMODE_HLT", text='Mono-cutter')
         row = layout.row()
         self.layout.operator("project.segmentationinv", icon="SCULPTMODE_HLT", text='Multi-cutter')
         row = layout.row()
 
-        self.layout.operator("tiff2png.relink", icon="META_DATA", text='Relink images from tiff to png')
-        row = layout.row()
+        # self.layout.operator("tiff2png.relink", icon="META_DATA", text='Relink images from tiff to png')
+        # row = layout.row()
 
-        self.layout.operator("obname.ffn", icon="META_DATA", text='Ren active from namefile')
-        row = layout.row()
-        self.layout.operator("rename.ge", icon="META_DATA", text='Ren 4 GE')
-        row = layout.row()
-        row.label(text="Switch engine")
-        self.layout.operator("activatenode.material", icon="PMARKER_SEL", text='Activate cycles nodes')
-        self.layout.operator("deactivatenode.material", icon="PMARKER", text='De-activate cycles nodes')
-        self.layout.operator("bi2cycles.material", icon="PARTICLES", text='Create cycles nodes')
-        self.layout.operator("cycles2bi.material", icon="PMARKER", text='Cycles to BI')
+        # self.layout.operator("obname.ffn", icon="META_DATA", text='Ren active from namefile')
+        # row = layout.row()
+        # self.layout.operator("rename.ge", icon="META_DATA", text='Ren 4 GE')
+        # row = layout.row()
+        # row.label(text="Switch engine")
+        # self.layout.operator("activatenode.material", icon="PMARKER_SEL", text='Activate cycles nodes')
+        # self.layout.operator("deactivatenode.material", icon="PMARKER", text='De-activate cycles nodes')
+        # self.layout.operator("bi2cycles.material", icon="PARTICLES", text='Create cycles nodes')
+        # self.layout.operator("cycles2bi.material", icon="PMARKER", text='Cycles to BI')
 
 class ToolsPanelLODgenerator:
     bl_label = "LOD generator"

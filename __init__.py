@@ -19,7 +19,7 @@
 bl_info = {
     "name": "3D Survey Collection",
     "author": "Emanuel Demetrescu",
-    "version": (1,4.1),
+    "version": (1,4.2),
     "blender": (2, 80, 0),
     "location": "3D View > Toolbox",
     "description": "A collection of tools for 3D Survey activities",
@@ -123,7 +123,7 @@ classes = (
     UI.VIEW3D_PT_Shift_ToolBar,
     UI.VIEW3D_PT_Import_ToolBar,
     UI.VIEW3D_PT_Export_ToolBar,
-    #UI.VIEW3D_PT_QuickUtils_ToolBar,
+    UI.VIEW3D_PT_QuickUtils_ToolBar,
     UI.VIEW3D_PT_LODgenerator,
     UI.VIEW3D_PT_ccTool,
     #UI.VIEW3D_PT_PhotogrTool,

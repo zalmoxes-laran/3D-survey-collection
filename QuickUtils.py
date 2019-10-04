@@ -11,12 +11,11 @@ class OBJECT_OT_CorrectMaterial(bpy.types.Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
-        selection = bpy.context.selected_objects
+        selection = context.selected_objects
         bpy.ops.object.select_all(action='DESELECT')
         for obj in selection:
             obj.select_set(True)
             for i in range(0,len(obj.material_slots)):
-#                bpy.ops.object.material_slot_remove()
                 obj.active_material_index = i
                 ma = obj.active_material
                 ma.diffuse_intensity = 1
@@ -25,8 +24,8 @@ class OBJECT_OT_CorrectMaterial(bpy.types.Operator):
                 ma.specular_color[1] = 1         
                 ma.specular_color[2] = 1  
                 ma.diffuse_color[0] = 1
-                ma.diffuse_color[1] = 1         
-                ma.diffuse_color[2] = 1       
+                ma.diffuse_color[1] = 1
+                ma.diffuse_color[2] = 1
                 ma.alpha = 1.0
                 ma.use_transparency = False
                 ma.transparency_method = 'Z_TRANSPARENCY'
@@ -48,7 +47,7 @@ class OBJECT_OT_projectsegmentation(bpy.types.Operator):
         ob_counter = 1
         
         data = bpy.data
-        ob_cutting = context.scene.objects.active
+        ob_cutting = context.active_object
         #ob_cutting = data.objects.get("secante")
         ob_to_cut = context.selected_objects
         ob_tot = (len(ob_to_cut)-1)
@@ -60,9 +59,10 @@ class OBJECT_OT_projectsegmentation(bpy.types.Operator):
                 start_time_ob = time.time()
                 print('>>> CUTTING >>>')
                 print('>>>>>> the object is going to be cutted: ""'+ ob.name+'"" ('+str(ob_counter)+'/'+str(ob_tot)+')')
-                ob_cutting.select = True
-                context.scene.objects.active = ob
-                ob.select = True
+                ob_cutting.select_set(True)
+                #context.scene.objects.active = ob
+                context.view_layer.objects.active = ob
+                ob.select_set(True)
                 bpy.ops.object.editmode_toggle()
                 bpy.ops.mesh.knife_project(cut_through=True)
                 try:
@@ -90,7 +90,7 @@ class OBJECT_OT_projectsegmentationinversed(bpy.types.Operator):
         start_time = time.time()
         ob_counter = 1
         data = bpy.data
-        ob_to_cut = context.scene.objects.active
+        ob_to_cut = context.active_object
         #ob_cutting = data.objects.get("secante")
         ob_cutting = context.selected_objects
         ob_tot = (len(ob_cutting)-1)
@@ -103,9 +103,10 @@ class OBJECT_OT_projectsegmentationinversed(bpy.types.Operator):
                 start_time_ob = time.time()
                 print('>>> CUTTING >>>')
                 print('>>>>>> the object "'+ ob.name +'" ('+str(ob_counter)+'/'+str(ob_tot)+') is cutting the object'+ ob_to_cut.name)
-                ob.select = True
-                context.scene.objects.active = ob_to_cut
-                ob_to_cut.select = True
+                ob.select_set(True)
+                #context.scene.objects.active = ob_to_cut
+                context.view_layer.objects.active = ob_to_cut
+                ob_to_cut.select_set(True)
                 bpy.ops.object.editmode_toggle()
                 bpy.ops.mesh.knife_project(cut_through=True)
                 try:
