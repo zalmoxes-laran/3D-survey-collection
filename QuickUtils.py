@@ -36,9 +36,9 @@ class OBJECT_OT_CorrectMaterial(bpy.types.Operator):
         return {'FINISHED'}
 
 class OBJECT_OT_projectsegmentation(bpy.types.Operator):
-    """Project segmentation"""
+    """Segment (projecting) a series of selected elements using an active mesh"""
     bl_idname = "project.segmentation"
-    bl_label = "Project segmentation"
+    bl_label = "Segment (projecting) a series of selected elements using an active mesh"
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
@@ -80,9 +80,9 @@ class OBJECT_OT_projectsegmentation(bpy.types.Operator):
         return {'FINISHED'}
 
 class OBJECT_OT_projectsegmentationinversed(bpy.types.Operator):
-    """Project segmentation inverse"""
+    """Segment (projecting) an active mesh using a series of selected elements"""
     bl_idname = "project.segmentationinv"
-    bl_label = "Project segmentation inverse"
+    bl_label = "Segment (projecting) an active mesh using a series of selected elements"
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):

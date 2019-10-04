@@ -19,7 +19,7 @@
 bl_info = {
     "name": "3D Survey Collection",
     "author": "Emanuel Demetrescu",
-    "version": (1,4.2),
+    "version": (1,4.3),
     "blender": (2, 80, 0),
     "location": "3D View > Toolbox",
     "description": "A collection of tools for 3D Survey activities",
@@ -28,7 +28,6 @@ bl_info = {
 #    "tracker_url": "",
     "category": "Tools",
     }
-
 
 if "bpy" in locals():
     import importlib
@@ -126,7 +125,7 @@ classes = (
     UI.VIEW3D_PT_QuickUtils_ToolBar,
     UI.VIEW3D_PT_LODgenerator,
     UI.VIEW3D_PT_ccTool,
-    #UI.VIEW3D_PT_PhotogrTool,
+    UI.VIEW3D_PT_PhotogrTool,
     #UI.VIEW3D_PT_TexPatcher,
     UI.VIEW3D_PT_SetupPanel, 
     import_3DSC.ImportMultipleObjs,

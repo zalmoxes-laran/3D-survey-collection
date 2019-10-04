@@ -2,33 +2,24 @@ import bpy
 import os
 from .functions import *
 
+# class VIEW3D_OT_tex_to_material(bpy.types.Operator):
+#     """Create texture materials for images assigned in UV editor"""
+#     bl_idname = "view3d.tex_to_material"
+#     bl_label = "Texface Images to Material/Texture (Material Utils)"
+#     bl_options = {'REGISTER', 'UNDO'}
 
-#class CAMERA_PH_presets(Menu):
-#    bl_label = "cameras presets"
-#    preset_subdir = "ph_camera"
-#    preset_operator = "script.execute_preset"
-#    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_GAME'}
-#    draw = Menu.draw_preset
+#     @classmethod
+#     def poll(cls, context):
+#         return context.active_object is not None
 
-
-class VIEW3D_OT_tex_to_material(bpy.types.Operator):
-    """Create texture materials for images assigned in UV editor"""
-    bl_idname = "view3d.tex_to_material"
-    bl_label = "Texface Images to Material/Texture (Material Utils)"
-    bl_options = {'REGISTER', 'UNDO'}
-
-    @classmethod
-    def poll(cls, context):
-        return context.active_object is not None
-
-    def execute(self, context):
-        if context.selected_editable_objects:
-            tex_to_mat()
-            return {'FINISHED'}
-        else:
-            self.report({'WARNING'},
-                        "No editable selected objects, could not finish")
-            return {'CANCELLED'}
+#     def execute(self, context):
+#         if context.selected_editable_objects:
+#             tex_to_mat()
+#             return {'FINISHED'}
+#         else:
+#             self.report({'WARNING'},
+#                         "No editable selected objects, could not finish")
+#             return {'CANCELLED'}
 
 class OBJECT_OT_IsometricScene(bpy.types.Operator):
     bl_idname = "isometric.scene"
@@ -114,7 +105,7 @@ class OBJECT_OT_BetterCameras(bpy.types.Operator):
         selection = bpy.context.selected_objects
         bpy.ops.object.select_all(action='DESELECT')
         for cam in selection:
-            cam.select = True
+            cam.select_set(True)
             cam.data.show_limits = True
             cam.data.clip_start = 0.5
             cam.data.clip_end = 4
@@ -132,7 +123,7 @@ class OBJECT_OT_NoBetterCameras(bpy.types.Operator):
         selection = bpy.context.selected_objects
         bpy.ops.object.select_all(action='DESELECT')
         for cam in selection:
-            cam.select = True
+            cam.select_set(True)
             cam.data.show_limits = False
         return {'FINISHED'}
 
@@ -189,7 +180,8 @@ class OBJECT_OT_CreateCameraImagePlane(bpy.types.Operator):
             bpy.ops.transform.resize( value=(0.5,0.5,0.5))
             bpy.ops.uv.smart_project(angle_limit=66,island_margin=0, user_area_weight=0)
             bpy.ops.uv.select_all(action='TOGGLE')
-            bpy.ops.transform.rotate(value=1.5708, axis=(0,0,1) )
+            bpy.ops.transform.rotate(value=1.5708, orient_axis='Z')
+            
             bpy.ops.object.editmode_toggle()
 
             imageplane.location = (0,0,-depth)
@@ -210,23 +202,27 @@ class OBJECT_OT_CreateCameraImagePlane(bpy.types.Operator):
             # if not returned by new use imgeplane.material_slots[0].material
             material.name = 'mat_imageplane_'+cameraname
 
-            material.use_nodes = False
+            material.use_nodes = True
 
-
-            activename = bpy.path.clean_name(bpy.context.scene.objects.active.name)
+            activename = bpy.path.clean_name(bpy.context.view_layer.objects.active.name)
 
             undistortedpath = bpy.context.scene.BL_undistorted_path
 
             if not undistortedpath:
                 raise Exception("Hey Buddy, you have to set the undistorted images path !")
 
-            bpy.context.object.data.uv_layers.active.data[0].image = bpy.data.images.load(undistortedpath+cameraname)
+            
+            image_cam = bpy.data.images.load(undistortedpath+cameraname)
 
-            bpy.ops.view3d.tex_to_material()
+            setup_mat_panorama_3DSC(material.name, image_cam)
+
+            #bpy.context.object.data.uv_layers.active.data[0].image = 
+
+            #bpy.ops.view3d.tex_to_material()
 
         except Exception as e:
-            imageplane.select=False
-            camera.select = True
+            imageplane.select_set(False)
+            camera.select_set(True)
             raise e
         return {'FINISHED'}
 
@@ -268,9 +264,10 @@ class OBJECT_OT_paintcam(bpy.types.Operator):
         else:
             for obj in cam_ob.children:
                 if obj.name.startswith("objplane_"):
-                    obj.hide = True
+                    obj.hide_viewport = True
             bpy.ops.paint.texture_paint_toggle()
-            bpy.context.space_data.show_only_render = True
+            #bpy.context.space_data.show_only_render = True
+            bpy.types.View3DOverlay.show_overlays = False
             bpy.ops.image.project_edit()
             obj_camera = bpy.context.scene.camera
     
@@ -278,7 +275,8 @@ class OBJECT_OT_paintcam(bpy.types.Operator):
             cleanpath = bpy.path.abspath(undistortedphoto)
             bpy.ops.image.external_edit(filepath=cleanpath)
 
-            bpy.context.space_data.show_only_render = False
+            bpy.types.View3DOverlay.show_overlays = True
+            #bpy.context.space_data.show_only_render = False
             bpy.ops.paint.texture_paint_toggle()
 
         return {'FINISHED'}
