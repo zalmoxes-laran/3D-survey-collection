@@ -847,6 +847,14 @@ def create_pano_ubermat(regenerate_maps):
             mapping_node_pano.location = (current_x_location,current_y_location)
             mapping_node_pano.vector_type = 'TEXTURE'
             current_pano_ob = select_obj_from_panoitem(current_pano_name)
+
+            
+            bpy.ops.object.select_all(action='DESELECT')
+            current_pano_ob.select_set(True)
+            context.view_layer.objects.active = current_pano_ob
+            
+            bpy.ops.transform.rotate(value=90.0, orient_axis='Z', orient_type='LOCAL')
+
             i = 0
             while i < 3:
                 mapping_node_pano.translation[i] = current_pano_ob.location[i]
@@ -854,6 +862,13 @@ def create_pano_ubermat(regenerate_maps):
                 print(str(current_pano_ob.name))
                 i += 1
             #mapping_node_pano.rotation[2] = (mapping_node_pano.rotation[2]-1.5708)
+
+            #bpy.ops.transform.rotate(value=-90.0, orient_axis='Z', orient_type='LOCAL')
+            
+            bpy.ops.object.select_all(action='DESELECT')
+            context.view_layer.objects.active = obj_mat
+            obj_mat.select_set(True)
+            
             links.new(vector_node_pano.outputs[3], mapping_node_pano.inputs[0])
             
             current_x_location += 500
