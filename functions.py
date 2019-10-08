@@ -46,6 +46,10 @@ def grad(rad):
     grad = rad*57.2957795
     return grad
 
+def rad(grad):
+    rad = (grad*1.570796327153556)/90.0
+    return rad
+
 def get_nodegroupname_from_obj(obj):
 #    if 'cc_node' in [node.node_tree.name for node in obj.material_slots[0].material.node_tree.nodes]:
     if obj.material_slots[0].material.node_tree.nodes.find('cc_node') == -1 :
@@ -823,11 +827,11 @@ def create_pano_ubermat(regenerate_maps):
         nodes = mat.node_tree.nodes
         links = mat.node_tree.links
         for n in nodes:
-            if regenerate_maps is True:
-                if not n.name.startswith('mk_'):
-                    nodes.remove(n)
-            else:
-                nodes.remove(n)
+            #if regenerate_maps is True:
+            #    if not n.name.startswith('mk_'):
+            #        nodes.remove(n)
+            #else:
+            nodes.remove(n)
         vector_node_pano = nodes.new('ShaderNodeTexCoord')
         vector_node_pano.name = "vectornode"
         vector_node_pano.location = (-450,0)
@@ -848,12 +852,13 @@ def create_pano_ubermat(regenerate_maps):
             mapping_node_pano.vector_type = 'TEXTURE'
             current_pano_ob = select_obj_from_panoitem(current_pano_name)
 
-            
             bpy.ops.object.select_all(action='DESELECT')
             current_pano_ob.select_set(True)
             context.view_layer.objects.active = current_pano_ob
+            #gradi = str(rad(90.0))
+            #print("oggetto da girare: "+ current_pano_ob.name+ " dei seguenti gradi:" + gradi)
             
-            bpy.ops.transform.rotate(value=90.0, orient_axis='Z', orient_type='LOCAL')
+            bpy.ops.transform.rotate(value=rad(90.0), orient_axis='Z', orient_type='LOCAL')
 
             i = 0
             while i < 3:
@@ -861,9 +866,8 @@ def create_pano_ubermat(regenerate_maps):
                 mapping_node_pano.rotation[i] = current_pano_ob.rotation_euler[i]
                 print(str(current_pano_ob.name))
                 i += 1
-            #mapping_node_pano.rotation[2] = (mapping_node_pano.rotation[2]-1.5708)
-
-            #bpy.ops.transform.rotate(value=-90.0, orient_axis='Z', orient_type='LOCAL')
+            
+            bpy.ops.transform.rotate(value=-(rad(90.0)), orient_axis='Z', orient_type='LOCAL')
             
             bpy.ops.object.select_all(action='DESELECT')
             context.view_layer.objects.active = obj_mat
@@ -976,40 +980,29 @@ def select_obj_from_panoitem(panoname):
             found_ob = ob
     return found_ob 
 
-
 def setup_mat_panorama_3DSC(matname, img):
     scene = bpy.context.scene
     mat = bpy.data.materials[matname]
-    #mat.diffuse_color[0] = R
-    #mat.diffuse_color[1] = G
-    #mat.diffuse_color[2] = B
-    #mat.show_transparent_back = False
+
     mat.use_backface_culling = True
     mat.use_nodes = True
     mat.node_tree.nodes.clear()
-    #mat.use_backface_culling = True
-    mat.blend_method = "ADD"#scene.proxy_blend_mode
+ 
+    mat.blend_method = "ADD"
     links = mat.node_tree.links
     nodes = mat.node_tree.nodes
     output = nodes.new('ShaderNodeOutputMaterial')
     output.location = (0, 0)
     mainNode = nodes.new('ShaderNodeEmission')
-    #mainNode.inputs['Color'].default_value = (R,G,B,scene.proxy_display_alpha)
     mainNode.location = (-600, 50)
     mainNode.name = "diffuse"
-    #mixNode = nodes.new('ShaderNodeMixShader')
-    #mixNode.location = (-400,-50)
-    #transpNode = nodes.new('ShaderNodeBsdfTransparent')
-    #transpNode.location = (-800,-200)
-    #mixNode.name = "mixnode"
-    #mixNode.inputs[0].default_value = scene.proxy_display_alpha
+
     teximgNode = nodes.new('ShaderNodeTexImage')
     teximgNode.image = img
     teximgNode.location = (-1200, 50)
     links.new(mainNode.outputs[0], output.inputs[0])
     links.new(teximgNode.outputs[0], mainNode.inputs[0])
-    #links.new(transpNode.outputs[0], mixNode.inputs[2])
-    #links.new(mixNode.outputs[0], output.inputs[0])
+
 
 
 def create_mat(ob):

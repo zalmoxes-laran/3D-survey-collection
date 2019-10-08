@@ -494,6 +494,17 @@ class PANOToolsPanel:
         row = layout.row()
         self.layout.operator("ubermat_update.pano", icon="MATERIAL", text='')
         row = layout.row()
+        
+        split = layout.split()
+        # First column
+        col = split.column()
+        #col.label(text="Lens:")
+        col.prop(context.scene, 'RES_pano', toggle = True)
+        #split = layout.split()
+        col = split.column()
+        col.operator("set.panores", icon="NODE_COMPOSITING", text='')
+        row = layout.row()
+        
 
 
 #        self.layout.operator("uslist_icon.update", icon="PARTICLE_DATA", text='Only icons refresh')

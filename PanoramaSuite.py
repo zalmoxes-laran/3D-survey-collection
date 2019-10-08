@@ -201,3 +201,26 @@ class VIEW_setlens(bpy.types.Operator):
 #        set_rotation_to_bubble(context,object,current_camera_obj)
 
         return {'FINISHED'}
+
+
+class SETpanoRES(bpy.types.Operator):
+    bl_idname = "set.panores"
+    bl_label = "set the res of the panorama"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        scene = bpy.context.scene
+        active_obj = bpy.context.active_object
+        if active_obj.material_slots[0].material.name.endswith('uvuberpano'):
+            mat = active_obj.material_slots[0].material
+            nodes = mat.node_tree.nodes
+            for node in nodes:
+                if node.name.startswith('tn_'):
+                    nodename = node.name[3:]
+                    print(nodename)
+                    current_panores_foldername = str(scene.RES_pano)+"k"
+                    ItemName_res = (nodename+"-"+str(scene.RES_pano)+"k.jpg")
+                    minimum_sChildPath = os.path.join(scene.PANO_dir,current_panores_foldername,ItemName_res)
+                    print(minimum_sChildPath)
+                    node.image.filepath = minimum_sChildPath
+        return {'FINISHED'}

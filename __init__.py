@@ -197,6 +197,7 @@ classes = (
     PanoramaSuite.PANO_import,
     PanoramaSuite.ubermat_create,
     PanoramaSuite.ubermat_update,
+    PanoramaSuite.SETpanoRES,
     PANO_UL_List,
     PANOListItem,
 )
@@ -276,7 +277,7 @@ def register():
       )
 
     bpy.types.Scene.RES_pano = IntProperty(
-        name = "Resolution of Panoramic image for bubbles", 
+        name = "Res", 
         default = 1,
         description = "Resolution of Panoramic image for bubbles")
 
