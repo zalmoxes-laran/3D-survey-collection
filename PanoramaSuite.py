@@ -91,7 +91,6 @@ class ubermat_create(bpy.types.Operator):
 
         create_pano_ubermat(True)
 
-
         return {'FINISHED'}
 
 class ubermat_update(bpy.types.Operator):
@@ -103,7 +102,6 @@ class ubermat_update(bpy.types.Operator):
 
         create_pano_ubermat(False)
         
-
         return {'FINISHED'}
 
 class REMOVE_pano(bpy.types.Operator):

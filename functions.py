@@ -59,6 +59,14 @@ def get_nodegroupname_from_obj(obj):
         #nodegroupname = obj.material_slots[0].material.node_tree.nodes['cc_node'].node_tree
     return nodegroupname
 
+def get_cc_node_pano(obj, current_pano):
+    nodes = obj.material_slots[0].material.node_tree.nodes
+    cc_node = ""
+    for node in nodes:
+        if node.name.startswith('cc_'+current_pano):
+            cc_node = node
+    return cc_node
+
 #if 'Material Output' in [node.name for node in bpy.data.materials['your_material_name'].node_tree.nodes]:
 #    print('Yes!')
 
@@ -855,8 +863,6 @@ def create_pano_ubermat(regenerate_maps):
             bpy.ops.object.select_all(action='DESELECT')
             current_pano_ob.select_set(True)
             context.view_layer.objects.active = current_pano_ob
-            #gradi = str(rad(90.0))
-            #print("oggetto da girare: "+ current_pano_ob.name+ " dei seguenti gradi:" + gradi)
             
             bpy.ops.transform.rotate(value=rad(90.0), orient_axis='Z', orient_type='LOCAL')
 
@@ -883,7 +889,6 @@ def create_pano_ubermat(regenerate_maps):
 
             current_file_pano_name = current_pano_name+"-"+str(scene.RES_pano)+"k.jpg"
             
-            #pano_tex_image = image_from_path(path)
             found = False
             for im in bpy.data.images:
                 if im.name == current_file_pano_name:
@@ -911,13 +916,14 @@ def create_pano_ubermat(regenerate_maps):
             if not current_dir_blend:
                 raise Exception("Blend file is not saved")
             current_pano_subfolder_4maps = ("mp_"+obj_mat.name)
-            new_map_img_filename = ("mp_"+obj_mat.name+"_"+current_pano_name+".jpg")
+            new_map_img_filename = ("mp_"+obj_mat.name+"_"+current_pano_name+".png")
             new_map_dir_path = create_folder_in_path(current_pano_subfolder_4maps,current_dir_blend)
             new_map_img_path = os.path.join(new_map_dir_path,new_map_img_filename) 
             
-            tempimage = bpy.data.images.new(name=new_map_img_filename, width=2048, height=2048, alpha=False)
+            tempimage = bpy.data.images.new(name=new_map_img_filename, width=2048, height=2048, alpha=True)
+            tempimage.alpha_mode = 'CHANNEL_PACKED'
             tempimage.filepath_raw = new_map_img_path
-            tempimage.file_format = 'JPEG'
+            tempimage.file_format = 'PNG'
             tempimage.save()
 
             pano_mask_node.image = tempimage
@@ -955,7 +961,6 @@ def create_pano_ubermat(regenerate_maps):
         pano_output_node = nodes.new('ShaderNodeOutputMaterial')
         pano_output_node.location = (current_x_location, current_y_location)
         links.new(pano_emission_node.outputs[0], pano_output_node.inputs[0])
-
 
 def create_folder_in_path(foldername,path):
     folderpath = os.path.join(path, foldername)

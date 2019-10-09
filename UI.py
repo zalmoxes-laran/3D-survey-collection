@@ -237,10 +237,7 @@ class ToolsPanel_ccTool:
             if obj.type not in ['MESH']:
                 select_a_mesh(layout)
             else:    
-
-                # per ora tengo questa riga per eventuale gestione di file provenienti dalla 2.79:
-                #self.layout.operator("bi2cycles.material", icon="MOD_PARTICLE_INSTANCE", text='Create cycles nodes')
-                
+              
                 activeobj = context.active_object
                 if get_nodegroupname_from_obj(obj) is None:
                     layout.operator("create.ccsetup", icon="SEQ_HISTOGRAM", text='create cc setup')
@@ -480,7 +477,9 @@ class PANOToolsPanel:
     def draw(self, context):
         layout = self.layout
         scene = context.scene
-        obj = context.object
+        obj = context.active_object
+        current_pano = scene.pano_list[scene.pano_list_index].name
+
         row = layout.row()
         row.label(text="PANO file")
         row = layout.row()
@@ -489,61 +488,67 @@ class PANOToolsPanel:
         row.prop(context.scene, 'PANO_dir', toggle = True)
         row = layout.row()
         self.layout.operator("import.pano", icon="GROUP_UVS", text='Read/Refresh PANO file')
-        row = layout.row()
-        self.layout.operator("ubermat_create.pano", icon="MATERIAL", text='')
-        row = layout.row()
-        self.layout.operator("ubermat_update.pano", icon="MATERIAL", text='')
-        row = layout.row()
-        
-        split = layout.split()
-        # First column
-        col = split.column()
-        #col.label(text="Lens:")
-        col.prop(context.scene, 'RES_pano', toggle = True)
-        #split = layout.split()
-        col = split.column()
-        col.operator("set.panores", icon="NODE_COMPOSITING", text='')
-        row = layout.row()
-        
 
+        if context.active_object:
+            if obj.type not in ['MESH']:
+                select_a_mesh(layout)
+            else:   
 
-#        self.layout.operator("uslist_icon.update", icon="PARTICLE_DATA", text='Only icons refresh')
-#        row = layout.row()
+                row = layout.row()
+                split = layout.split()
+                col = split.column()
+                col.operator("ubermat_create.pano", icon="MATERIAL", text='')
+                col = split.column()
+                col.operator("ubermat_update.pano", icon="MATERIAL", text='')
+                row = layout.row()
+                
+                split = layout.split()
+                # First column
+                col = split.column()
+                #col.label(text="Lens:")
+                col.prop(context.scene, 'RES_pano', toggle = True)
+                #split = layout.split()
+                col = split.column()
+                col.operator("set.panores", icon="NODE_COMPOSITING", text='')
+                row = layout.row()
+        
+        row = layout.row()
         layout.alignment = 'LEFT'
         row.template_list("PANO_UL_List", "PANO nodes", scene, "pano_list", scene, "pano_list_index")
+
         if scene.pano_list_index >= 0 and len(scene.pano_list) > 0:
             item = scene.pano_list[scene.pano_list_index]
             row = layout.row()
             row.label(text="Name:")
             row = layout.row()
             row.prop(item, "name", text="")
-#        if obj.type in ['CAMERA']:
-#            obj = context.object
-#            row = layout.row()
-#            row.label(text="Active camera is: " + obj.name)
-#            row = layout.row()
+
+        if context.active_object:
+            if obj.type in ['MESH']:
+                if obj.material_slots:
+                    if obj.material_slots[0].material.name.endswith('uberpano'):
+                        row = layout.row()
+                        node = get_cc_node_pano(obj, current_pano)
+                        row.label(text=node.name)# + nodegroupname)
+                        layout.context_pointer_set("node", node)
+                        node.draw_buttons_ext(context, layout)
+
         row = layout.row()
         self.layout.operator("view.pano", icon="ZOOM_PREVIOUS", text='Inside the Pano')
         row = layout.row()
         self.layout.operator("remove.pano", icon="ERROR", text='Remove the Pano')
-        
-        row = layout.row()
         row = layout.row()
         self.layout.operator("align.quad", icon="OUTLINER_OB_FORCE_FIELD", text='Align quad')
         row = layout.row()
-        
         split = layout.split()
         # First column
         col = split.column()
         col.label(text="Lens:")
         col.prop(context.scene, 'PANO_cam_lens', toggle = True)
-#        col.prop(scene, "frame_start")
-
         # Second column, aligned
         col = split.column(align=True)
         col.label(text="Apply")
         col.operator("set.lens", icon="FILE_TICK", text='SL')
-#        col.prop(scene, "frame_start")
 
 class VIEW3D_PT_SetupPanel(Panel, PANOToolsPanel):
     bl_category = "3DSC"
