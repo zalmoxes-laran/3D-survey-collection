@@ -69,9 +69,7 @@ else:
             )
 
 # register
-##################################
-
-
+#############################################
 # bpy.types.Scene.PT_cameras = EnumProperty(
 #     items = [('Canon 6D', 'Un', 'One'), 
 #              ('Zwei', 'Deux', 'Two'),
@@ -83,19 +81,33 @@ class PANOListItem(PropertyGroup):
     """ Group of properties representing an item in the list """
 
     name : StringProperty(
-           name="Name",
-           description="A name for this item",
-           default="Untitled")
+            name="Name",
+            description="A name for this item",
+            default="Untitled")
 
     icon : StringProperty(
-           name="code for icon",
-           description="",
-           default="GROUP_UVS")
+            name="code for icon",
+            description="",
+            default="GROUP_UVS")
 
+    resol_pano : IntProperty(
+            name = "Res", 
+            default = 1,
+            description = "Resolution of Panoramic image for this bubble")
 
+class Res_mode_menu(bpy.types.Menu):
+    bl_label = "Custom Menu"
+    bl_idname = "OBJECT_MT_Res_mode_menu"
+
+    def draw(self, context):
+        layout = self.layout
+
+        layout.operator("emset.emmaterial", text="EM")
+        layout.operator("emset.epochmaterial", text="Periods")          
+            
 class PANO_UL_List(bpy.types.UIList):
-    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
-        scene = context.scene
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, resol_pano, index):
+        #scene = context.scene
         layout.label(text = item.name, icon = item.icon)
 
 class InterfaceVars(PropertyGroup):
@@ -200,6 +212,7 @@ classes = (
     PanoramaSuite.SETpanoRES,
     PANO_UL_List,
     PANOListItem,
+    Res_mode_menu,
 )
 
 def register():

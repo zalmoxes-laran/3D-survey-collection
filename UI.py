@@ -4,6 +4,7 @@ import mathutils
 from bpy.types import Panel
 from bpy.types import Operator
 from bpy.types import PropertyGroup
+from bpy.types import Menu, UIList
 
 from .functions import *
 
@@ -478,7 +479,6 @@ class PANOToolsPanel:
         layout = self.layout
         scene = context.scene
         obj = context.active_object
-        current_pano = scene.pano_list[scene.pano_list_index].name
 
         row = layout.row()
         row.label(text="PANO file")
@@ -511,12 +511,21 @@ class PANOToolsPanel:
                 col = split.column()
                 col.operator("set.panores", icon="NODE_COMPOSITING", text='')
                 row = layout.row()
-        
+
+                row = layout.row(align=True)
+                split = row.split()
+                col = split.column()
+                col.label(text="Display mode")
+                col = split.column(align=True)
+                
+                col.menu(Res_mode_menu.bl_idname, text=str(context.scene.RES_pano), icon='COLOR')
+
         row = layout.row()
         layout.alignment = 'LEFT'
         row.template_list("PANO_UL_List", "PANO nodes", scene, "pano_list", scene, "pano_list_index")
 
         if scene.pano_list_index >= 0 and len(scene.pano_list) > 0:
+            current_pano = scene.pano_list[scene.pano_list_index].name
             item = scene.pano_list[scene.pano_list_index]
             row = layout.row()
             row.label(text="Name:")
@@ -554,4 +563,3 @@ class VIEW3D_PT_SetupPanel(Panel, PANOToolsPanel):
     bl_category = "3DSC"
     bl_idname = "VIEW3D_PT_SetupPanel"
     #bl_context = "objectmode"
-
