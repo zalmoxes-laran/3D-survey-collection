@@ -518,7 +518,7 @@ class PANOToolsPanel:
                 col.label(text="Display mode")
                 col = split.column(align=True)
                 
-                col.menu(Res_mode_menu.bl_idname, text=str(context.scene.RES_pano), icon='COLOR')
+                #col.menu(Res_mode_menu.bl_idname, text=str(context.scene.RES_pano), icon='COLOR')
 
         row = layout.row()
         layout.alignment = 'LEFT'
