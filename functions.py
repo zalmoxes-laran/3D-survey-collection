@@ -98,9 +98,9 @@ def parse_cam_xml(name_cam):
     tree = ET.parse(path2xml)
     root = tree.getroot()
     scene = bpy.context.scene
-    scene.camera_list.clear()
     #bpy.types.Scene.camera_list = []
     if name_cam == "just_parse":
+        scene.camera_list.clear()
         idx = 0
         for cam in root.findall('cam'):
             #rank = country.find('rank').text
@@ -118,11 +118,11 @@ def parse_cam_xml(name_cam):
                 s_height = cam.find('s_height').text
                 x = cam.find('x').text
                 y = cam.find('y').text
-            return s_width, s_height, x, y
+        return s_width, s_height, x, y
 
 
 def set_up_lens(obj,sens_width,sens_lenght,lens):
-    obj.select_set(True)
+    #obj.select_set(True)
     obj.data.lens = lens
     obj.data.sensor_fit = 'HORIZONTAL'
     obj.data.sensor_width = sens_width

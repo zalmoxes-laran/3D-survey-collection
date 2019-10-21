@@ -179,17 +179,11 @@ classes = (
     LODgenerator.OBJECT_OT_RemoveGroupsLOD,
     PhotogrTool.OBJECT_OT_applypaintcam,
     PhotogrTool.OBJECT_OT_BetterCameras,
-    PhotogrTool.OBJECT_OT_Canon6D14,
-    PhotogrTool.OBJECT_OT_Canon6D24,
-    PhotogrTool.OBJECT_OT_Canon6D35,
-    PhotogrTool.OBJECT_OT_Canon6Dscene,
-    PhotogrTool.OBJECT_OT_IsometricScene,
-    PhotogrTool.OBJECT_OT_nikond320018mm,
-    PhotogrTool.OBJECT_OT_nikond3200scene,
     PhotogrTool.OBJECT_OT_NoBetterCameras,
     PhotogrTool.OBJECT_OT_paintcam,
     PhotogrTool.OBJECT_OT_CreateCameraImagePlane,
     PhotogrTool.XML_CAM_parse,
+    PhotogrTool.set_camera_type,
     ccTool.OBJECT_OT_createccsetup,
     ccTool.OBJECT_OT_bakecyclesdiffuse,
     ccTool.OBJECT_OT_removeccsetup,
@@ -302,6 +296,11 @@ def register():
         description = "Current camera type"
         )
 
+    bpy.types.Scene.camera_lens = IntProperty(
+        name = "Camera Lens",
+        default = 35,
+        description = "Lens camera",
+        )
 
 # panoramic
     bpy.types.Scene.camera_list = CollectionProperty(type = CAMTypeList)

@@ -27,7 +27,7 @@ class ToolsPanelImport:
         layout = self.layout
         obj = context.object
 
-        ßrow = layout.row()
+        row = layout.row()
         self.layout.operator("import_points.txt", icon="STICKY_UVS_DISABLE", text='Coordinates')
         row = layout.row()
         self.layout.operator("import_scene.multiple_objs", icon="DUPLICATE", text='Multiple objs')
@@ -47,11 +47,7 @@ class ToolsPanelExport:
         if obj is not None:
             self.layout.operator("export.coordname", icon="STICKY_UVS_DISABLE", text='Coordinates')
             row = layout.row()
-            #row.label(text=obj.name)
-            #row = layout.row()
-            #row.label(text="Override")
-            #row = layout.row()
-            #layout.separator()
+
             box = layout.box()
             row = box.row()
             row.operator("export.object", icon="OBJECT_DATA", text='One obj')
@@ -59,8 +55,7 @@ class ToolsPanelExport:
             row.operator("fbx.exp", icon="OBJECT_DATA", text='One fbx UE4')
             row = box.row() 
             row.label(text= "-> "+obj.name + ".obj/.fbx")
-            #row = box.row()
-            #row.prop(obj, "name", text="")
+
             box = layout.box()
             row = box.row()
             row.operator("obj.exportbatch", icon="DUPLICATE", text='Several obj')
@@ -70,13 +65,7 @@ class ToolsPanelExport:
             row.operator("fbx.exportbatch", icon="DUPLICATE", text='Several fbx UE4')
             row = box.row() 
             row.label(text= "-> /FBX/objectname.fbx")
-            #row = layout.row()
 
-#            self.layout.operator("osgt.exportbatch", icon="OBJECT_DATA", text='Exp. several osgt files')
-#            row = layout.row()
-#            if is_windows():
-#                row = layout.row()
-#                row.label(text="We are under Windows..")
         else:
             row.label(text="Select object(s) to see tools here.")
             row = layout.row()
@@ -315,12 +304,13 @@ class Camera_menu(bpy.types.Menu):
     def draw(self, context):
         camera_type_list = context.scene.camera_list
         idx = 0
+        layout = self.layout
         while idx < len(camera_type_list):
-            layout = self.layout
             op = layout.operator(
                     "set_camera.type", text=camera_type_list[idx].name_cam, emboss=False, icon="RIGHTARROW")
             op.name_cam = camera_type_list[idx].name_cam
-        
+            idx +=1
+
 class ToolsPanelPhotogrTool:
     bl_label = "Photogrammetry paint"
     bl_space_type = 'VIEW_3D'
@@ -344,27 +334,30 @@ class ToolsPanelPhotogrTool:
             cam_cam = scene.camera.data
             row = layout.row()
             row.label(text="Set up scene", icon='EXPERIMENTAL')
+            #row.prop(scene, 'LODnum', icon='BLENDER', toggle=True)
             row = layout.row()
             split = row.split()
             col = split.column()
-            col.menu(Camera_menu.bl_idname, text=camera_type, icon='COLOR')
+            col.operator("xmlcam.parse", icon="FILE_TICK", text='Refresh')
             col = split.column()
-            col.operator("xmlcam.parse", icon="FILE_TICK", text='RL')
+            col.prop(scene, 'camera_lens', icon='BLENDER', toggle=True, text='Lens')
+
+            if camera_type is not 'Not set':
+                row = layout.row()
+                row.menu(Camera_menu.bl_idname, text=camera_type, icon='COLOR')
+
             if obj_selected:
                 if obj.type in ['MESH']:
                     pass
                 elif obj.type in ['CAMERA']:
                     row = layout.row()
-                    row.label(text="Set selected cams as:", icon='PLUS')
-                    self.layout.operator("nikond320018mm.camera", icon="PLUS", text='Nikon d3200 18mm')
-                    self.layout.operator("canon6d35mm.camera", icon="PLUS", text='Canon6D 35mm')
-                    self.layout.operator("canon6d24mm.camera", icon="PLUS", text='Canon6D 24mm')
-                    self.layout.operator("canon6d14mm.camera", icon="PLUS", text='Canon6D 14mm')
+                    row.label(text="Visual mode:", icon='PLUS')
                     row = layout.row()
-                    row.label(text="Visual mode for selected cams:", icon='PLUS')
-                    self.layout.operator("better.cameras", icon="PLUS", text='Better Cams')
-                    self.layout.operator("nobetter.cameras", icon="PLUS", text='Disable Better Cams')
-                    row = layout.row()
+                    split = row.split()
+                    col = split.column()
+                    col.operator("better.cameras", icon="PLUS", text='Better Cams')
+                    col = split.column()
+                    col.operator("nobetter.cameras", icon="PLUS", text='Disable Better Cams')
                     row = layout.row()
                 else:
                     row = layout.row()
