@@ -2,24 +2,21 @@ import bpy
 import os
 from .functions import *
 
-# class VIEW3D_OT_tex_to_material(bpy.types.Operator):
-#     """Create texture materials for images assigned in UV editor"""
-#     bl_idname = "view3d.tex_to_material"
-#     bl_label = "Texface Images to Material/Texture (Material Utils)"
-#     bl_options = {'REGISTER', 'UNDO'}
+class set_camera_type(bpy.types.Operator):
+    bl_idname = "set_camera.type"
+    bl_label = "Set Camera Type"
+    bl_options = {"REGISTER", "UNDO"}
 
-#     @classmethod
-#     def poll(cls, context):
-#         return context.active_object is not None
+    name_cam : StringProperty()
 
-#     def execute(self, context):
-#         if context.selected_editable_objects:
-#             tex_to_mat()
-#             return {'FINISHED'}
-#         else:
-#             self.report({'WARNING'},
-#                         "No editable selected objects, could not finish")
-#             return {'CANCELLED'}
+    def execute(self, context):
+        camera = bpy.context.camera
+        s_width, s_height, x, y = parse_cam_xml(name_cam)
+        camera.sensor_width = s_width
+        camera.sensor_height = s_height
+        set_up_scene(x,y,True)
+        context.scene.camera_type = "name_cam"
+        return {'FINISHED'} 
 
 class OBJECT_OT_IsometricScene(bpy.types.Operator):
     bl_idname = "isometric.scene"
@@ -38,7 +35,16 @@ class OBJECT_OT_Canon6Dscene(bpy.types.Operator):
     def execute(self, context):
         set_up_scene(5472,3648,False)
         return {'FINISHED'}
-    
+
+class XML_CAM_parse(bpy.types.Operator):
+    bl_idname = "xmlcam.parse"
+    bl_label = "Parse xml file"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        parse_cam_xml('just_parse')
+        return {'FINISHED'}
+
 class OBJECT_OT_nikond3200scene(bpy.types.Operator):
     bl_idname = "nikond3200.scene"
     bl_label = "Nikon d3200 scene"

@@ -308,6 +308,19 @@ class ToolsPanel_ccTool:
             select_a_mesh(layout)
 
 
+class Camera_menu(bpy.types.Menu):
+    bl_label = "Custom Menu"
+    bl_idname = "OBJECT_MT_Camera_menu"
+
+    def draw(self, context):
+        camera_type_list = context.scene.camera_list
+        idx = 0
+        while idx < len(camera_type_list):
+            layout = self.layout
+            op = layout.operator(
+                    "set_camera.type", text=camera_type_list[idx].name_cam, emboss=False, icon="RIGHTARROW")
+            op.name_cam = camera_type_list[idx].name_cam
+        
 class ToolsPanelPhotogrTool:
     bl_label = "Photogrammetry paint"
     bl_space_type = 'VIEW_3D'
@@ -319,6 +332,7 @@ class ToolsPanelPhotogrTool:
         scene = context.scene
         cam_ob = None
         cam_ob = scene.camera
+        camera_type = context.scene.camera_type
 
         if cam_ob is None:
             row = layout.row()
@@ -331,9 +345,11 @@ class ToolsPanelPhotogrTool:
             row = layout.row()
             row.label(text="Set up scene", icon='EXPERIMENTAL')
             row = layout.row()
-            self.layout.operator("isometric.scene", icon="PLUS", text='Isometric scene')
-            self.layout.operator("canon6d.scene", icon="PLUS", text='CANON 6D scene')
-            self.layout.operator("nikond3200.scene", icon="PLUS", text='NIKON D3200 scene')
+            split = row.split()
+            col = split.column()
+            col.menu(Camera_menu.bl_idname, text=camera_type, icon='COLOR')
+            col = split.column()
+            col.operator("xmlcam.parse", icon="FILE_TICK", text='RL')
             if obj_selected:
                 if obj.type in ['MESH']:
                     pass
@@ -518,7 +534,7 @@ class PANOToolsPanel:
                 col.label(text="Display mode")
                 col = split.column(align=True)
                 
-                col.menu(Res_mode_menu.bl_idname, text=str(context.scene.RES_pano), icon='COLOR')
+                #col.menu(Res_mode_menu.bl_idname, text=str(context.scene.RES_pano), icon='COLOR')
 
         row = layout.row()
         layout.alignment = 'LEFT'

@@ -68,14 +68,13 @@ else:
             PanoramaSuite,
             )
 
-# register
-#############################################
-# bpy.types.Scene.PT_cameras = EnumProperty(
-#     items = [('Canon 6D', 'Un', 'One'), 
-#              ('Zwei', 'Deux', 'Two'),
-#              ('Drei', 'Trois', 'Three')],
-#     name = "Camera")
-# scn['MyEnum'] = 2
+class CAMTypeList(PropertyGroup):
+    """ List of cameras """
+
+    name_cam : StringProperty(
+            name="Name",
+            description="A name for this item",
+            default="Untitled")
 
 class PANOListItem(PropertyGroup):
     """ Group of properties representing an item in the list """
@@ -138,8 +137,9 @@ classes = (
     UI.VIEW3D_PT_LODgenerator,
     UI.VIEW3D_PT_ccTool,
     UI.VIEW3D_PT_PhotogrTool,
+    UI.Camera_menu,
     #UI.VIEW3D_PT_TexPatcher,
-    UI.VIEW3D_PT_SetupPanel, 
+    UI.VIEW3D_PT_SetupPanel,
     import_3DSC.ImportMultipleObjs,
     import_3DSC.OBJECT_OT_IMPORTPOINTS,
     import_3DSC.ImportCoorPoints,
@@ -189,6 +189,7 @@ classes = (
     PhotogrTool.OBJECT_OT_NoBetterCameras,
     PhotogrTool.OBJECT_OT_paintcam,
     PhotogrTool.OBJECT_OT_CreateCameraImagePlane,
+    PhotogrTool.XML_CAM_parse,
     ccTool.OBJECT_OT_createccsetup,
     ccTool.OBJECT_OT_bakecyclesdiffuse,
     ccTool.OBJECT_OT_removeccsetup,
@@ -212,6 +213,7 @@ classes = (
     PanoramaSuite.SETpanoRES,
     PANO_UL_List,
     PANOListItem,
+    CAMTypeList,
     Res_mode_menu,
 )
 
@@ -284,18 +286,25 @@ def register():
       )
 
     bpy.types.Scene.BL_z_shift = FloatProperty(
-      name = "Z shift",
-      default = 0.0,
-      description = "Define the shift on the z axis",
-      )
+        name = "Z shift",
+        default = 0.0,
+        description = "Define the shift on the z axis",
+        )
 
     bpy.types.Scene.RES_pano = IntProperty(
         name = "Res", 
         default = 1,
         description = "Resolution of Panoramic image for bubbles")
+    
+    bpy.types.Scene.camera_type = StringProperty(
+        name = "Camera type",
+        default = "Not set",
+        description = "Current camera type"
+        )
 
 
 # panoramic
+    bpy.types.Scene.camera_list = CollectionProperty(type = CAMTypeList)
     bpy.types.Scene.pano_list = CollectionProperty(type = PANOListItem)
     bpy.types.Scene.pano_list_index = IntProperty(name = "Index for my_list", default = 0)
     bpy.types.Scene.PANO_file = StringProperty(
