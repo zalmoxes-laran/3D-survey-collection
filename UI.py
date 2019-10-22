@@ -39,6 +39,7 @@ class ToolsPanelExport:
     bl_label = "Exporters"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
+    bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
         layout = self.layout
@@ -74,6 +75,7 @@ class ToolsPanelSHIFT:
     bl_label = "Shifting"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
+    bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
         layout = self.layout
@@ -94,7 +96,6 @@ class ToolsPanelSHIFT:
 #        if scene['crs x'] is not None and scene['crs y'] is not None:
 #            if scene['crs x'] > 0 or scene['crs y'] > 0:
 #                self.layout.operator("shift_from.blendergis", icon="PASTEDOWN", text='from Bender GIS')
-
 
 class ToolsPanelQuickUtils:
     bl_label = "Quick Utils"
@@ -227,7 +228,6 @@ class ToolsPanel_ccTool:
             if obj.type not in ['MESH']:
                 select_a_mesh(layout)
             else:    
-              
                 activeobj = context.active_object
                 if get_nodegroupname_from_obj(obj) is None:
                     layout.operator("create.ccsetup", icon="SEQ_HISTOGRAM", text='create cc setup')
@@ -295,7 +295,6 @@ class ToolsPanel_ccTool:
                 row = layout.row() 
         else:
             select_a_mesh(layout)
-
 
 class Camera_menu(bpy.types.Menu):
     bl_label = "Custom Menu"
@@ -478,16 +477,32 @@ class VIEW3D_PT_TexPatcher(Panel, ToolsPanelTexPatcher):
 
 #panorama
 
-class PANOToolsPanel:
+class Res_menu(bpy.types.Menu):
+    bl_label = "Custom Menu"
+    bl_idname = "OBJECT_MT_Res_menu"
 
+    def draw(self, context):
+        res_list = context.scene.resolution_list
+        idx = 0
+        layout = self.layout
+        while idx < len(res_list):
+            op = layout.operator(
+                    "set.pano_res", text=str(res_list[idx].res_num), emboss=False, icon="RIGHTARROW")
+            op.res_number = str(res_list[idx].res_num)
+            idx +=1
+
+
+class PANOToolsPanel:
     bl_label = "Panorama suite"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
+    bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
         layout = self.layout
         scene = context.scene
         obj = context.active_object
+        resolution_pano = scene.RES_pano
 
         row = layout.row()
         row.label(text="PANO file")
@@ -502,7 +517,6 @@ class PANOToolsPanel:
             if obj.type not in ['MESH']:
                 select_a_mesh(layout)
             else:   
-
                 row = layout.row()
                 split = layout.split()
                 col = split.column()
@@ -511,14 +525,16 @@ class PANOToolsPanel:
                 col.operator("ubermat_update.pano", icon="MATERIAL", text='')
                 row = layout.row()
                 
-                split = layout.split()
-                # First column
-                col = split.column()
-                #col.label(text="Lens:")
-                col.prop(context.scene, 'RES_pano', toggle = True)
                 #split = layout.split()
-                col = split.column()
-                col.operator("set.panores", icon="NODE_COMPOSITING", text='')
+                #col = split.column()
+
+                if len(scene.resolution_list) > 0:
+                    row = layout.row()
+                    row.menu(Res_menu.bl_idname, text=str(resolution_pano), icon='COLOR')
+                    
+                #col.prop(context.scene, 'RES_pano', toggle = True)
+                #col = split.column()
+                #col.operator("set.panores", icon="NODE_COMPOSITING", text='')
                 row = layout.row()
 
                 row = layout.row(align=True)

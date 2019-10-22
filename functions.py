@@ -1086,31 +1086,39 @@ def create_cam(name,pos_x,pos_y,pos_z):
 def read_pano_dir(context):
     scene = context.scene
     sPath = scene.PANO_dir
-    folder_list = []
+    scene.resolution_list.clear()
     minimum_sChildPath = ""
+    folder_list = []
     folder_presence = False
     min_len = 100
+    idx = 0
     for sChild in os.listdir(sPath):                
             sChildPath = os.path.join(sPath,sChild)
-            #print(str(sChild))
-            
             if os.path.isdir(sChildPath):
                 folder_presence = True
                 folder_list.append(sChild)
                 currentnumber = getnumber_in_name(str(sChild))
+                scene.resolution_list.add()
+                scene.resolution_list[idx].res_num = currentnumber
+                idx += 1
+
                 if currentnumber < min_len:
-                    print(str(currentnumber))
+                    #print(str(currentnumber))
                     min_len = currentnumber
+                    
                     
     if folder_presence is False:
         pass
-    print(str(minimum_sChildPath))
+    #print(str(minimum_sChildPath))
     scene.RES_pano = min_len
+    #scene["RES_pano_folder_list"] = sorted(scene.resolution_list, key = getnumber_in_name)
     scene["RES_pano_folder_list"] = sorted(folder_list, key = getnumber_in_name)
+    print(scene["RES_pano_folder_list"])
     return
 
 def getnumber_in_name(string):
     temp = re.findall(r'\d+', str(string)) 
     numbers = list(map(int, temp))
+    #print(numbers)
     lastnumber = int(numbers[len(numbers)-1])
     return lastnumber

@@ -206,6 +206,8 @@ class SETpanoRES(bpy.types.Operator):
     bl_label = "set the res of the panorama"
     bl_options = {"REGISTER", "UNDO"}
 
+    res_number : StringProperty()
+
     def execute(self, context):
         scene = bpy.context.scene
         active_obj = bpy.context.active_object
@@ -216,8 +218,8 @@ class SETpanoRES(bpy.types.Operator):
                 if node.name.startswith('tn_'):
                     nodename = node.name[3:]
                     print(nodename)
-                    current_panores_foldername = str(scene.RES_pano)+"k"
-                    ItemName_res = (nodename+"-"+str(scene.RES_pano)+"k.jpg")
+                    current_panores_foldername = str(self.res_number)+"k"
+                    ItemName_res = (nodename+"-"+str(self.res_number)+"k.jpg")
                     minimum_sChildPath = os.path.join(scene.PANO_dir,current_panores_foldername,ItemName_res)
                     print(minimum_sChildPath)
                     node.image.filepath = minimum_sChildPath

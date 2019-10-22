@@ -68,6 +68,14 @@ else:
             PanoramaSuite,
             )
 
+class RES_list(PropertyGroup):
+    """ List of resolutions """
+
+    res_num : IntProperty(
+            name="Resolution",
+            description="Resolution number",
+            default=1)
+
 class CAMTypeList(PropertyGroup):
     """ List of cameras """
 
@@ -93,17 +101,7 @@ class PANOListItem(PropertyGroup):
             name = "Res", 
             default = 1,
             description = "Resolution of Panoramic image for this bubble")
-
-class Res_mode_menu(bpy.types.Menu):
-    bl_label = "Custom Menu"
-    bl_idname = "OBJECT_MT_Res_mode_menu"
-
-    def draw(self, context):
-        layout = self.layout
-
-        layout.operator("emset.emmaterial", text="EM")
-        layout.operator("emset.epochmaterial", text="Periods")          
-            
+                    
 class PANO_UL_List(bpy.types.UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, resol_pano, index):
         #scene = context.scene
@@ -138,6 +136,7 @@ classes = (
     UI.VIEW3D_PT_ccTool,
     UI.VIEW3D_PT_PhotogrTool,
     UI.Camera_menu,
+    UI.Res_menu,
     #UI.VIEW3D_PT_TexPatcher,
     UI.VIEW3D_PT_SetupPanel,
     import_3DSC.ImportMultipleObjs,
@@ -208,7 +207,7 @@ classes = (
     PANO_UL_List,
     PANOListItem,
     CAMTypeList,
-    Res_mode_menu,
+    RES_list,
 )
 
 def register():
@@ -304,8 +303,10 @@ def register():
 
 # panoramic
     bpy.types.Scene.camera_list = CollectionProperty(type = CAMTypeList)
+    bpy.types.Scene.resolution_list = CollectionProperty(type = RES_list)
     bpy.types.Scene.pano_list = CollectionProperty(type = PANOListItem)
     bpy.types.Scene.pano_list_index = IntProperty(name = "Index for my_list", default = 0)
+
     bpy.types.Scene.PANO_file = StringProperty(
     name = "TXT",
     default = "",
