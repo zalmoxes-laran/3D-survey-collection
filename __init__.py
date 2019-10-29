@@ -137,7 +137,7 @@ classes = (
     UI.VIEW3D_PT_PhotogrTool,
     UI.Camera_menu,
     UI.Res_menu,
-    #UI.VIEW3D_PT_TexPatcher,
+    UI.VIEW3D_PT_TexPatcher,
     UI.VIEW3D_PT_SetupPanel,
     import_3DSC.ImportMultipleObjs,
     import_3DSC.OBJECT_OT_IMPORTPOINTS,

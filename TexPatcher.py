@@ -9,8 +9,8 @@ class OBJECT_OT_textransfer(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        selected_ob = bpy.context.selected_objects
-        active_ob = bpy.context.scene.objects.active
+        selected_ob = context.selected_objects
+        active_ob = context.active_object
         for matslot in active_ob.material_slots:
             mat = matslot.material
             nodes = mat.node_tree.nodes

@@ -427,8 +427,8 @@ class ToolsPanelTexPatcher:
                 row = layout.row()
                 self.layout.operator("exit.setup", icon="OBJECT_DATAMODE", text='Exit paint mode')            
             row = layout.row()
-            self.layout.operator("savepaint.cam", icon="IMAGE_COL", text='Save new textures')
-            self.layout.operator("remove.sp", icon="LIBRARY_DATA_BROKEN", text='Remove image source')
+            self.layout.operator("savepaint.cam", icon="DISK_DRIVE", text='Save new textures')
+            self.layout.operator("remove.sp", icon="CANCEL", text='Remove image source')
 
 
 ##################################################################################################################
@@ -473,7 +473,7 @@ class VIEW3D_PT_PhotogrTool(Panel, ToolsPanelPhotogrTool):
 class VIEW3D_PT_TexPatcher(Panel, ToolsPanelTexPatcher):
     bl_category = "3DSC"
     bl_idname = "VIEW3D_PT_TexPatcher"
-    bl_context = "objectmode"
+    #bl_context = "objectmode"
 
 #panorama
 

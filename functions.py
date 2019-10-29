@@ -28,6 +28,7 @@ class OBJECT_OT_savepaintcam(bpy.types.Operator):
 
     def execute(self, context):
         bpy.ops.image.save_dirty()
+        
         return {'FINISHED'}
 
 class OBJECT_OT_createcyclesmat(bpy.types.Operator):
@@ -308,11 +309,11 @@ def decimate_mesh(context,obj,ratio,lod):
 
 def setupclonepaint():
     bpy.ops.object.mode_set(mode = 'TEXTURE_PAINT')
-    bpy.ops.paint.brush_select(paint_mode='TEXTURE_PAINT', texture_paint_tool='CLONE')
+    bpy.ops.paint.brush_select(image_tool='CLONE')
     bpy.context.scene.tool_settings.image_paint.mode = 'MATERIAL'
     bpy.context.scene.tool_settings.image_paint.use_clone_layer = True
 #    bpy.context.scene.tool_settings.image_paint.seam_bleed = 16
-    obj = bpy.context.scene.objects.active
+    obj = bpy.context.active_object
     
     for matslot in obj.material_slots:
         mat = matslot.material
@@ -404,7 +405,7 @@ def bake_tex_set(type):
     start_time = time.time()
     if type == "source":
         if len(selected_objs) > 1:
-            ob = scene.objects.active
+            ob = context.active_object
             print('checking presence of a destination texture set..')
             for matslot in ob.material_slots:
                 mat = matslot.material
