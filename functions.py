@@ -5,6 +5,7 @@ import bmesh
 import platform
 from random import randint, choice
 import re
+import xml.etree.ElementTree as ET
 
 #per panorami
 import math
@@ -27,6 +28,7 @@ class OBJECT_OT_savepaintcam(bpy.types.Operator):
 
     def execute(self, context):
         bpy.ops.image.save_dirty()
+        
         return {'FINISHED'}
 
 class OBJECT_OT_createcyclesmat(bpy.types.Operator):
@@ -90,8 +92,38 @@ def get_cc_node_in_mat(mat,type):
     node = mat.nodes
     return node
 
+def parse_cam_xml(name_cam):
+    # if name_cam is not "just_parse", the function will return the parameters for the cam
+    path = bpy.utils.script_paths(subdir="Addons/3D-survey-collection/src/", user_pref=True, check_all=False, use_user=True)
+    path2xml = os.path.join(path[0],"cams.xml")
+    tree = ET.parse(path2xml)
+    root = tree.getroot()
+    scene = bpy.context.scene
+    #bpy.types.Scene.camera_list = []
+    if name_cam == "just_parse":
+        scene.camera_list.clear()
+        idx = 0
+        for cam in root.findall('cam'):
+            #rank = country.find('rank').text
+            name = cam.get('name')
+            scene.camera_list.add()
+            scene.camera_list[idx].name_cam = name
+            idx +=1
+            print(name)
+        return
+    else:
+        for cam in root.findall('cam'):
+            name = cam.get('name')
+            if name_cam == name:
+                s_width = cam.find('s_width').text
+                s_height = cam.find('s_height').text
+                x = cam.find('x').text
+                y = cam.find('y').text
+        return s_width, s_height, x, y
+
+
 def set_up_lens(obj,sens_width,sens_lenght,lens):
-    obj.select_set(True)
+    #obj.select_set(True)
     obj.data.lens = lens
     obj.data.sensor_fit = 'HORIZONTAL'
     obj.data.sensor_width = sens_width
@@ -101,10 +133,7 @@ def set_up_scene(x,y,ao):
     bpy.context.scene.render.resolution_x = x
     bpy.context.scene.render.resolution_y = y
     bpy.context.scene.render.resolution_percentage = 100
-    #bpy.context.scene.game_settings.material_mode = 'GLSL'
-    #bpy.context.scene.game_settings.use_glsl_lights = False
     bpy.context.scene.world.light_settings.use_ambient_occlusion = ao
-    #bpy.context.scene.render.alpha_mode = 'TRANSPARENT'
     bpy.context.scene.tool_settings.image_paint.screen_grab_size[0] = x
     bpy.context.scene.tool_settings.image_paint.screen_grab_size[1] = y
 
@@ -280,11 +309,11 @@ def decimate_mesh(context,obj,ratio,lod):
 
 def setupclonepaint():
     bpy.ops.object.mode_set(mode = 'TEXTURE_PAINT')
-    bpy.ops.paint.brush_select(paint_mode='TEXTURE_PAINT', texture_paint_tool='CLONE')
+    bpy.ops.paint.brush_select(image_tool='CLONE')
     bpy.context.scene.tool_settings.image_paint.mode = 'MATERIAL'
     bpy.context.scene.tool_settings.image_paint.use_clone_layer = True
 #    bpy.context.scene.tool_settings.image_paint.seam_bleed = 16
-    obj = bpy.context.scene.objects.active
+    obj = bpy.context.active_object
     
     for matslot in obj.material_slots:
         mat = matslot.material
@@ -376,7 +405,7 @@ def bake_tex_set(type):
     start_time = time.time()
     if type == "source":
         if len(selected_objs) > 1:
-            ob = scene.objects.active
+            ob = context.active_object
             print('checking presence of a destination texture set..')
             for matslot in ob.material_slots:
                 mat = matslot.material
@@ -1058,31 +1087,39 @@ def create_cam(name,pos_x,pos_y,pos_z):
 def read_pano_dir(context):
     scene = context.scene
     sPath = scene.PANO_dir
-    folder_list = []
+    scene.resolution_list.clear()
     minimum_sChildPath = ""
+    folder_list = []
     folder_presence = False
     min_len = 100
+    idx = 0
     for sChild in os.listdir(sPath):                
             sChildPath = os.path.join(sPath,sChild)
-            #print(str(sChild))
-            
             if os.path.isdir(sChildPath):
                 folder_presence = True
                 folder_list.append(sChild)
                 currentnumber = getnumber_in_name(str(sChild))
+                scene.resolution_list.add()
+                scene.resolution_list[idx].res_num = currentnumber
+                idx += 1
+
                 if currentnumber < min_len:
-                    print(str(currentnumber))
+                    #print(str(currentnumber))
                     min_len = currentnumber
+                    
                     
     if folder_presence is False:
         pass
-    print(str(minimum_sChildPath))
+    #print(str(minimum_sChildPath))
     scene.RES_pano = min_len
+    #scene["RES_pano_folder_list"] = sorted(scene.resolution_list, key = getnumber_in_name)
     scene["RES_pano_folder_list"] = sorted(folder_list, key = getnumber_in_name)
+    print(scene["RES_pano_folder_list"])
     return
 
 def getnumber_in_name(string):
     temp = re.findall(r'\d+', str(string)) 
     numbers = list(map(int, temp))
+    #print(numbers)
     lastnumber = int(numbers[len(numbers)-1])
     return lastnumber

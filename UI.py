@@ -4,6 +4,7 @@ import mathutils
 from bpy.types import Panel
 from bpy.types import Operator
 from bpy.types import PropertyGroup
+from bpy.types import Menu, UIList
 
 from .functions import *
 
@@ -26,7 +27,7 @@ class ToolsPanelImport:
         layout = self.layout
         obj = context.object
 
-        ßrow = layout.row()
+        row = layout.row()
         self.layout.operator("import_points.txt", icon="STICKY_UVS_DISABLE", text='Coordinates')
         row = layout.row()
         self.layout.operator("import_scene.multiple_objs", icon="DUPLICATE", text='Multiple objs')
@@ -38,6 +39,7 @@ class ToolsPanelExport:
     bl_label = "Exporters"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
+    bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
         layout = self.layout
@@ -46,11 +48,7 @@ class ToolsPanelExport:
         if obj is not None:
             self.layout.operator("export.coordname", icon="STICKY_UVS_DISABLE", text='Coordinates')
             row = layout.row()
-            #row.label(text=obj.name)
-            #row = layout.row()
-            #row.label(text="Override")
-            #row = layout.row()
-            #layout.separator()
+
             box = layout.box()
             row = box.row()
             row.operator("export.object", icon="OBJECT_DATA", text='One obj')
@@ -58,8 +56,7 @@ class ToolsPanelExport:
             row.operator("fbx.exp", icon="OBJECT_DATA", text='One fbx UE4')
             row = box.row() 
             row.label(text= "-> "+obj.name + ".obj/.fbx")
-            #row = box.row()
-            #row.prop(obj, "name", text="")
+
             box = layout.box()
             row = box.row()
             row.operator("obj.exportbatch", icon="DUPLICATE", text='Several obj')
@@ -69,13 +66,7 @@ class ToolsPanelExport:
             row.operator("fbx.exportbatch", icon="DUPLICATE", text='Several fbx UE4')
             row = box.row() 
             row.label(text= "-> /FBX/objectname.fbx")
-            #row = layout.row()
 
-#            self.layout.operator("osgt.exportbatch", icon="OBJECT_DATA", text='Exp. several osgt files')
-#            row = layout.row()
-#            if is_windows():
-#                row = layout.row()
-#                row.label(text="We are under Windows..")
         else:
             row.label(text="Select object(s) to see tools here.")
             row = layout.row()
@@ -84,6 +75,7 @@ class ToolsPanelSHIFT:
     bl_label = "Shifting"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
+    bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
         layout = self.layout
@@ -104,7 +96,6 @@ class ToolsPanelSHIFT:
 #        if scene['crs x'] is not None and scene['crs y'] is not None:
 #            if scene['crs x'] > 0 or scene['crs y'] > 0:
 #                self.layout.operator("shift_from.blendergis", icon="PASTEDOWN", text='from Bender GIS')
-
 
 class ToolsPanelQuickUtils:
     bl_label = "Quick Utils"
@@ -237,7 +228,6 @@ class ToolsPanel_ccTool:
             if obj.type not in ['MESH']:
                 select_a_mesh(layout)
             else:    
-              
                 activeobj = context.active_object
                 if get_nodegroupname_from_obj(obj) is None:
                     layout.operator("create.ccsetup", icon="SEQ_HISTOGRAM", text='create cc setup')
@@ -306,6 +296,19 @@ class ToolsPanel_ccTool:
         else:
             select_a_mesh(layout)
 
+class Camera_menu(bpy.types.Menu):
+    bl_label = "Custom Menu"
+    bl_idname = "OBJECT_MT_Camera_menu"
+
+    def draw(self, context):
+        camera_type_list = context.scene.camera_list
+        idx = 0
+        layout = self.layout
+        while idx < len(camera_type_list):
+            op = layout.operator(
+                    "set_camera.type", text=camera_type_list[idx].name_cam, emboss=False, icon="RIGHTARROW")
+            op.name_cam = camera_type_list[idx].name_cam
+            idx +=1
 
 class ToolsPanelPhotogrTool:
     bl_label = "Photogrammetry paint"
@@ -318,6 +321,7 @@ class ToolsPanelPhotogrTool:
         scene = context.scene
         cam_ob = None
         cam_ob = scene.camera
+        camera_type = context.scene.camera_type
 
         if cam_ob is None:
             row = layout.row()
@@ -329,25 +333,30 @@ class ToolsPanelPhotogrTool:
             cam_cam = scene.camera.data
             row = layout.row()
             row.label(text="Set up scene", icon='EXPERIMENTAL')
+            #row.prop(scene, 'LODnum', icon='BLENDER', toggle=True)
             row = layout.row()
-            self.layout.operator("isometric.scene", icon="PLUS", text='Isometric scene')
-            self.layout.operator("canon6d.scene", icon="PLUS", text='CANON 6D scene')
-            self.layout.operator("nikond3200.scene", icon="PLUS", text='NIKON D3200 scene')
+            split = row.split()
+            col = split.column()
+            col.operator("xmlcam.parse", icon="FILE_TICK", text='Refresh')
+            col = split.column()
+            col.prop(scene, 'camera_lens', icon='BLENDER', toggle=True, text='Lens')
+
+            if camera_type is not 'Not set':
+                row = layout.row()
+                row.menu(Camera_menu.bl_idname, text=camera_type, icon='COLOR')
+
             if obj_selected:
                 if obj.type in ['MESH']:
                     pass
                 elif obj.type in ['CAMERA']:
                     row = layout.row()
-                    row.label(text="Set selected cams as:", icon='PLUS')
-                    self.layout.operator("nikond320018mm.camera", icon="PLUS", text='Nikon d3200 18mm')
-                    self.layout.operator("canon6d35mm.camera", icon="PLUS", text='Canon6D 35mm')
-                    self.layout.operator("canon6d24mm.camera", icon="PLUS", text='Canon6D 24mm')
-                    self.layout.operator("canon6d14mm.camera", icon="PLUS", text='Canon6D 14mm')
+                    row.label(text="Visual mode:", icon='PLUS')
                     row = layout.row()
-                    row.label(text="Visual mode for selected cams:", icon='PLUS')
-                    self.layout.operator("better.cameras", icon="PLUS", text='Better Cams')
-                    self.layout.operator("nobetter.cameras", icon="PLUS", text='Disable Better Cams')
-                    row = layout.row()
+                    split = row.split()
+                    col = split.column()
+                    col.operator("better.cameras", icon="PLUS", text='Better Cams')
+                    col = split.column()
+                    col.operator("nobetter.cameras", icon="PLUS", text='Disable Better Cams')
                     row = layout.row()
                 else:
                     row = layout.row()
@@ -418,8 +427,8 @@ class ToolsPanelTexPatcher:
                 row = layout.row()
                 self.layout.operator("exit.setup", icon="OBJECT_DATAMODE", text='Exit paint mode')            
             row = layout.row()
-            self.layout.operator("savepaint.cam", icon="IMAGE_COL", text='Save new textures')
-            self.layout.operator("remove.sp", icon="LIBRARY_DATA_BROKEN", text='Remove image source')
+            self.layout.operator("savepaint.cam", icon="DISK_DRIVE", text='Save new textures')
+            self.layout.operator("remove.sp", icon="CANCEL", text='Remove image source')
 
 
 ##################################################################################################################
@@ -464,21 +473,36 @@ class VIEW3D_PT_PhotogrTool(Panel, ToolsPanelPhotogrTool):
 class VIEW3D_PT_TexPatcher(Panel, ToolsPanelTexPatcher):
     bl_category = "3DSC"
     bl_idname = "VIEW3D_PT_TexPatcher"
-    bl_context = "objectmode"
+    #bl_context = "objectmode"
 
 #panorama
 
-class PANOToolsPanel:
+class Res_menu(bpy.types.Menu):
+    bl_label = "Custom Menu"
+    bl_idname = "OBJECT_MT_Res_menu"
 
+    def draw(self, context):
+        res_list = context.scene.resolution_list
+        idx = 0
+        layout = self.layout
+        while idx < len(res_list):
+            op = layout.operator(
+                    "set.pano_res", text=str(res_list[idx].res_num), emboss=False, icon="RIGHTARROW")
+            op.res_number = str(res_list[idx].res_num)
+            idx +=1
+
+
+class PANOToolsPanel:
     bl_label = "Panorama suite"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
+    bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
         layout = self.layout
         scene = context.scene
         obj = context.active_object
-        current_pano = scene.pano_list[scene.pano_list_index].name
+        resolution_pano = scene.RES_pano
 
         row = layout.row()
         row.label(text="PANO file")
@@ -493,7 +517,6 @@ class PANOToolsPanel:
             if obj.type not in ['MESH']:
                 select_a_mesh(layout)
             else:   
-
                 row = layout.row()
                 split = layout.split()
                 col = split.column()
@@ -502,21 +525,32 @@ class PANOToolsPanel:
                 col.operator("ubermat_update.pano", icon="MATERIAL", text='')
                 row = layout.row()
                 
-                split = layout.split()
-                # First column
-                col = split.column()
-                #col.label(text="Lens:")
-                col.prop(context.scene, 'RES_pano', toggle = True)
                 #split = layout.split()
-                col = split.column()
-                col.operator("set.panores", icon="NODE_COMPOSITING", text='')
+                #col = split.column()
+
+                if len(scene.resolution_list) > 0:
+                    row = layout.row()
+                    row.menu(Res_menu.bl_idname, text=str(resolution_pano), icon='COLOR')
+                    
+                #col.prop(context.scene, 'RES_pano', toggle = True)
+                #col = split.column()
+                #col.operator("set.panores", icon="NODE_COMPOSITING", text='')
                 row = layout.row()
-        
+
+                row = layout.row(align=True)
+                split = row.split()
+                col = split.column()
+                col.label(text="Display mode")
+                col = split.column(align=True)
+                
+                #col.menu(Res_mode_menu.bl_idname, text=str(context.scene.RES_pano), icon='COLOR')
+
         row = layout.row()
         layout.alignment = 'LEFT'
         row.template_list("PANO_UL_List", "PANO nodes", scene, "pano_list", scene, "pano_list_index")
 
         if scene.pano_list_index >= 0 and len(scene.pano_list) > 0:
+            current_pano = scene.pano_list[scene.pano_list_index].name
             item = scene.pano_list[scene.pano_list_index]
             row = layout.row()
             row.label(text="Name:")
@@ -554,4 +588,3 @@ class VIEW3D_PT_SetupPanel(Panel, PANOToolsPanel):
     bl_category = "3DSC"
     bl_idname = "VIEW3D_PT_SetupPanel"
     #bl_context = "objectmode"
-

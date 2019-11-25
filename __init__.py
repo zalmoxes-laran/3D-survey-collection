@@ -19,8 +19,8 @@
 bl_info = {
     "name": "3D Survey Collection",
     "author": "Emanuel Demetrescu",
-    "version": (1,4.3),
-    "blender": (2, 80, 0),
+    "version": (1,4.4),
+    "blender": (2, 81, 0),
     "location": "3D View > Toolbox",
     "description": "A collection of tools for 3D Survey activities",
 #    "warning": "",
@@ -68,34 +68,43 @@ else:
             PanoramaSuite,
             )
 
-# register
-##################################
+class RES_list(PropertyGroup):
+    """ List of resolutions """
 
+    res_num : IntProperty(
+            name="Resolution",
+            description="Resolution number",
+            default=1)
 
-# bpy.types.Scene.PT_cameras = EnumProperty(
-#     items = [('Canon 6D', 'Un', 'One'), 
-#              ('Zwei', 'Deux', 'Two'),
-#              ('Drei', 'Trois', 'Three')],
-#     name = "Camera")
-# scn['MyEnum'] = 2
+class CAMTypeList(PropertyGroup):
+    """ List of cameras """
+
+    name_cam : StringProperty(
+            name="Name",
+            description="A name for this item",
+            default="Untitled")
 
 class PANOListItem(PropertyGroup):
     """ Group of properties representing an item in the list """
 
     name : StringProperty(
-           name="Name",
-           description="A name for this item",
-           default="Untitled")
+            name="Name",
+            description="A name for this item",
+            default="Untitled")
 
     icon : StringProperty(
-           name="code for icon",
-           description="",
-           default="GROUP_UVS")
+            name="code for icon",
+            description="",
+            default="GROUP_UVS")
 
-
+    resol_pano : IntProperty(
+            name = "Res", 
+            default = 1,
+            description = "Resolution of Panoramic image for this bubble")
+                    
 class PANO_UL_List(bpy.types.UIList):
-    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
-        scene = context.scene
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, resol_pano, index):
+        #scene = context.scene
         layout.label(text = item.name, icon = item.icon)
 
 class InterfaceVars(PropertyGroup):
@@ -126,8 +135,10 @@ classes = (
     UI.VIEW3D_PT_LODgenerator,
     UI.VIEW3D_PT_ccTool,
     UI.VIEW3D_PT_PhotogrTool,
-    #UI.VIEW3D_PT_TexPatcher,
-    UI.VIEW3D_PT_SetupPanel, 
+    UI.Camera_menu,
+    UI.Res_menu,
+    UI.VIEW3D_PT_TexPatcher,
+    UI.VIEW3D_PT_SetupPanel,
     import_3DSC.ImportMultipleObjs,
     import_3DSC.OBJECT_OT_IMPORTPOINTS,
     import_3DSC.ImportCoorPoints,
@@ -167,16 +178,11 @@ classes = (
     LODgenerator.OBJECT_OT_RemoveGroupsLOD,
     PhotogrTool.OBJECT_OT_applypaintcam,
     PhotogrTool.OBJECT_OT_BetterCameras,
-    PhotogrTool.OBJECT_OT_Canon6D14,
-    PhotogrTool.OBJECT_OT_Canon6D24,
-    PhotogrTool.OBJECT_OT_Canon6D35,
-    PhotogrTool.OBJECT_OT_Canon6Dscene,
-    PhotogrTool.OBJECT_OT_IsometricScene,
-    PhotogrTool.OBJECT_OT_nikond320018mm,
-    PhotogrTool.OBJECT_OT_nikond3200scene,
     PhotogrTool.OBJECT_OT_NoBetterCameras,
     PhotogrTool.OBJECT_OT_paintcam,
     PhotogrTool.OBJECT_OT_CreateCameraImagePlane,
+    PhotogrTool.XML_CAM_parse,
+    PhotogrTool.set_camera_type,
     ccTool.OBJECT_OT_createccsetup,
     ccTool.OBJECT_OT_bakecyclesdiffuse,
     ccTool.OBJECT_OT_removeccsetup,
@@ -200,6 +206,8 @@ classes = (
     PanoramaSuite.SETpanoRES,
     PANO_UL_List,
     PANOListItem,
+    CAMTypeList,
+    RES_list,
 )
 
 def register():
@@ -271,20 +279,34 @@ def register():
       )
 
     bpy.types.Scene.BL_z_shift = FloatProperty(
-      name = "Z shift",
-      default = 0.0,
-      description = "Define the shift on the z axis",
-      )
+        name = "Z shift",
+        default = 0.0,
+        description = "Define the shift on the z axis",
+        )
 
     bpy.types.Scene.RES_pano = IntProperty(
         name = "Res", 
         default = 1,
         description = "Resolution of Panoramic image for bubbles")
+    
+    bpy.types.Scene.camera_type = StringProperty(
+        name = "Camera type",
+        default = "Not set",
+        description = "Current camera type"
+        )
 
+    bpy.types.Scene.camera_lens = IntProperty(
+        name = "Camera Lens",
+        default = 35,
+        description = "Lens camera",
+        )
 
 # panoramic
+    bpy.types.Scene.camera_list = CollectionProperty(type = CAMTypeList)
+    bpy.types.Scene.resolution_list = CollectionProperty(type = RES_list)
     bpy.types.Scene.pano_list = CollectionProperty(type = PANOListItem)
     bpy.types.Scene.pano_list_index = IntProperty(name = "Index for my_list", default = 0)
+
     bpy.types.Scene.PANO_file = StringProperty(
     name = "TXT",
     default = "",
@@ -303,10 +325,30 @@ def register():
     name = "Cam Lens",
     default = 21,
     description = "Define the lens of the cameras",
-#      subtype = 'FILE_PATH'
     )
-
 
 def unregister():
     for cls in classes:
         bpy.utils.unregister_class(cls)
+
+    del bpy.types.WindowManager.interface_vars
+    del bpy.types.WindowManager.ccToolViewVar
+    del bpy.types.Scene.LODnum
+    del bpy.types.Scene.LOD1_tex_res
+    del bpy.types.Scene.LOD2_tex_res
+    del bpy.types.Scene.LOD3_tex_res
+    del bpy.types.Scene.LOD1_dec_ratio
+    del bpy.types.Scene.LOD2_dec_ratio
+    del bpy.types.Scene.LOD3_dec_ratio
+    del bpy.types.Scene.BL_undistorted_path
+    del bpy.types.Scene.BL_x_shift
+    del bpy.types.Scene.BL_y_shift
+    del bpy.types.Scene.BL_z_shift
+    del bpy.types.Scene.RES_pano
+    del bpy.types.Scene.camera_type
+    del bpy.types.Scene.camera_lens
+    del bpy.types.Scene.pano_list
+    del bpy.types.Scene.pano_list_index
+    del bpy.types.Scene.PANO_file
+    del bpy.types.Scene.PANO_dir
+    del bpy.types.Scene.PANO_cam_lens

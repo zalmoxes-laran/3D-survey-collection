@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<data>
+    <cam name="CANON 6D">
+        <s_width>35.8</s_width>
+        <s_height>23.9</s_height>
+        <x>5472</x>
+        <y>3648</y>
+    </cam>
+    <cam name="NIKON D3200">
+        <s_width>23.2</s_width>
+        <s_height>15.4</s_height>
+        <x>4512</x>
+        <y>3000</y>
+    </cam>
+</data>

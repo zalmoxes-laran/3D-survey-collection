@@ -2,98 +2,31 @@ import bpy
 import os
 from .functions import *
 
-# class VIEW3D_OT_tex_to_material(bpy.types.Operator):
-#     """Create texture materials for images assigned in UV editor"""
-#     bl_idname = "view3d.tex_to_material"
-#     bl_label = "Texface Images to Material/Texture (Material Utils)"
-#     bl_options = {'REGISTER', 'UNDO'}
+class set_camera_type(bpy.types.Operator):
+    bl_idname = "set_camera.type"
+    bl_label = "Set Camera Type"
+    bl_options = {"REGISTER", "UNDO"}
 
-#     @classmethod
-#     def poll(cls, context):
-#         return context.active_object is not None
+    name_cam : StringProperty()
 
-#     def execute(self, context):
-#         if context.selected_editable_objects:
-#             tex_to_mat()
-#             return {'FINISHED'}
-#         else:
-#             self.report({'WARNING'},
-#                         "No editable selected objects, could not finish")
-#             return {'CANCELLED'}
+    def execute(self, context):
+        context.scene.camera_type = self.name_cam
+        selected_objects = context.selected_objects
+        s_width, s_height, x, y = parse_cam_xml(self.name_cam)
+        lens = context.scene.camera_lens
+        for ob in selected_objects:
+            if ob.type in ['CAMERA']:
+                set_up_lens(ob, float(s_width), float(s_height), lens)
+        set_up_scene(int(x),int(y),True)
+        return {'FINISHED'} 
 
-class OBJECT_OT_IsometricScene(bpy.types.Operator):
-    bl_idname = "isometric.scene"
-    bl_label = "Isometric scene"
+class XML_CAM_parse(bpy.types.Operator):
+    bl_idname = "xmlcam.parse"
+    bl_label = "Parse xml file"
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
-        set_up_scene(3000,3000,True)
-        return {'FINISHED'}
-
-class OBJECT_OT_Canon6Dscene(bpy.types.Operator):
-    bl_idname = "canon6d.scene"
-    bl_label = "Canon 6D scene"
-    bl_options = {"REGISTER", "UNDO"}
-
-    def execute(self, context):
-        set_up_scene(5472,3648,False)
-        return {'FINISHED'}
-    
-class OBJECT_OT_nikond3200scene(bpy.types.Operator):
-    bl_idname = "nikond3200.scene"
-    bl_label = "Nikon d3200 scene"
-    bl_options = {"REGISTER", "UNDO"}
-
-    def execute(self, context):
-        set_up_scene(4512,3000,False)
-        return {'FINISHED'}
-
-class OBJECT_OT_nikond320018mm(bpy.types.Operator):
-    bl_idname = "nikond320018mm.camera"
-    bl_label = "Set as nikond3200 18mm"
-    bl_options = {"REGISTER", "UNDO"}
-
-    def execute(self, context):
-        selection = bpy.context.selected_objects
-        bpy.ops.object.select_all(action='DESELECT')
-        for obj in selection:
-            set_up_lens(obj,23.2,15.4,18)
-        return {'FINISHED'}
-
-class OBJECT_OT_Canon6D35(bpy.types.Operator):
-    bl_idname = "canon6d35mm.camera"
-    bl_label = "Set as Canon 6D 35mm"
-    bl_options = {"REGISTER", "UNDO"}
-
-    def execute(self, context):
-        selection = bpy.context.selected_objects
-        bpy.ops.object.select_all(action='DESELECT')
-        for obj in selection:
-            set_up_lens(obj,35.8,23.9,35)
-        return {'FINISHED'}
-
-class OBJECT_OT_Canon6D24(bpy.types.Operator):
-    bl_idname = "canon6d24mm.camera"
-    bl_label = "Set as Canon 6D 14mm"
-    bl_options = {"REGISTER", "UNDO"}
-
-    def execute(self, context):
-        selection = bpy.context.selected_objects
-        bpy.ops.object.select_all(action='DESELECT')
-        for obj in selection:
-            set_up_lens(obj,35.8,23.9,24)
-        return {'FINISHED'}
-
-class OBJECT_OT_Canon6D14(bpy.types.Operator):
-    bl_idname = "canon6d14mm.camera"
-    bl_label = "Set as Canon 6D 14mm"
-    bl_options = {"REGISTER", "UNDO"}
-
-    def execute(self, context):
-        selection = bpy.context.selected_objects
-        bpy.ops.object.select_all(action='DESELECT')
-        for obj in selection:
-            set_up_lens(obj,35.8,23.9,14.46)
+        parse_cam_xml('just_parse')
         return {'FINISHED'}
 
 class OBJECT_OT_BetterCameras(bpy.types.Operator):
