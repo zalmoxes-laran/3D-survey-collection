@@ -325,10 +325,30 @@ def register():
     name = "Cam Lens",
     default = 21,
     description = "Define the lens of the cameras",
-#      subtype = 'FILE_PATH'
     )
-
 
 def unregister():
     for cls in classes:
         bpy.utils.unregister_class(cls)
+
+    del bpy.types.WindowManager.interface_vars
+    del bpy.types.WindowManager.ccToolViewVar
+    del bpy.types.Scene.LODnum
+    del bpy.types.Scene.LOD1_tex_res
+    del bpy.types.Scene.LOD2_tex_res
+    del bpy.types.Scene.LOD3_tex_res
+    del bpy.types.Scene.LOD1_dec_ratio
+    del bpy.types.Scene.LOD2_dec_ratio
+    del bpy.types.Scene.LOD3_dec_ratio
+    del bpy.types.Scene.BL_undistorted_path
+    del bpy.types.Scene.BL_x_shift
+    del bpy.types.Scene.BL_y_shift
+    del bpy.types.Scene.BL_z_shift
+    del bpy.types.Scene.RES_pano
+    del bpy.types.Scene.camera_type
+    del bpy.types.Scene.camera_lens
+    del bpy.types.Scene.pano_list
+    del bpy.types.Scene.pano_list_index
+    del bpy.types.Scene.PANO_file
+    del bpy.types.Scene.PANO_dir
+    del bpy.types.Scene.PANO_cam_lens
