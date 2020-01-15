@@ -126,12 +126,12 @@ class ToolsPanelQuickUtils:
         # self.layout.operator("lod0poly.reducer", icon="IMGDISPLAY", text='LOD0 mesh decimator')
         row = layout.row()
         self.layout.operator("project.segmentation", icon="SCULPTMODE_HLT", text='Mono-cutter')
-        row = layout.row()
+        #row = layout.row()
         self.layout.operator("project.segmentationinv", icon="SCULPTMODE_HLT", text='Multi-cutter')
-        row = layout.row()
+        #row = layout.row()
 
-        self.layout.operator("circum.center", icon="SCULPTMODE_HLT", text='CircumCenter')
-        row = layout.row()
+        self.layout.operator("circum.center", icon="PROP_OFF", text='CircumCenter')
+        #row = layout.row()
 
         # self.layout.operator("tiff2png.relink", icon="META_DATA", text='Relink images from tiff to png')
         # row = layout.row()

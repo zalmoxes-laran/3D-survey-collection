@@ -11,8 +11,32 @@ class OBJECT_OT_circumcenter(bpy.types.Operator):
     bl_label = "Set the cursor in the center of a circumference"
     bl_options = {'REGISTER', 'UNDO'}
 
-    def execute(self, context):
+    @classmethod
+    def poll(cls, context):
+        turn_on_button = False
+        if context.active_object is not None:
+            if context.active_object.type == 'MESH':
+                if len(context.active_object.data.vertices) == 3:
+                    turn_on_button = True
+        return turn_on_button
 
+    def execute(self, context):
+            
+        co_final_1 = obj.matrix_world @ obj.data.vertices[0].co
+        ax = co_final_1[0]
+        ay = co_final_1[1]
+        co_final_2 = obj.matrix_world @ obj.data.vertices[1].co
+        bx = co_final_2[0]
+        by = co_final_2[1]
+        co_final_3 = obj.matrix_world @ obj.data.vertices[2].co
+        cx = co_final_3[0]
+        cy = co_final_3[1]
+        abcz = (co_final_1[2]+co_final_2[2]+co_final_3[2])/3
+        print(str(ax)+", "+str(ay)+", "+str(bx)+", "+str(by)+", "+str(cx)+", "+str(cy)+","+str(abcz))
+        ux,uy = circumcenter(ax,ay,bx,by,cx,cy)
+        radius_circle = calculateDistance(ux,uy,ax,ay)
+        bpy.ops.mesh.primitive_circle_add(vertices=32, radius=radius_circle, fill_type='NOTHING', calc_uvs=True, enter_editmode=False, align='WORLD', location=(ux, uy, abcz), rotation=(0.0, 0.0, 0.0))
+       
         return {'FINISHED'}
 
 class OBJECT_OT_CorrectMaterial(bpy.types.Operator):

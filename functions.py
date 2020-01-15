@@ -51,10 +51,14 @@ def circumcenter(ax,ay,bx,by,cx,cy):
     # by = float(input('What is y of point 2?'))
     # cx = float(input('What is x of point 3?'))
     # cy = float(input('What is y of point 3?'))
-    d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by))
+    d = 2 * ((ax * (by - cy)) + (bx * (cy - ay)) + (cx * (ay - by)))
     ux = ((ax * ax + ay * ay) * (by - cy) + (bx * bx + by * by) * (cy - ay) + (cx * cx + cy * cy) * (ay - by)) / d
     uy = ((ax * ax + ay * ay) * (cx - bx) + (bx * bx + by * by) * (ax - cx) + (cx * cx + cy * cy) * (bx - ax)) / d
     return (ux, uy)
+
+def calculateDistance(x1,y1,x2,y2):  
+     dist = math.sqrt((x2 - x1)**2 + (y2 - y1)**2)  
+     return dist  
 
 def grad(rad):
     grad = rad*57.2957795
