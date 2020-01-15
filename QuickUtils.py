@@ -5,6 +5,16 @@ from random import randint, choice
 from .functions import *
 from .qualitycheck import *
 
+class OBJECT_OT_circumcenter(bpy.types.Operator):
+    """Set the cursor in the center of a circumference"""
+    bl_idname = "circum.center"
+    bl_label = "Set the cursor in the center of a circumference"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+
+        return {'FINISHED'}
+
 class OBJECT_OT_CorrectMaterial(bpy.types.Operator):
     bl_idname = "correct.material"
     bl_label = "Correct photogr. mats"

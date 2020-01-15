@@ -44,6 +44,18 @@ class OBJECT_OT_createcyclesmat(bpy.types.Operator):
 
 ##########################################################################################
 
+def circumcenter(ax,ay,bx,by,cx,cy):
+    # ax = float(input('What is x of point 1?'))
+    # ay = float(input('What is y of point 1?'))
+    # bx = float(input('What is x of point 2?'))
+    # by = float(input('What is y of point 2?'))
+    # cx = float(input('What is x of point 3?'))
+    # cy = float(input('What is y of point 3?'))
+    d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by))
+    ux = ((ax * ax + ay * ay) * (by - cy) + (bx * bx + by * by) * (cy - ay) + (cx * cx + cy * cy) * (ay - by)) / d
+    uy = ((ax * ax + ay * ay) * (cx - bx) + (bx * bx + by * by) * (ax - cx) + (cx * cx + cy * cy) * (bx - ax)) / d
+    return (ux, uy)
+
 def grad(rad):
     grad = rad*57.2957795
     return grad

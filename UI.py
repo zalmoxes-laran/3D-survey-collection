@@ -85,17 +85,17 @@ class ToolsPanelSHIFT:
         row = layout.row()        
         row.label(text="Shift values:")
         row = layout.row()
-#        row.prop(context.scene, 'SRID', toggle = True)
-#        row = layout.row() 
+        #row.prop(context.scene, 'SRID', toggle = True)
+        #row = layout.row() 
         row.prop(context.scene, 'BL_x_shift', toggle = True)
         row = layout.row()  
         row.prop(context.scene, 'BL_y_shift', toggle = True)
         row = layout.row()  
         row.prop(context.scene, 'BL_z_shift', toggle = True)    
         row = layout.row()
-#        if scene['crs x'] is not None and scene['crs y'] is not None:
-#            if scene['crs x'] > 0 or scene['crs y'] > 0:
-#                self.layout.operator("shift_from.blendergis", icon="PASTEDOWN", text='from Bender GIS')
+        #if scene['crs x'] is not None and scene['crs y'] is not None:
+        #    if scene['crs x'] > 0 or scene['crs y'] > 0:
+        #        self.layout.operator("shift_from.blendergis", icon="PASTEDOWN", text='from Bender GIS')
 
 class ToolsPanelQuickUtils:
     bl_label = "Quick Utils"
@@ -128,6 +128,9 @@ class ToolsPanelQuickUtils:
         self.layout.operator("project.segmentation", icon="SCULPTMODE_HLT", text='Mono-cutter')
         row = layout.row()
         self.layout.operator("project.segmentationinv", icon="SCULPTMODE_HLT", text='Multi-cutter')
+        row = layout.row()
+
+        self.layout.operator("circum.center", icon="SCULPTMODE_HLT", text='CircumCenter')
         row = layout.row()
 
         # self.layout.operator("tiff2png.relink", icon="META_DATA", text='Relink images from tiff to png')

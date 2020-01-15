@@ -171,6 +171,7 @@ classes = (
     QuickUtils.OBJECT_OT_removefromallgroups,
     QuickUtils.OBJECT_OT_renameGEobject,
     QuickUtils.OBJECT_OT_tiff2pngrelink,
+    QuickUtils.OBJECT_OT_circumcenter,
     LODgenerator.OBJECT_OT_CreateGroupsLOD,
     LODgenerator.OBJECT_OT_ExportGroupsLOD,
     LODgenerator.OBJECT_OT_LOD,

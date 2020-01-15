@@ -12,4 +12,10 @@
         <x>4512</x>
         <y>3000</y>
     </cam>
+    <cam name="GoPro4">
+        <s_width>6.17</s_width>
+        <s_height>4.55</s_height>
+        <x>3840</x>
+        <y>2160</y>
+    </cam>
 </data>
