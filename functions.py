@@ -28,7 +28,7 @@ class OBJECT_OT_savepaintcam(bpy.types.Operator):
 
     def execute(self, context):
         bpy.ops.image.save_dirty()
-        
+
         return {'FINISHED'}
 
 class OBJECT_OT_createcyclesmat(bpy.types.Operator):
@@ -56,9 +56,9 @@ def circumcenter(ax,ay,bx,by,cx,cy):
     uy = ((ax * ax + ay * ay) * (cx - bx) + (bx * bx + by * by) * (ax - cx) + (cx * cx + cy * cy) * (bx - ax)) / d
     return (ux, uy)
 
-def calculateDistance(x1,y1,x2,y2):  
-     dist = math.sqrt((x2 - x1)**2 + (y2 - y1)**2)  
-     return dist  
+def calculateDistance(x1,y1,x2,y2):
+     dist = math.sqrt((x2 - x1)**2 + (y2 - y1)**2)
+     return dist
 
 def grad(rad):
     grad = rad*57.2957795
@@ -144,7 +144,7 @@ def set_up_lens(obj,sens_width,sens_lenght,lens):
     obj.data.sensor_fit = 'HORIZONTAL'
     obj.data.sensor_width = sens_width
     obj.data.sensor_height = sens_lenght
-    
+
 def set_up_scene(x,y,ao):
     bpy.context.scene.render.resolution_x = x
     bpy.context.scene.render.resolution_y = y
@@ -330,7 +330,7 @@ def setupclonepaint():
     bpy.context.scene.tool_settings.image_paint.use_clone_layer = True
 #    bpy.context.scene.tool_settings.image_paint.seam_bleed = 16
     obj = bpy.context.active_object
-    
+
     for matslot in obj.material_slots:
         mat = matslot.material
         original_image = node_retriever(mat, "original")
@@ -361,7 +361,7 @@ def cycles2bi():
 #            print(node_original.image.name)
 #            print(mat.texture_slots[0].texture.image.name)
             mat.texture_slots[0].texture.image = node_original.image
-            
+
 def select_a_mesh(layout):
     row = layout.row()
     row.label(text="Select a mesh to start")
@@ -496,9 +496,9 @@ def create_new_tex_set(mat, type):
 
     if type == "source_paint_node":
         t_image_name = "sp_"+o_filename_no_ext
-    
+
     t_image = bpy.data.images.new(name=t_image_name, width=x_image, height=y_image, alpha=False)
-    
+
     # set path to new image
     fn = os.path.join(o_imagedir, t_image_name)
     t_image.filepath_raw = fn+".png"
@@ -507,7 +507,7 @@ def create_new_tex_set(mat, type):
     tteximg = nodes.new('ShaderNodeTexImage')
     tteximg.location = (-1100, -450)
     tteximg.image = t_image
-    tteximg.name = type 
+    tteximg.name = type
 
     for currnode in nodes:
         currnode.select = False
@@ -531,7 +531,7 @@ def node_retriever(mat, type):
     list_all_node_type[original] = None
     list_all_node_type[source_paint_node] = None
     list_all_node_type[diffuse] = None
-    node = None 
+    node = None
 
     if type == "all":
         for node_type in list_all_node_type:
@@ -549,8 +549,8 @@ def node_retriever(mat, type):
                 pass
         print("non ho trovato nulla")
         node = False
-        return node 
-               
+        return node
+
 # for cycles material
 
 def dict2list(dict):
@@ -564,9 +564,9 @@ def create_correction_nodegroup(name):
     # create a group
 #    active_object_name = bpy.context.scene.objects.active.name
     cc_nodegroup = bpy.data.node_groups.new(name, 'ShaderNodeTree')
-    #cc_nodegroup.name = "cc_node" 
+    #cc_nodegroup.name = "cc_node"
 #    cc_nodegroup.label = label
-    
+
     # create group inputs
     group_inputs = cc_nodegroup.nodes.new('NodeGroupInput')
     group_inputs.location = (-750,0)
@@ -644,7 +644,7 @@ def cc_node_to_mat(mat, cc_nodegroup):#(ob,context):
 
     teximg = node_retriever(mat, "Image Texture")
     teximg.name = "original"
-    
+
     print("Ho letto il materiale ed ho trovato una immagine di nome: " + teximg.image.name)
     colcor = nodes.new(type="ShaderNodeGroup")
  #   colcor.node_tree = cc_nodegroup
@@ -779,7 +779,7 @@ def create_material_from_image(context,image,oggetto,connect):
         oggetto.data.materials[0] = mat
     else:
         oggetto.data.materials.append(mat)
-    
+
     mat.node_tree.nodes.active = texImage
 
     return mat, texImage, bsdf
@@ -856,7 +856,7 @@ def create_pano_ubermat(regenerate_maps):
     context = bpy.context
     scene = context.scene
     obj_mat = context.view_layer.objects.active
-    obj_mat_mat_name = obj_mat.name+"uberpano" 
+    obj_mat_mat_name = obj_mat.name+"uberpano"
     if obj_mat.name in scene.pano_list:
         raise NameError("The active object %s is a panorama, skip the process, please select an object you want to create a panoramic material for" % obj_mat.name)
         return
@@ -908,7 +908,7 @@ def create_pano_ubermat(regenerate_maps):
             bpy.ops.object.select_all(action='DESELECT')
             current_pano_ob.select_set(True)
             context.view_layer.objects.active = current_pano_ob
-            
+
             bpy.ops.transform.rotate(value=rad(90.0), orient_axis='Z', orient_type='LOCAL')
 
             i = 0
@@ -917,15 +917,15 @@ def create_pano_ubermat(regenerate_maps):
                 mapping_node_pano.rotation[i] = current_pano_ob.rotation_euler[i]
                 print(str(current_pano_ob.name))
                 i += 1
-            
+
             bpy.ops.transform.rotate(value=-(rad(90.0)), orient_axis='Z', orient_type='LOCAL')
-            
+
             bpy.ops.object.select_all(action='DESELECT')
             context.view_layer.objects.active = obj_mat
             obj_mat.select_set(True)
-            
+
             links.new(vector_node_pano.outputs[3], mapping_node_pano.inputs[0])
-            
+
             current_x_location += 500
             pano_tex_node = nodes.new('ShaderNodeTexEnvironment')
             pano_tex_node.location = (current_x_location, current_y_location)
@@ -933,7 +933,7 @@ def create_pano_ubermat(regenerate_maps):
             links.new(mapping_node_pano.outputs[0], pano_tex_node.inputs[0])
 
             current_file_pano_name = current_pano_name+"-"+str(scene.RES_pano)+"k.jpg"
-            
+
             found = False
             for im in bpy.data.images:
                 if im.name == current_file_pano_name:
@@ -941,14 +941,14 @@ def create_pano_ubermat(regenerate_maps):
                     print("got a previous image")
                 else:
                     pass
-            
+
             if found is False:
                 current_dir_pano_name = str(scene.RES_pano)+"k"
                 path = os.path.join(scene.PANO_dir,current_dir_pano_name,current_file_pano_name)
                 pano_tex_node.image = image_from_path(path)
             else:
                 pano_tex_node.image = bpy.data.images[current_file_pano_name]
-                
+
             current_x_location +=400
             if regenerate_maps is True:
                 pano_mask_node = nodes.new('ShaderNodeTexImage')
@@ -956,15 +956,15 @@ def create_pano_ubermat(regenerate_maps):
             else:
                 pano_mask_node = nodes.nodes.get("mk_"+current_pano_name)
             pano_mask_node.location = (current_x_location, current_y_location)
-            
+
             current_dir_blend = os.path.dirname(bpy.data.filepath)
             if not current_dir_blend:
                 raise Exception("Blend file is not saved")
             current_pano_subfolder_4maps = ("mp_"+obj_mat.name)
             new_map_img_filename = ("mp_"+obj_mat.name+"_"+current_pano_name+".png")
             new_map_dir_path = create_folder_in_path(current_pano_subfolder_4maps,current_dir_blend)
-            new_map_img_path = os.path.join(new_map_dir_path,new_map_img_filename) 
-            
+            new_map_img_path = os.path.join(new_map_dir_path,new_map_img_filename)
+
             tempimage = bpy.data.images.new(name=new_map_img_filename, width=2048, height=2048, alpha=True)
             tempimage.alpha_mode = 'CHANNEL_PACKED'
             tempimage.filepath_raw = new_map_img_path
@@ -1028,7 +1028,7 @@ def select_obj_from_panoitem(panoname):
     for ob in bpy.data.objects:
         if panoname == ob.name:
             found_ob = ob
-    return found_ob 
+    return found_ob
 
 def setup_mat_panorama_3DSC(matname, img):
     scene = bpy.context.scene
@@ -1037,8 +1037,8 @@ def setup_mat_panorama_3DSC(matname, img):
     mat.use_backface_culling = True
     mat.use_nodes = True
     mat.node_tree.nodes.clear()
- 
-    mat.blend_method = "ADD"
+
+    mat.blend_method = "OPAQUE"
     links = mat.node_tree.links
     nodes = mat.node_tree.nodes
     output = nodes.new('ShaderNodeOutputMaterial')
@@ -1109,7 +1109,7 @@ def read_pano_dir(context):
     folder_presence = False
     min_len = 100
     idx = 0
-    for sChild in os.listdir(sPath):                
+    for sChild in os.listdir(sPath):
             sChildPath = os.path.join(sPath,sChild)
             if os.path.isdir(sChildPath):
                 folder_presence = True
@@ -1122,8 +1122,8 @@ def read_pano_dir(context):
                 if currentnumber < min_len:
                     #print(str(currentnumber))
                     min_len = currentnumber
-                    
-                    
+
+
     if folder_presence is False:
         pass
     #print(str(minimum_sChildPath))
@@ -1134,7 +1134,7 @@ def read_pano_dir(context):
     return
 
 def getnumber_in_name(string):
-    temp = re.findall(r'\d+', str(string)) 
+    temp = re.findall(r'\d+', str(string))
     numbers = list(map(int, temp))
     #print(numbers)
     lastnumber = int(numbers[len(numbers)-1])

@@ -6,6 +6,12 @@
         <x>5472</x>
         <y>3648</y>
     </cam>
+    <cam name="CANON 70D">
+        <s_width>22.3</s_width>
+        <s_height>15.0</s_height>
+        <x>5472</x>
+        <y>3648</y>
+    </cam>
     <cam name="NIKON D3200">
         <s_width>23.2</s_width>
         <s_height>15.4</s_height>
