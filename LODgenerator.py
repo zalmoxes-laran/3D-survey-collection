@@ -351,3 +351,80 @@ class OBJECT_OT_CreateGroupsLOD(bpy.types.Operator):
                     print(str(num))
                     child = selectLOD(listobjects, num, baseobj)
         return {'FINISHED'}
+
+class OBJECT_OT_changeLOD(bpy.types.Operator):
+    """Change LOD for selected objs"""
+    bl_idname = "change.lod"
+    bl_label = "Change LOD"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+
+        context = bpy.context
+        scene = context.scene
+        collection = context.collection
+
+        lod_list_clear(context) 
+
+        LOD_target = "LOD"+str(context.scene.setLODnum)
+
+        selection = bpy.context.selected_objects
+
+        #bpy.ops.object.select_all(action='DESELECT')
+
+        LODS = ["LOD0", "LOD1", "LOD2", "LOD3", "LOD4", "LOD5"]
+
+        librerie = []
+
+        lod_list_item_counter = 0
+
+        for objs_to_check in selection:
+            current_obj_LOD = objs_to_check.name[-4:]
+            #object_clean_name = objs_to_check.name[:-4]
+            if current_obj_LOD == LOD_target or current_obj_LOD not in LODS:
+                pass
+            else:
+                if objs_to_check.library is not None:
+                    if objs_to_check.library.name not in librerie:
+                        librerie.append(objs_to_check.library.name)
+                    print("L'oggetto "+objs_to_check.name + " appartiene alla libreria " + objs_to_check.library.name)
+                    #objs_to_check.select_set(True)
+                    scene.lod_list_item.add()
+                    scene.lod_list_item[lod_list_item_counter].name = objs_to_check.name
+                    scene.lod_list_item[lod_list_item_counter].libreria_lod = objs_to_check.library.name
+                    lod_list_item_counter +=1
+                    #print("oggetto aggiunto: "+scene.lod_list_item[lod_list_item_counter].name)
+
+        for libreria in librerie:
+            print(libreria)
+            library_path = bpy.data.libraries[libreria].filepath
+
+            print(library_path)
+
+            with bpy.data.libraries.load(library_path, link=True) as (data_from, data_to):
+                #data_to.objects = [target_name]#data.objects[target_name] #[name for name in data_from.objects if name.endswith("_LOD0")]
+                data_to.objects = [name for name in data_from.objects if name.endswith(LOD_target)]
+            
+            for object_in_lod_list in scene.lod_list_item:
+                #print(object_in_lod_list.name)
+                #print("nella lista: "+object_in_lod_list.libreria_lod)
+                #print("nella libreria: "+libreria)
+                if object_in_lod_list.libreria_lod == libreria:
+                    #print("ho trovato oggetto che ha la medesima libreria")
+                    current_LOD = object_in_lod_list.name[-4:]
+                    print(current_LOD)
+                    #object_clean_name = object_in_library[:-4]
+                    target_name = object_in_lod_list.name.replace(current_LOD, LOD_target)
+                    print("Target name: "+target_name)
+                    found = False
+                    for object_in_library in data_to.objects:
+                        if object_in_library.name == target_name:
+                            found = True
+                            collection.objects.link(bpy.data.objects[target_name])
+                            collection.objects.unlink(bpy.data.objects[object_in_lod_list.name])
+                    if not found:
+                        object_clean_name = target_name[:-5]
+                        print('The object "'+object_clean_name+'" has no '+ LOD_target+" in library")
+
+        return {'FINISHED'}
+

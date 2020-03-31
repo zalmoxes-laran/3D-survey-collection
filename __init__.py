@@ -127,12 +127,27 @@ class ccToolViewVar(PropertyGroup):
         default='cc_node'
     )
 
+class LODitemListItem(PropertyGroup):
+    """ Group of properties representing an item in the list """
+
+    name : StringProperty(
+            name="object",
+            description="object name",
+            default="Untitled")
+
+    libreria_lod : StringProperty(
+            name="library",
+            description="library name",
+            default="Untitled")
+
+
 classes = (
     UI.VIEW3D_PT_Shift_ToolBar,
     UI.VIEW3D_PT_Import_ToolBar,
     UI.VIEW3D_PT_Export_ToolBar,
     UI.VIEW3D_PT_QuickUtils_ToolBar,
     UI.VIEW3D_PT_LODgenerator,
+    UI.VIEW3D_PT_LODmanager,
     UI.VIEW3D_PT_ccTool,
     UI.VIEW3D_PT_PhotogrTool,
     UI.Camera_menu,
@@ -177,6 +192,7 @@ classes = (
     LODgenerator.OBJECT_OT_LOD,
     LODgenerator.OBJECT_OT_LOD0,
     LODgenerator.OBJECT_OT_RemoveGroupsLOD,
+    LODgenerator.OBJECT_OT_changeLOD,
     PhotogrTool.OBJECT_OT_applypaintcam,
     PhotogrTool.OBJECT_OT_BetterCameras,
     PhotogrTool.OBJECT_OT_NoBetterCameras,
@@ -209,7 +225,11 @@ classes = (
     PANOListItem,
     CAMTypeList,
     RES_list,
+    LODitemListItem,
 )
+
+
+
 
 def register():
     for cls in classes:
@@ -227,6 +247,13 @@ def register():
         max = 3,
         description = "Enter desired number of LOD (Level of Detail)")
     
+    bpy.types.Scene.setLODnum = IntProperty(
+        name = "LOD", 
+        default = 0,
+        min = 0,
+        max = 3,
+        description = "Enter desired number of LOD (Level of Detail)")
+
     bpy.types.Scene.LOD1_tex_res = IntProperty(
         name = "Resolution Texture of the LOD1", 
         default = 2048,
@@ -307,6 +334,7 @@ def register():
     bpy.types.Scene.resolution_list = CollectionProperty(type = RES_list)
     bpy.types.Scene.pano_list = CollectionProperty(type = PANOListItem)
     bpy.types.Scene.pano_list_index = IntProperty(name = "Index for my_list", default = 0)
+    bpy.types.Scene.lod_list_item = CollectionProperty(type = LODitemListItem)
 
     bpy.types.Scene.PANO_file = StringProperty(
     name = "TXT",
@@ -332,6 +360,7 @@ def unregister():
     for cls in classes:
         bpy.utils.unregister_class(cls)
 
+    del bpy.types.Scene.setLODnum
     del bpy.types.WindowManager.interface_vars
     del bpy.types.WindowManager.ccToolViewVar
     del bpy.types.Scene.LODnum
@@ -353,3 +382,4 @@ def unregister():
     del bpy.types.Scene.PANO_file
     del bpy.types.Scene.PANO_dir
     del bpy.types.Scene.PANO_cam_lens
+    del bpy.types.Scene.lod_list_item

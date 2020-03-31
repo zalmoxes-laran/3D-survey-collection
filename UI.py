@@ -146,6 +146,30 @@ class ToolsPanelQuickUtils:
         # self.layout.operator("bi2cycles.material", icon="PARTICLES", text='Create cycles nodes')
         # self.layout.operator("cycles2bi.material", icon="PMARKER", text='Cycles to BI')
 
+class ToolsPanelLODmanager:
+    bl_label = "LOD manager"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_options = {'DEFAULT_CLOSED'}
+
+    def draw(self, context):
+        layout = self.layout
+        obj = context.object
+        scene = context.scene
+
+        row = layout.row()        
+        row.label(text="Change LOD of selected linked objects:")
+        row = layout.row()
+
+        split = layout.split()
+        # First column
+        col = split.column()
+        col.prop(scene, 'setLODnum', icon='BLENDER', toggle=True)
+        # Second column, aligned
+        col = split.column(align=True)
+        col.operator("change.lod", text='set LOD')
+        #self.layout.operator("change.lod", icon="MESH_UVSPHERE", text='set LOD')
+
 class ToolsPanelLODgenerator:
     bl_label = "LOD generator"
     bl_space_type = 'VIEW_3D'
@@ -463,6 +487,11 @@ class VIEW3D_PT_LODgenerator(Panel, ToolsPanelLODgenerator):
     bl_idname = "VIEW3D_PT_LODgenerator"
     bl_context = "objectmode"
 
+class VIEW3D_PT_LODmanager(Panel, ToolsPanelLODmanager):
+    bl_category = "3DSC"
+    bl_idname = "VIEW3D_PT_LODmanager"
+    bl_context = "objectmode"
+
 class VIEW3D_PT_ccTool(Panel, ToolsPanel_ccTool):
     bl_category = "3DSC"
     bl_idname = "VIEW3D_PT_ccTool"
@@ -493,7 +522,6 @@ class Res_menu(bpy.types.Menu):
                     "set.pano_res", text=str(res_list[idx].res_num), emboss=False, icon="RIGHTARROW")
             op.res_number = str(res_list[idx].res_num)
             idx +=1
-
 
 class PANOToolsPanel:
     bl_label = "Panorama suite"

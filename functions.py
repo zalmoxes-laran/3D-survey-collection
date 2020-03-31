@@ -828,6 +828,14 @@ def set_rotation_to_bubble(context,object,pano):
     bpy.ops.object.visual_transform_apply()
     bpy.ops.object.constraints_clear()
 
+def lod_list_clear(context):
+    scene = context.scene
+    scene.lod_list_item.update()
+    list_lenght = len(scene.lod_list_item)
+    for x in range(list_lenght):
+        scene.lod_list_item.remove(0)
+    return
+
 def PANO_list_clear(context):
     scene = context.scene
     scene.pano_list.update()
