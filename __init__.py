@@ -358,7 +358,10 @@ def register():
 
 def unregister():
     for cls in classes:
-        bpy.utils.unregister_class(cls)
+        try:
+                bpy.utils.unregister_class(cls)
+        except RuntimeError:
+                pass
 
     del bpy.types.Scene.setLODnum
     del bpy.types.WindowManager.interface_vars
