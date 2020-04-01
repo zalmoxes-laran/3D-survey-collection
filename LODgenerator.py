@@ -362,7 +362,7 @@ class OBJECT_OT_changeLOD(bpy.types.Operator):
 
         context = bpy.context
         scene = context.scene
-        collection = context.collection
+        #collection = context.collection
 
         lod_list_clear(context) 
 
@@ -387,7 +387,7 @@ class OBJECT_OT_changeLOD(bpy.types.Operator):
                 if objs_to_check.library is not None:
                     if objs_to_check.library.name not in librerie:
                         librerie.append(objs_to_check.library.name)
-                    print("L'oggetto "+objs_to_check.name + " appartiene alla libreria " + objs_to_check.library.name)
+                    #print("L'oggetto "+objs_to_check.name + " appartiene alla libreria " + objs_to_check.library.name)
                     #objs_to_check.select_set(True)
                     scene.lod_list_item.add()
                     scene.lod_list_item[lod_list_item_counter].name = objs_to_check.name
@@ -396,10 +396,10 @@ class OBJECT_OT_changeLOD(bpy.types.Operator):
                     #print("oggetto aggiunto: "+scene.lod_list_item[lod_list_item_counter].name)
 
         for libreria in librerie:
-            print(libreria)
+            
             library_path = bpy.data.libraries[libreria].filepath
 
-            print(library_path)
+            
 
             with bpy.data.libraries.load(library_path, link=True) as (data_from, data_to):
                 #data_to.objects = [target_name]#data.objects[target_name] #[name for name in data_from.objects if name.endswith("_LOD0")]
@@ -412,19 +412,26 @@ class OBJECT_OT_changeLOD(bpy.types.Operator):
                 if object_in_lod_list.libreria_lod == libreria:
                     #print("ho trovato oggetto che ha la medesima libreria")
                     current_LOD = object_in_lod_list.name[-4:]
-                    print(current_LOD)
+                   
                     #object_clean_name = object_in_library[:-4]
                     target_name = object_in_lod_list.name.replace(current_LOD, LOD_target)
-                    print("Target name: "+target_name)
+                    
                     found = False
                     for object_in_library in data_to.objects:
                         if object_in_library.name == target_name:
                             found = True
-                            collection.objects.link(bpy.data.objects[target_name])
-                            collection.objects.unlink(bpy.data.objects[object_in_lod_list.name])
+                            collection_list_for_current_ob = []
+                            for collection in bpy.data.collections:
+                                for obj in collection.all_objects:
+                                    if obj.name == object_in_lod_list.name:
+                                        
+                                        collection_list_for_current_ob.append(collection.name)
+                                        
+                            for relevant_collection in collection_list_for_current_ob:
+                                bpy.data.collections[relevant_collection].objects.link(bpy.data.objects[target_name])
+                                bpy.data.collections[relevant_collection].objects.unlink(bpy.data.objects[object_in_lod_list.name])
                     if not found:
                         object_clean_name = target_name[:-5]
                         print('The object "'+object_clean_name+'" has no '+ LOD_target+" in library")
 
         return {'FINISHED'}
-
