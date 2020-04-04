@@ -118,7 +118,6 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                     obj_base_name = obj_LOD0_name
 
                 print('Creating new LOD'+ str(i_lodbake_counter) +' object..')
-                #bpy.ops.object.duplicate_move(OBJECT_OT_duplicate={"linked":False, "mode":'TRANSLATION'}, TRANSFORM_OT_translate={"value":(0, 0, 0), "constraint_axis":(False, False, False), "constraint_orientation":'GLOBAL', "mirror":False, "proportional":'DISABLED', "proportional_edit_falloff":'SMOOTH', "proportional_size":1, "snap":False, "snap_target":'CLOSEST', "snap_point":(0, 0, 0), "snap_align":False, "snap_normal":(0, 0, 0), "gpencil_strokes":False, "texture_space":False, "remove_on_cancel":False, "release_confirm":False})
                 bpy.ops.object.duplicate(linked=False, mode='TRANSLATION')
                 obj_LODnew = context.view_layer.objects.active
 

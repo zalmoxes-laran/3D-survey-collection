@@ -18,6 +18,8 @@ from bpy.props import (BoolProperty,
                        CollectionProperty
                        )
 
+from . import addon_updater_ops
+
 class ToolsPanelImport:
     bl_label = "Importers"
     bl_space_type = 'VIEW_3D'
@@ -78,6 +80,7 @@ class ToolsPanelSHIFT:
     bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
+        addon_updater_ops.check_for_update_background()
         layout = self.layout
         scene = context.scene
         obj = context.object
@@ -96,6 +99,8 @@ class ToolsPanelSHIFT:
         #if scene['crs x'] is not None and scene['crs y'] is not None:
         #    if scene['crs x'] > 0 or scene['crs y'] > 0:
         #        self.layout.operator("shift_from.blendergis", icon="PASTEDOWN", text='from Bender GIS')
+
+        addon_updater_ops.update_notice_box_ui(self, context)
 
 class ToolsPanelQuickUtils:
     bl_label = "Quick Utils"
