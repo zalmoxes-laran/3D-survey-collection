@@ -19,7 +19,7 @@
 bl_info = {
     "name": "3D Survey Collection",
     "author": "Emanuel Demetrescu",
-    "version": (1,4,41),
+    "version": (1,4,42),
     "blender": (2, 82, 0),
     "location": "3D View > Toolbox",
     "description": "A collection of tools for 3D Survey activities",
@@ -68,6 +68,7 @@ else:
             TexPatcher,
             PanoramaSuite,
             report_data,
+            addon_updater_ops,
             )
 
 
