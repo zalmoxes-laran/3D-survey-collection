@@ -7,6 +7,7 @@ from bpy.types import PropertyGroup
 from bpy.types import Menu, UIList
 
 from .functions import *
+from . import report_data
 
 import os
 from bpy_extras.io_utils import ImportHelper, axis_conversion
@@ -17,6 +18,62 @@ from bpy.props import (BoolProperty,
                        EnumProperty,
                        CollectionProperty
                        )
+
+
+class View3DCheckPanel:
+
+    bl_label = "Inspection Panel"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        return obj is not None and obj.type == 'MESH' and obj.mode in {'OBJECT', 'EDIT'}
+
+
+class VIEW3D_PT_mesh_analyze(Panel, View3DCheckPanel):
+    bl_category = "3DSC"
+    bl_idname = "VIEW3D_PT_mesh_analyze"
+    bl_context = "objectmode"
+
+    _type_to_icon = {
+        bmesh.types.BMVert: 'VERTEXSEL',
+        bmesh.types.BMEdge: 'EDGESEL',
+        bmesh.types.BMFace: 'FACESEL',
+    }
+
+    def draw_report(self, context):
+        layout = self.layout
+        info = report_data.info()
+
+        if info:
+            is_edit = context.edit_object is not None
+
+            layout.label(text="Result")
+            box = layout.box()
+            col = box.column()
+
+            for i, (text, data) in enumerate(info):
+                if is_edit and data and data[1]:
+                    bm_type, _bm_array = data
+                    col.operator("mesh.print3d_select_report", text=text,
+                                 icon=self._type_to_icon[bm_type],).index = i
+                else:
+                    col.label(text=text)
+
+    def draw(self, context):
+        layout = self.layout
+
+        # TODO, presets
+
+        layout.label(text="Statistics")
+        row = layout.row(align=True)
+        #row.operator("mesh.print3d_info_volume", text="Volume")
+        row.operator("mesh.info_area", text="Area")
+
+        self.draw_report(context)
 
 class ToolsPanelImport:
     bl_label = "Importers"
@@ -33,7 +90,8 @@ class ToolsPanelImport:
         self.layout.operator("import_scene.multiple_objs", icon="DUPLICATE", text='Multiple objs')
         row = layout.row()
         self.layout.operator("import_cam.agixml", icon="DUPLICATE", text='Agisoft xml cams')
- 
+
+
 
 class ToolsPanelExport:
     bl_label = "Exporters"

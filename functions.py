@@ -1147,3 +1147,53 @@ def getnumber_in_name(string):
     #print(numbers)
     lastnumber = int(numbers[len(numbers)-1])
     return lastnumber
+
+
+def bmesh_calc_area(bm):
+    """Calculate the surface area."""
+    return sum(f.calc_area() for f in bm.faces)
+
+
+def bmesh_copy_from_object(obj, transform=True, triangulate=True, apply_modifiers=False):
+    """Returns a transformed, triangulated copy of the mesh"""
+
+    assert obj.type == 'MESH'
+
+    if apply_modifiers and obj.modifiers:
+        import bpy
+        depsgraph = bpy.context.evaluated_depsgraph_get()
+        obj_eval = obj.evaluated_get(depsgraph)
+        me = obj_eval.to_mesh()
+        bm = bmesh.new()
+        bm.from_mesh(me)
+        obj_eval.to_mesh_clear()
+    else:
+        me = obj.data
+        if obj.mode == 'EDIT':
+            bm_orig = bmesh.from_edit_mesh(me)
+            bm = bm_orig.copy()
+        else:
+            bm = bmesh.new()
+            bm.from_mesh(me)
+
+    # TODO. remove all customdata layers.
+    # would save ram
+
+    if transform:
+        bm.transform(obj.matrix_world)
+
+    if triangulate:
+        bmesh.ops.triangulate(bm, faces=bm.faces)
+
+    return bm
+
+
+def clean_float(text):
+    # strip trailing zeros: 0.000 -> 0.0
+    index = text.rfind(".")
+    if index != -1:
+        index += 2
+        head, tail = text[:index], text[index:]
+        tail = tail.rstrip("0")
+        text = head + tail
+    return text

@@ -66,6 +66,7 @@ else:
             PhotogrTool,
             TexPatcher,
             PanoramaSuite,
+            report_data,
             )
 
 class RES_list(PropertyGroup):
@@ -154,6 +155,7 @@ classes = (
     UI.Res_menu,
     UI.VIEW3D_PT_TexPatcher,
     UI.VIEW3D_PT_SetupPanel,
+    UI.VIEW3D_PT_mesh_analyze,
     import_3DSC.ImportMultipleObjs,
     import_3DSC.OBJECT_OT_IMPORTPOINTS,
     import_3DSC.ImportCoorPoints,
@@ -221,6 +223,7 @@ classes = (
     PanoramaSuite.ubermat_create,
     PanoramaSuite.ubermat_update,
     PanoramaSuite.SETpanoRES,
+    qualitycheck.MESH_OT_info_area,
     PANO_UL_List,
     PANOListItem,
     CAMTypeList,
