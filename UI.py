@@ -112,17 +112,17 @@ class ToolsPanelExport:
             row.operator("export.object", icon="OBJECT_DATA", text='One obj')
             row = box.row()
             row.operator("fbx.exp", icon="OBJECT_DATA", text='One fbx UE4')
-            row = box.row() 
+            row = box.row()
             row.label(text= "-> "+obj.name + ".obj/.fbx")
 
             box = layout.box()
             row = box.row()
             row.operator("obj.exportbatch", icon="DUPLICATE", text='Several obj')
-            row = box.row() 
+            row = box.row()
             row.label(text= "-> /objectname.obj")
             row = box.row()
             row.operator("fbx.exportbatch", icon="DUPLICATE", text='Several fbx UE4')
-            row = box.row() 
+            row = box.row()
             row.label(text= "-> /FBX/objectname.fbx")
 
         else:
@@ -136,24 +136,27 @@ class ToolsPanelSHIFT:
     bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
+        addon_updater_ops.check_for_update_background()
         layout = self.layout
         scene = context.scene
         obj = context.object
 
-        row = layout.row()        
+        row = layout.row()
         row.label(text="Shift values:")
         row = layout.row()
         #row.prop(context.scene, 'SRID', toggle = True)
-        #row = layout.row() 
+        #row = layout.row()
         row.prop(context.scene, 'BL_x_shift', toggle = True)
-        row = layout.row()  
+        row = layout.row()
         row.prop(context.scene, 'BL_y_shift', toggle = True)
-        row = layout.row()  
-        row.prop(context.scene, 'BL_z_shift', toggle = True)    
+        row = layout.row()
+        row.prop(context.scene, 'BL_z_shift', toggle = True)
         row = layout.row()
         #if scene['crs x'] is not None and scene['crs y'] is not None:
         #    if scene['crs x'] > 0 or scene['crs y'] > 0:
         #        self.layout.operator("shift_from.blendergis", icon="PASTEDOWN", text='from Bender GIS')
+
+        addon_updater_ops.update_notice_box_ui(self, context)
 
 class ToolsPanelQuickUtils:
     bl_label = "Quick Utils"
@@ -215,7 +218,7 @@ class ToolsPanelLODmanager:
         obj = context.object
         scene = context.scene
 
-        row = layout.row()        
+        row = layout.row()
         row.label(text="Change LOD of selected linked objects:")
         row = layout.row()
 
@@ -282,7 +285,7 @@ class ToolsPanelLODgenerator:
 
             row = layout.row()
             row.label(text="LOD clusters")
-            
+
             split = layout.split()
             # First column
             col = split.column()
@@ -290,7 +293,7 @@ class ToolsPanelLODgenerator:
             # Second column, aligned
             col = split.column(align=True)
             col.operator("remove.grouplod", icon="CANCEL", text='')
-            
+
             row = layout.row()
             row.label(text="LOD cluster(s) export:")
             self.layout.operator("exportfbx.grouplod", icon="MESH_GRID", text='FBX')
@@ -312,7 +315,7 @@ class ToolsPanel_ccTool:
         if context.active_object:
             if obj.type not in ['MESH']:
                 select_a_mesh(layout)
-            else:    
+            else:
                 activeobj = context.active_object
                 if get_nodegroupname_from_obj(obj) is None:
                     layout.operator("create.ccsetup", icon="SEQ_HISTOGRAM", text='create cc setup')
@@ -377,7 +380,7 @@ class ToolsPanel_ccTool:
                     row = layout.row()
 
                     layout.operator("applyccsetup.material", icon="FILE_TICK", text='apply cc')
-                row = layout.row() 
+                row = layout.row()
         else:
             select_a_mesh(layout)
 
@@ -411,7 +414,7 @@ class ToolsPanelPhotogrTool:
         if cam_ob is None:
             row = layout.row()
             row.label(text="Please, add a Cam to see tools here")
-            
+
         else:
             obj = context.object
             obj_selected = context.view_layer.objects.active
@@ -446,7 +449,7 @@ class ToolsPanelPhotogrTool:
                 else:
                     row = layout.row()
                     row.label(text="Please select a mesh or a cam", icon='PLUS')
- 
+
             row = layout.row()
             row.label(text="Painting Toolbox", icon='PLUS')
             row = layout.row()
@@ -471,7 +474,7 @@ class ToolsPanelPhotogrTool:
                 else:
                     row = layout.row()
                     row.label(text="Please, set a photo to camera", icon='TPAINT_HLT')
-                
+
                 self.layout.operator("applypaint.cam", icon="PLUS", text='Apply paint')
                 self.layout.operator("savepaint.cam", icon="PLUS", text='Save modified texs')
                 row = layout.row()
@@ -508,9 +511,9 @@ class ToolsPanelTexPatcher:
                 row.prop(scene.tool_settings.image_paint, "use_occlude")
                 row.prop(scene.tool_settings.image_paint, "use_backface_culling")
                 row.prop(scene.tool_settings.image_paint, "use_normal_falloff")
-                
+
                 row = layout.row()
-                self.layout.operator("exit.setup", icon="OBJECT_DATAMODE", text='Exit paint mode')            
+                self.layout.operator("exit.setup", icon="OBJECT_DATAMODE", text='Exit paint mode')
             row = layout.row()
             self.layout.operator("savepaint.cam", icon="DISK_DRIVE", text='Save new textures')
             self.layout.operator("remove.sp", icon="CANCEL", text='Remove image source')
@@ -605,7 +608,7 @@ class PANOToolsPanel:
         if context.active_object:
             if obj.type not in ['MESH']:
                 select_a_mesh(layout)
-            else:   
+            else:
                 row = layout.row()
                 split = layout.split()
                 col = split.column()
@@ -613,14 +616,14 @@ class PANOToolsPanel:
                 col = split.column()
                 col.operator("ubermat_update.pano", icon="MATERIAL", text='')
                 row = layout.row()
-                
+
                 #split = layout.split()
                 #col = split.column()
 
                 if len(scene.resolution_list) > 0:
                     row = layout.row()
                     row.menu(Res_menu.bl_idname, text=str(resolution_pano), icon='COLOR')
-                    
+
                 #col.prop(context.scene, 'RES_pano', toggle = True)
                 #col = split.column()
                 #col.operator("set.panores", icon="NODE_COMPOSITING", text='')
@@ -631,7 +634,7 @@ class PANOToolsPanel:
                 col = split.column()
                 col.label(text="Display mode")
                 col = split.column(align=True)
-                
+
                 #col.menu(Res_mode_menu.bl_idname, text=str(context.scene.RES_pano), icon='COLOR')
 
         row = layout.row()

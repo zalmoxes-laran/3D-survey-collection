@@ -56,3 +56,4 @@ docs/_build/
 
 # PyBuilder
 target/
+3d-survey-collection_updater/3D-survey-collection_updater_status.json

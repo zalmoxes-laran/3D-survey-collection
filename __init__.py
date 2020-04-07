@@ -19,8 +19,8 @@
 bl_info = {
     "name": "3D Survey Collection",
     "author": "Emanuel Demetrescu",
-    "version": (1,4.41),
-    "blender": (2, 81, 0),
+    "version": (1,4,41),
+    "blender": (2, 82, 0),
     "location": "3D View > Toolbox",
     "description": "A collection of tools for 3D Survey activities",
 #    "warning": "",
@@ -37,6 +37,7 @@ if "bpy" in locals():
 else:
     import math
     import bpy
+
     import bpy.props as prop
 
     from bpy.props import (
@@ -69,6 +70,63 @@ else:
             report_data,
             )
 
+
+# demo bare-bones preferences
+@addon_updater_ops.make_annotations
+class DemPreferences(bpy.types.AddonPreferences):
+    bl_idname = __package__
+    # addon updater preferences
+    auto_check_update = bpy.props.BoolProperty(
+        name="Auto-check for Update",
+        description="If enabled, auto-check for updates using an interval",
+        default=False,
+                )
+    updater_intrval_months = bpy.props.IntProperty(
+        name='Months',
+        description="Number of months between checking for updates",
+        default=0,
+        min=0
+                )
+    updater_intrval_days = bpy.props.IntProperty(
+        name='Days',
+        description="Number of days between checking for updates",
+        default=7,
+        min=0,
+        max=31
+                )
+    updater_intrval_hours = bpy.props.IntProperty(
+        name='Hours',
+        description="Number of hours between checking for updates",
+        default=0,
+        min=0,
+        max=23
+                )
+    updater_intrval_minutes = bpy.props.IntProperty(
+        name='Minutes',
+        description="Number of minutes between checking for updates",
+        default=0,
+        min=0,
+        max=59
+                )
+    def draw(self, context):
+        layout = self.layout
+        # col = layout.column() # works best if a column, or even just self.layout
+        mainrow = layout.row()
+        col = mainrow.column()
+        # updater draw function
+        # could also pass in col as third arg
+        addon_updater_ops.update_settings_ui(self, context)
+        # Alternate draw function, which is more condensed and can be
+        # placed within an existing draw function. Only contains:
+        #   1) check for update/update now buttons
+        #   2) toggle for auto-check (interval will be equal to what is set above)
+        # addon_updater_ops.update_settings_ui_condensed(self, context, col)
+        # Adding another column to help show the above condensed ui as one column
+        # col = mainrow.column()
+        # col.scale_y = 2
+        # col.operator("wm.url_open","Open webpage ").url=addon_updater_ops.updater.website
+
+
 class RES_list(PropertyGroup):
     """ List of resolutions """
 
@@ -99,10 +157,10 @@ class PANOListItem(PropertyGroup):
             default="GROUP_UVS")
 
     resol_pano : IntProperty(
-            name = "Res", 
+            name = "Res",
             default = 1,
             description = "Resolution of Panoramic image for this bubble")
-                    
+
 class PANO_UL_List(bpy.types.UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, resol_pano, index):
         #scene = context.scene
@@ -229,46 +287,47 @@ classes = (
     CAMTypeList,
     RES_list,
     LODitemListItem,
+    DemPreferences,
 )
 
-
-
-
 def register():
+
+    addon_updater_ops.register(bl_info)
+
     for cls in classes:
         bpy.utils.register_class(cls)
-    
+
     bpy.types.WindowManager.interface_vars = bpy.props.PointerProperty(type=InterfaceVars)
     bpy.types.WindowManager.ccToolViewVar = bpy.props.PointerProperty(type=ccToolViewVar)
 
 
 #def initSceneProperties(scn):
     bpy.types.Scene.LODnum = IntProperty(
-        name = "LODs", 
+        name = "LODs",
         default = 1,
         min = 1,
         max = 3,
         description = "Enter desired number of LOD (Level of Detail)")
-    
+
     bpy.types.Scene.setLODnum = IntProperty(
-        name = "LOD", 
+        name = "LOD",
         default = 0,
         min = 0,
         max = 3,
         description = "Enter desired number of LOD (Level of Detail)")
 
     bpy.types.Scene.LOD1_tex_res = IntProperty(
-        name = "Resolution Texture of the LOD1", 
+        name = "Resolution Texture of the LOD1",
         default = 2048,
         description = "Enter the resolution for the texture of the LOD1")
 
     bpy.types.Scene.LOD2_tex_res = IntProperty(
-        name = "Resolution Texture of the LOD2", 
+        name = "Resolution Texture of the LOD2",
         default = 512,
         description = "Enter the resolution for the texture of the LOD2")
 
     bpy.types.Scene.LOD3_tex_res = IntProperty(
-        name = "Resolution Texture of the LOD3", 
+        name = "Resolution Texture of the LOD3",
         default = 128,
         description = "Enter the resolution for the texture of the LOD3")
 
@@ -276,13 +335,13 @@ def register():
         name = "LOD1 decimation ratio",
         default = 0.5,
         description = "Define the decimation ratio of the LOD 1",
-        )    
-    
+        )
+
     bpy.types.Scene.LOD2_dec_ratio = FloatProperty(
         name = "LOD2 decimation ratio",
         default = 0.1,
         description = "Define the decimation ratio of the LOD 2",
-        )    
+        )
 
     bpy.types.Scene.LOD3_dec_ratio = FloatProperty(
         name = "LOD3 decimation ratio",
@@ -296,7 +355,7 @@ def register():
       description = "Define the root path of the undistorted images",
       subtype = 'DIR_PATH'
       )
-      
+
     bpy.types.Scene.BL_x_shift = FloatProperty(
       name = "X shift",
       default = 0.0,
@@ -316,10 +375,10 @@ def register():
         )
 
     bpy.types.Scene.RES_pano = IntProperty(
-        name = "Res", 
+        name = "Res",
         default = 1,
         description = "Resolution of Panoramic image for bubbles")
-    
+
     bpy.types.Scene.camera_type = StringProperty(
         name = "Camera type",
         default = "Not set",
@@ -360,6 +419,8 @@ def register():
     )
 
 def unregister():
+
+    addon_updater_ops.unregister(bl_info)
     for cls in classes:
         try:
                 bpy.utils.unregister_class(cls)
