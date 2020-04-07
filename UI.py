@@ -72,6 +72,7 @@ class VIEW3D_PT_mesh_analyze(Panel, View3DCheckPanel):
         row = layout.row(align=True)
         #row.operator("mesh.print3d_info_volume", text="Volume")
         row.operator("mesh.info_area", text="Area")
+        row.operator("mesh.info_texs", text="TexRes")
 
         self.draw_report(context)
 

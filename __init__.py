@@ -69,6 +69,7 @@ else:
             PanoramaSuite,
             report_data,
             addon_updater_ops,
+            qualitycheck,
             )
 
 
@@ -283,6 +284,7 @@ classes = (
     PanoramaSuite.ubermat_update,
     PanoramaSuite.SETpanoRES,
     qualitycheck.MESH_OT_info_area,
+    qualitycheck.MESH_OT_info_texs,
     PANO_UL_List,
     PANOListItem,
     CAMTypeList,
