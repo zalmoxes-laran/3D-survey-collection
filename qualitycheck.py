@@ -74,9 +74,8 @@ class MESH_OT_info_texs(Operator):
                         if image_size == 4096:
                             tex_list_4096 += 1
 
-        print("Ci sono "+ str(len(selected))+ " oggetti, con "+ str(material_count) +" materiali, di cui " +str(tex_list_512)+" con textures 512 px e "+str(tex_list_1024)+" con textures 1024 px e "+str(tex_list_2048)+" con textures 2048 px e "+ str(tex_list_4096)+" con textures 4096 px" )
+        #print("Ci sono "+ str(len(selected))+ " oggetti, con "+ str(material_count) +" materiali, di cui " +str(tex_list_512)+" con textures 512 px e "+str(tex_list_1024)+" con textures 1024 px e "+str(tex_list_2048)+" con textures 2048 px e "+ str(tex_list_4096)+" con textures 4096 px" )
 
-
-        #report_data.update((f"Area: {area_fmt}²", None))
+        report_data.update((f" "+str(len(selected))+" ob; " + str(material_count) +" mats; 512: " +str(tex_list_512)+"; 1024: "+str(tex_list_1024)+"; 2048: "+str(tex_list_2048)+"; 4096: "+ str(tex_list_4096), None))
 
         return {'FINISHED'}

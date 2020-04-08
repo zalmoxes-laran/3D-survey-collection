@@ -56,12 +56,13 @@ class VIEW3D_PT_mesh_analyze(Panel, View3DCheckPanel):
             col = box.column()
 
             for i, (text, data) in enumerate(info):
-                if is_edit and data and data[1]:
-                    bm_type, _bm_array = data
-                    col.operator("mesh.print3d_select_report", text=text,
-                                 icon=self._type_to_icon[bm_type],).index = i
-                else:
-                    col.label(text=text)
+                col.label(text=text)
+                # if is_edit and data and data[1]:
+                #     bm_type, _bm_array = data
+                #     col.operator("mesh.print3d_select_report", text=text,
+                #                  icon=self._type_to_icon[bm_type],).index = i
+                # else:
+                #     col.label(text=text)
 
     def draw(self, context):
         layout = self.layout
