@@ -8,6 +8,7 @@ from bpy.types import Menu, UIList
 
 from .functions import *
 from . import report_data
+from . import addon_updater_ops
 
 import os
 from bpy_extras.io_utils import ImportHelper, axis_conversion
@@ -135,7 +136,7 @@ class ToolsPanelSHIFT:
     bl_label = "Shifting"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_options = {'DEFAULT_CLOSED'}
+    #bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
         addon_updater_ops.check_for_update_background()
