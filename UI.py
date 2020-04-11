@@ -74,7 +74,8 @@ class VIEW3D_PT_mesh_analyze(Panel, View3DCheckPanel):
         row = layout.row(align=True)
         #row.operator("mesh.print3d_info_volume", text="Volume")
         row.operator("mesh.info_area", text="Area")
-        row.operator("mesh.info_texs", text="TexRes")
+        row.operator("mesh.info_texs", text="TexStats")
+        row.operator("mesh.info_texres", text="TexRes")
 
         self.draw_report(context)
 
@@ -486,7 +487,7 @@ class ToolsPanelPhotogrTool:
 
 
 class ToolsPanelTexPatcher:
-    bl_label = "Texture patcher"
+    bl_label = "Texture mixer"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_options = {'DEFAULT_CLOSED'}

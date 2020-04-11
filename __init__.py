@@ -145,6 +145,30 @@ class CAMTypeList(PropertyGroup):
             description="A name for this item",
             default="Untitled")
 
+class AnalysisListItem(PropertyGroup):
+    """ Group of properties representing an item in the list """
+
+    # name : StringProperty(
+    #         name="Name",
+    #         description="A name for this item",
+    #         default="Untitled")
+
+    # icon : StringProperty(
+    #         name="code for icon",
+    #         description="",
+    #         default="GROUP_UVS")
+
+    res_tex : IntProperty(
+            name = "Res",
+            default = 0,
+            description = "Resolution of Image Texture")
+
+    res_counter : IntProperty(
+            name = "Number of instances",
+            default = 0,
+            description = "Number of instances for a given resolution")
+
+
 class PANOListItem(PropertyGroup):
     """ Group of properties representing an item in the list """
 
@@ -285,12 +309,14 @@ classes = (
     PanoramaSuite.SETpanoRES,
     qualitycheck.MESH_OT_info_area,
     qualitycheck.MESH_OT_info_texs,
+    qualitycheck.MESH_OT_info_texres,
     PANO_UL_List,
     PANOListItem,
     CAMTypeList,
     RES_list,
     LODitemListItem,
     DemPreferences,
+    AnalysisListItem,
 )
 
 def register():
@@ -400,6 +426,7 @@ def register():
     bpy.types.Scene.pano_list = CollectionProperty(type = PANOListItem)
     bpy.types.Scene.pano_list_index = IntProperty(name = "Index for my_list", default = 0)
     bpy.types.Scene.lod_list_item = CollectionProperty(type = LODitemListItem)
+    bpy.types.Scene.analysis_list = CollectionProperty(type = AnalysisListItem)
 
     bpy.types.Scene.PANO_file = StringProperty(
     name = "TXT",
@@ -453,3 +480,4 @@ def unregister():
     del bpy.types.Scene.PANO_dir
     del bpy.types.Scene.PANO_cam_lens
     del bpy.types.Scene.lod_list_item
+    del bpy.types.Scene.analysis_list

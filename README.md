@@ -64,11 +64,12 @@ The **Color correction** panel allows to
 
 You can link this github repo [3DSC Website](https://github.com/zalmoxes-laran/BlenderLandscape "Title") or cite
 
-	@misc{demetrescu_3d_2018,
-	title = {3D {Survey} {Collection}},
-	url = {https://github.com/zalmoxes-laran/BlenderLandscape},
+	@software{demetrescu_3d_2020,
 	author = {Demetrescu, Emanuel},
-	year = {2018}
+	title = {3D {Survey} {Collection}},
+	url = {https://github.com/zalmoxes-laran/3D-survey-collection},
+	version = {1.4.42},
+	date = {2020-04-07},
 	}
 
 ### Contact
