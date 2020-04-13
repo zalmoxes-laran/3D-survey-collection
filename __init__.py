@@ -19,7 +19,7 @@
 bl_info = {
     "name": "3D Survey Collection",
     "author": "Emanuel Demetrescu",
-    "version": (1,4,42),
+    "version": (1,4,43),
     "blender": (2, 82, 0),
     "location": "3D View > Toolbox",
     "description": "A collection of tools for 3D Survey activities",
@@ -225,7 +225,6 @@ class LODitemListItem(PropertyGroup):
             description="library name",
             default="Untitled")
 
-
 classes = (
     UI.VIEW3D_PT_Shift_ToolBar,
     UI.VIEW3D_PT_Import_ToolBar,
@@ -419,6 +418,7 @@ def register():
         default = 35,
         description = "Lens camera",
         )
+    bpy.types.Scene.info_log = []
 
 # panoramic
     bpy.types.Scene.camera_list = CollectionProperty(type = CAMTypeList)

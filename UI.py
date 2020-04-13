@@ -23,7 +23,7 @@ from bpy.props import (BoolProperty,
 
 class View3DCheckPanel:
 
-    bl_label = "Inspection Panel"
+    bl_label = "Model Inspector"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
 
@@ -75,7 +75,7 @@ class VIEW3D_PT_mesh_analyze(Panel, View3DCheckPanel):
         #row.operator("mesh.print3d_info_volume", text="Volume")
         row.operator("mesh.info_area", text="Area")
         row.operator("mesh.info_texs", text="TexStats")
-        row.operator("mesh.info_texres", text="TexRes")
+        row.operator("mesh.info_texres", text="MeanRes")
 
         self.draw_report(context)
 
