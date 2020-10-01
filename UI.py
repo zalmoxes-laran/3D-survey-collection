@@ -202,8 +202,8 @@ class ToolsPanelQuickUtils:
         # row = layout.row()
 
         # self.layout.operator("obname.ffn", icon="META_DATA", text='Ren active from namefile')
-        # row = layout.row()
-        # self.layout.operator("rename.ge", icon="META_DATA", text='Ren 4 GE')
+        row = layout.row()
+        self.layout.operator("rename.ge", icon="META_DATA", text='Ren 4 GE')
         # row = layout.row()
         # row.label(text="Switch engine")
         # self.layout.operator("activatenode.material", icon="PMARKER_SEL", text='Activate cycles nodes')
