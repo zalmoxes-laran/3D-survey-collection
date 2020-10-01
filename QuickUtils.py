@@ -5,6 +5,37 @@ from random import randint, choice
 from .functions import *
 from .qualitycheck import *
 
+class OBJECT_OT_renameGEobject(bpy.types.Operator):
+    """Rename data tree of selected objects using the object name"""
+    bl_idname = "rename.ge"
+    bl_label = "Rename data tree of selected objects using the object name (usefull for GE export)"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        context = bpy.context
+        scene = context.scene
+        selection = context.selected_objects
+        for ob in selection:
+            ob.data.name = "ME_"+ob.name
+            if ob.material_slots:
+                mslot_index = 0
+                tslot_index = 0
+                for m_slot in ob.material_slots:
+                    if m_slot.material:
+                        mslot_index += 1
+                        if m_slot.material.users == 1:
+                            m_slot.material.name = "M_"+str(mslot_index)+"_"+ob.name
+                        else:
+                            m_slot.material.name = "M_"+str(mslot_index)+"_"+ob.name
+                        # if m_slot.material.texture_slots:
+                        #     if(len(m_slot.material.texture_slots) > 0):
+                        #         tslot_index += 1
+                        #         m_tex = m_slot.material.texture_slots[0]
+                        #         m_tex.texture.name = "T_"+str(tslot_index)+"_"+ob.name
+                        #         m_tex.texture.image.name = "img_"+str(mslot_index)+"_"+ob.name
+        return {'FINISHED'}
+
+
 class OBJECT_OT_circumcenter(bpy.types.Operator):
     """Set the cursor in the center of a circumference"""
     bl_idname = "circum.center"
