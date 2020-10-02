@@ -448,6 +448,13 @@ def register():
     description = "Define the lens of the cameras",
     )
 
+    bpy.types.Scene.FBX_export_dir = StringProperty(
+    name = "FBX_export_DIR",
+    default = "",
+    description = "Define the path to the FBX export folder",
+    subtype = 'DIR_PATH'
+    )
+
 def unregister():
 
     addon_updater_ops.unregister(bl_info)
@@ -481,3 +488,4 @@ def unregister():
     del bpy.types.Scene.PANO_cam_lens
     del bpy.types.Scene.lod_list_item
     del bpy.types.Scene.analysis_list
+    del bpy.types.Scene.FBX_export_dir

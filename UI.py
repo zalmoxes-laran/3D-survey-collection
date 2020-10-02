@@ -125,6 +125,8 @@ class ToolsPanelExport:
             row = box.row()
             row.label(text= "-> /objectname.obj")
             row = box.row()
+            row.prop(context.scene, 'FBX_export_dir', toggle = True)
+            row = layout.row()
             row.operator("fbx.exportbatch", icon="DUPLICATE", text='Several fbx UE4')
             row = box.row()
             row.label(text= "-> /FBX/objectname.fbx")
