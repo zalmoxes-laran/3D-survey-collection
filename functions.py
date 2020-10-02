@@ -44,6 +44,25 @@ class OBJECT_OT_createcyclesmat(bpy.types.Operator):
 
 ##########################################################################################
 
+def rename_ge(ob):
+    ob.data.name = "ME_"+ob.name
+    if ob.material_slots:
+        mslot_index = 0
+        tslot_index = 0
+        for m_slot in ob.material_slots:
+            if m_slot.material:
+                mslot_index += 1
+                if m_slot.material.users == 1:
+                    m_slot.material.name = "M_"+str(mslot_index)+"_"+ob.name
+                else:
+                    m_slot.material.name = "M_"+str(mslot_index)+"_"+ob.name
+                # if m_slot.material.texture_slots:
+                #     if(len(m_slot.material.texture_slots) > 0):
+                #         tslot_index += 1
+                #         m_tex = m_slot.material.texture_slots[0]
+                #         m_tex.texture.name = "T_"+str(tslot_index)+"_"+ob.name
+                #         m_tex.texture.image.name = "img_"+str(mslot_index)+"_"+ob.name
+
 def circumcenter(ax,ay,bx,by,cx,cy):
     # ax = float(input('What is x of point 1?'))
     # ay = float(input('What is y of point 1?'))
@@ -320,7 +339,8 @@ def decimate_mesh(context,obj,ratio,lod):
     D.objects[obj.name].modifiers["Decimate"].ratio = ratio
     D.objects[obj.name].modifiers["Decimate"].vertex_group = "Group"
     D.objects[obj.name].modifiers["Decimate"].invert_vertex_group = True
-    bpy.ops.object.modifier_apply(apply_as='DATA', modifier="Decimate")
+    bpy.ops.object.modifier_apply(modifier="Decimate")
+#    bpy.ops.object.modifier_apply(apply_as='DATA', modifier="Decimate")
 #    print("applied modifier")
 
 def setupclonepaint():

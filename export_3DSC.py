@@ -158,7 +158,13 @@ class OBJECT_OT_objexportbatch(bpy.types.Operator):
 
     def execute(self, context):
 
-        basedir = os.path.dirname(bpy.data.filepath)
+        if bpy.context.scene.FBX_export_dir:
+            basedir = os.path.dirname(bpy.context.scene.FBX_export_dir)
+            #subfolder = ''
+        else:
+            basedir = os.path.dirname(bpy.data.filepath)
+            #subfolder = 'FBX'
+
         if not basedir:
             raise Exception("Blend file is not saved")
 
@@ -181,7 +187,6 @@ class OBJECT_OT_fbxexp(bpy.types.Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
-
         basedir = os.path.dirname(bpy.data.filepath)
         subfolder = 'FBX'
         if not os.path.exists(os.path.join(basedir, subfolder)):
@@ -220,8 +225,15 @@ class OBJECT_OT_fbxexportbatch(bpy.types.Operator):
 
     def execute(self, context):
 
-        basedir = os.path.dirname(bpy.data.filepath)
-        subfolder = 'FBX'
+        if bpy.context.scene.FBX_export_dir:
+            basedir = os.path.dirname(bpy.context.scene.FBX_export_dir)
+            subfolder = ''
+        else:
+            basedir = os.path.dirname(bpy.data.filepath)
+            subfolder = 'FBX'
+
+        #basedir = os.path.dirname(bpy.data.filepath)
+        
         createfolder(basedir, subfolder)
         subfolderpath = os.path.join(basedir, subfolder)
 

@@ -19,8 +19,8 @@
 bl_info = {
     "name": "3D Survey Collection",
     "author": "Emanuel Demetrescu",
-    "version": (1,4,44),
-    "blender": (2, 83, 0),
+    "version": (1,4,50),
+    "blender": (2, 90, 1),
     "location": "3D View > Toolbox",
     "description": "A collection of tools for 3D Survey activities",
 #    "warning": "",
@@ -449,7 +449,7 @@ def register():
     )
 
     bpy.types.Scene.FBX_export_dir = StringProperty(
-    name = "FBX_export_DIR",
+    name = "Export folder",
     default = "",
     description = "Define the path to the FBX export folder",
     subtype = 'DIR_PATH'

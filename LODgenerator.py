@@ -42,6 +42,7 @@ class OBJECT_OT_LOD0(bpy.types.Operator):
                     pass
             else:
                 create_double_UV(obj)
+            rename_ge(obj)            
         return {'FINISHED'}
 
 #_____________________________________________________________________________
@@ -77,6 +78,8 @@ class OBJECT_OT_LOD(bpy.types.Operator):
         ob_tot = len(selected_objects)
         LODnum = context.scene.LODnum
         i_lodbake_counter = 1
+
+        #context.view_layer.active_layer_collection = bpy.data.collections.get('LOD0')
 
         basedir = os.path.dirname(bpy.data.filepath)
         if not basedir:
@@ -242,7 +245,15 @@ class OBJECT_OT_ExportGroupsLOD(bpy.types.Operator):
 
     def execute(self, context):
         start_time = time.time()
-        basedir = os.path.dirname(bpy.data.filepath)
+
+        if bpy.context.scene.FBX_export_dir:
+            basedir = os.path.dirname(bpy.context.scene.FBX_export_dir)
+            subfolder = ''
+        else:
+            basedir = os.path.dirname(bpy.data.filepath)
+            subfolder = 'FBX'
+
+        #basedir = os.path.dirname(bpy.data.filepath)
         if not basedir:
             raise Exception("Blend file is not saved")
         ob_counter = 1

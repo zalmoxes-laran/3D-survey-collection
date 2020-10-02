@@ -113,24 +113,27 @@ class ToolsPanelExport:
 
             box = layout.box()
             row = box.row()
-            row.operator("export.object", icon="OBJECT_DATA", text='One obj')
+            row.label(text= "Export object(s) in one file:")
             row = box.row()
-            row.operator("fbx.exp", icon="OBJECT_DATA", text='One fbx UE4')
+            row.operator("export.object", icon="OBJECT_DATA", text='obj')
+            #row = box.row()
+            row.operator("fbx.exp", icon="OBJECT_DATA", text='fbx')
             row = box.row()
             row.label(text= "-> "+obj.name + ".obj/.fbx")
 
             box = layout.box()
             row = box.row()
-            row.operator("obj.exportbatch", icon="DUPLICATE", text='Several obj')
+            row.label(text= "Export objects in several files:")
             row = box.row()
-            row.label(text= "-> /objectname.obj")
+            row.operator("obj.exportbatch", icon="DUPLICATE", text='obj')
+            row.operator("fbx.exportbatch", icon="DUPLICATE", text='fbx')
             row = box.row()
-            row.prop(context.scene, 'FBX_export_dir', toggle = True)
-            row = layout.row()
-            row.operator("fbx.exportbatch", icon="DUPLICATE", text='Several fbx UE4')
+            if not bpy.context.scene.FBX_export_dir:
+                row.label(text= "-> /objectname.obj")
+                row = box.row()
+                row.label(text= "-> /FBX/objectname.fbx")
             row = box.row()
-            row.label(text= "-> /FBX/objectname.fbx")
-
+            row.prop(context.scene, 'FBX_export_dir', toggle = True, text='Export to')
         else:
             row.label(text="Select object(s) to see tools here.")
             row = layout.row()
@@ -302,6 +305,8 @@ class ToolsPanelLODgenerator:
 
             row = layout.row()
             row.label(text="LOD cluster(s) export:")
+            row = layout.row()
+            row.prop(context.scene, 'FBX_export_dir', toggle = True, text='folder')
             self.layout.operator("exportfbx.grouplod", icon="MESH_GRID", text='FBX')
 
 class ToolsPanel_ccTool:
@@ -472,7 +477,7 @@ class ToolsPanelPhotogrTool:
                 row.prop(cam_cam, "lens")
                 row = layout.row()
                 is_cam_ob_plane = check_children_plane(cam_ob)
-#                row.label(text=str(is_cam_ob_plane))
+               # row.label(text=str(is_cam_ob_plane))
                 if is_cam_ob_plane:
                     if obj.type in ['MESH']:
                         row.label(text="Active object: " + obj.name)
