@@ -431,6 +431,9 @@ class ToolsPanelPhotogrTool:
             obj_selected = context.view_layer.objects.active
             cam_cam = scene.camera.data
             row = layout.row()
+            op = row.operator("set_background.cam", icon="FILE_TICK", text='BG Cam')
+            op.name_cam = "Camera"
+            row = layout.row()
             row.label(text="Set up scene", icon='EXPERIMENTAL')
             #row.prop(scene, 'LODnum', icon='BLENDER', toggle=True)
             row = layout.row()

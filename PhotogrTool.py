@@ -2,6 +2,28 @@ import bpy
 import os
 from .functions import *
 
+class set_background_cam(bpy.types.Operator):
+    bl_idname = "set_background.cam"
+    bl_label = "Set background camera"
+    bl_options = {"REGISTER", "UNDO"}
+
+    name_cam : StringProperty()
+
+    def execute(self, context):
+        cam = bpy.data.cameras[self.name_cam]
+        clip_path = "/Users/emanueldemetrescu/Desktop/1917_b.jpg"
+
+        clip = bpy.data.movieclips.load(clip_path)
+        cam.show_background_images = True
+        back_img = cam.background_images.new()
+        back_img.source = 'MOVIE_CLIP'
+        back_img.clip = clip
+        back_img.clip_user.use_render_undistorted = True
+        back_img.display_depth = 'FRONT'
+
+        return {'FINISHED'} 
+
+
 class set_camera_type(bpy.types.Operator):
     bl_idname = "set_camera.type"
     bl_label = "Set Camera Type"

@@ -285,6 +285,7 @@ classes = (
     PhotogrTool.OBJECT_OT_CreateCameraImagePlane,
     PhotogrTool.XML_CAM_parse,
     PhotogrTool.set_camera_type,
+    PhotogrTool.set_background_cam,
     ccTool.OBJECT_OT_createccsetup,
     ccTool.OBJECT_OT_bakecyclesdiffuse,
     ccTool.OBJECT_OT_removeccsetup,
