@@ -23,7 +23,6 @@ class set_background_cam(bpy.types.Operator):
 
         return {'FINISHED'} 
 
-
 class set_camera_type(bpy.types.Operator):
     bl_idname = "set_camera.type"
     bl_label = "Set Camera Type"

@@ -495,7 +495,6 @@ class ToolsPanelPhotogrTool:
             else:
                 row.label(text="!!! Import some cams to start !!!")
 
-
 class ToolsPanelTexPatcher:
     bl_label = "Texture mixer"
     bl_space_type = 'VIEW_3D'
@@ -511,9 +510,9 @@ class ToolsPanelTexPatcher:
             row.label(text="Please, activate cycles engine !")
         else:
             row = layout.row()
-#            row.label(text="Select one or more source mesh")
-#            row = layout.row()
-#            row.label(text="+ a destination mesh")
+           # row.label(text="Select one or more source mesh")
+           # row = layout.row()
+           # row.label(text="+ a destination mesh")
             self.layout.operator("texture.transfer", icon="FULLSCREEN_EXIT", text='Transfer Texture')
             self.layout.operator("applysptexset.material", icon="AUTOMERGE_ON", text='Preview sp tex set')
             self.layout.operator("applyoritexset.material", icon="RECOVER_LAST", text='Use original tex set')
