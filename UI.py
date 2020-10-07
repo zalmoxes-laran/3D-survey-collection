@@ -95,8 +95,6 @@ class ToolsPanelImport:
         row = layout.row()
         self.layout.operator("import_cam.agixml", icon="DUPLICATE", text='Agisoft xml cams')
 
-
-
 class ToolsPanelExport:
     bl_label = "Exporters"
     bl_space_type = 'VIEW_3D'
@@ -430,6 +428,9 @@ class ToolsPanelPhotogrTool:
             obj = context.object
             obj_selected = context.view_layer.objects.active
             cam_cam = scene.camera.data
+            if scene.read_cam_xml:
+                parse_cam_xml("just_parse")
+                scene.read_cam_xml = False
             row = layout.row()
             op = row.operator("set_background.cam", icon="FILE_TICK", text='BG Cam')
             op.name_cam = "Camera"

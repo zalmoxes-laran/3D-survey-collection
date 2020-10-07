@@ -329,6 +329,10 @@ def register():
     bpy.types.WindowManager.interface_vars = bpy.props.PointerProperty(type=InterfaceVars)
     bpy.types.WindowManager.ccToolViewVar = bpy.props.PointerProperty(type=ccToolViewVar)
 
+    bpy.types.Scene.read_cam_xml = BoolProperty(
+        name = "initialize cam xml",
+        default = True,
+        description = "Read the list of cams to populate the context menu")
 
 #def initSceneProperties(scn):
     bpy.types.Scene.LODnum = IntProperty(
