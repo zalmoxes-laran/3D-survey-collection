@@ -27,7 +27,8 @@ class OBJECT_OT_savepaintcam(bpy.types.Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
-        bpy.ops.image.save_dirty()
+        #bpy.ops.image.save_dirty()
+        bpy.ops.image.save_all_modified()
 
         return {'FINISHED'}
 

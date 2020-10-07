@@ -30,4 +30,16 @@
         <x>2704</x>
         <y>1520</y>
     </cam>
+    <cam name="ILCE-7M3">
+        <s_width>37.66</s_width>
+        <s_height>21.22</s_height>
+        <x>3936</x>
+        <y>2216</y>
+    </cam>
+    <cam name="ILCE-7M3crop">
+        <s_width>37.66</s_width>
+        <s_height>21.22</s_height>
+        <x>3008</x>
+        <y>1688</y>
+    </cam>
 </data>
