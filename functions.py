@@ -135,8 +135,9 @@ def parse_cam_xml(name_cam):
     tree = ET.parse(path2xml)
     root = tree.getroot()
     scene = bpy.context.scene
-    #bpy.types.Scene.camera_list = []
+    
     if name_cam == "just_parse":
+        #scene.camera_list = []
         scene.camera_list.clear()
         idx = 0
         for cam in root.findall('cam'):

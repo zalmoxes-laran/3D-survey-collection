@@ -286,7 +286,6 @@ class OBJECT_OT_ExportGroupsLOD(bpy.types.Operator):
 #_______________________________________________________________
 
 
-
 class OBJECT_OT_RemoveGroupsLOD(bpy.types.Operator):
     """Removes LOD cluster(s)"""
     bl_idname = "remove.grouplod"
