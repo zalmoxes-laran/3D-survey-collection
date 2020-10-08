@@ -120,8 +120,10 @@ class OBJECT_OT_CreateCameraImagePlane(bpy.types.Operator):
 
     def createImagePlaneForCamera(self, camera):
         imageplane = None
+        if not bpy.context.scene.BL_undistorted_path:
+            raise Exception("Hey Buddy, you have to set the undistorted images path !")
         try:
-            depth = 10
+            depth = 1
 
             #create imageplane
             bpy.ops.mesh.primitive_plane_add()#radius = 0.5)
@@ -148,15 +150,10 @@ class OBJECT_OT_CreateCameraImagePlane(bpy.types.Operator):
             #setup material
             activename = bpy.path.clean_name(bpy.context.view_layer.objects.active.name)
             undistortedpath = bpy.context.scene.BL_undistorted_path
-
-            if not undistortedpath:
-                raise Exception("Hey Buddy, you have to set the undistorted images path !")
-
             image_cam = bpy.data.images.load(undistortedpath+cameraname)
             mat_from_image(image_cam,imageplane,True)
 
             #bpy.context.object.data.uv_layers.active.data[0].image = 
-
             #bpy.ops.view3d.tex_to_material()
 
         except Exception as e:

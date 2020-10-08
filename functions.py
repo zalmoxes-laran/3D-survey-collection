@@ -769,10 +769,8 @@ def desiredmatnumber(ob):
         else:
             desmatnumber = 6
             print("Be carefull ! the mesh is "+str(area)+" square meters is too big, consider to reduce it under 100. I will use six 4096 texture to describe it.")
-
     else:
         desmatnumber = 1
-
     return desmatnumber
 
 
@@ -830,6 +828,7 @@ def mat_from_image(img,ob,alpha):
         mat.node_tree.links.new(bsdf.outputs[0], mixshader_node.inputs[1])
         mat.node_tree.links.new(alpha_node.outputs[0], mixshader_node.inputs[2])
         mat.node_tree.links.new(mixshader_node.outputs['Shader'], material_output.inputs[0])
+        mat.blend_method = 'BLEND'
 
     # Assign it to object
     if ob.data.materials:
@@ -1251,3 +1250,8 @@ def clean_float(text):
         tail = tail.rstrip("0")
         text = head + tail
     return text
+
+def clean_suffix(ob,suffix):
+    if ob.name.endswith(suffix):
+        ob.name = ob.name[:-4]
+    return

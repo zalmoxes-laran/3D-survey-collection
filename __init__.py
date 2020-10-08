@@ -19,7 +19,7 @@
 bl_info = {
     "name": "3D Survey Collection",
     "author": "Emanuel Demetrescu",
-    "version": (1,4,50),
+    "version": (1,4,55),
     "blender": (2, 90, 1),
     "location": "3D View > Toolbox",
     "description": "A collection of tools for 3D Survey activities",
@@ -71,7 +71,6 @@ else:
             addon_updater_ops,
             qualitycheck,
             )
-
 
 # demo bare-bones preferences
 @addon_updater_ops.make_annotations
@@ -202,6 +201,16 @@ class InterfaceVars(PropertyGroup):
         default='RGB'
     )
 
+class SuffixVars(PropertyGroup):
+    suffixnum: EnumProperty(
+        items=[
+            ('.001', '.001', '.001', '', 0),
+            ('.002', '.002', '.002', '', 1),
+            ('.003', '.003', '.003', '', 2),
+        ],
+        default='.001'
+    )
+
 class ccToolViewVar(PropertyGroup):
     cc_view: EnumProperty(
         items=[
@@ -272,6 +281,7 @@ classes = (
     QuickUtils.OBJECT_OT_renameGEobject,
     QuickUtils.OBJECT_OT_tiff2pngrelink,
     QuickUtils.OBJECT_OT_circumcenter,
+    QuickUtils.OBJECT_OT_remove_suffixnumber,
     LODgenerator.OBJECT_OT_CreateGroupsLOD,
     LODgenerator.OBJECT_OT_ExportGroupsLOD,
     LODgenerator.OBJECT_OT_LOD,
@@ -298,6 +308,7 @@ classes = (
     TexPatcher.OBJECT_OT_removepaintsetup,
     TexPatcher.OBJECT_OT_textransfer,
     InterfaceVars,
+    SuffixVars,
     ccToolViewVar,
     PanoramaSuite.REMOVE_pano,
     PanoramaSuite.VIEW_pano,
@@ -328,6 +339,7 @@ def register():
 
     bpy.types.WindowManager.interface_vars = bpy.props.PointerProperty(type=InterfaceVars)
     bpy.types.WindowManager.ccToolViewVar = bpy.props.PointerProperty(type=ccToolViewVar)
+    bpy.types.WindowManager.suffix_num = bpy.props.PointerProperty(type=SuffixVars)    
 
 #def initSceneProperties(scn):
     bpy.types.Scene.LODnum = IntProperty(
@@ -466,6 +478,7 @@ def unregister():
 
     del bpy.types.Scene.setLODnum
     del bpy.types.WindowManager.interface_vars
+    del bpy.types.WindowManager.suffix_num
     del bpy.types.WindowManager.ccToolViewVar
     del bpy.types.Scene.LODnum
     del bpy.types.Scene.LOD1_tex_res

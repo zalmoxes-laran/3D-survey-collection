@@ -493,3 +493,15 @@ def switch_LOD_linked_data():
     for obj in data_to.objects:
         if obj is not None:
             scn.objects.link(obj)
+
+class OBJECT_OT_remove_suffixnumber(bpy.types.Operator):
+    bl_idname = "remove.suffixnumber"
+    bl_label = "Remove the suffix from object's name"
+    bl_options = {"REGISTER", "UNDO"}
+
+    suffix : StringProperty()
+
+    def execute(self, context):
+        for ob in bpy.context.selected_objects:
+            clean_suffix(ob,self.suffix)
+        return {'FINISHED'}

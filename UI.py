@@ -207,6 +207,11 @@ class ToolsPanelQuickUtils:
         # self.layout.operator("obname.ffn", icon="META_DATA", text='Ren active from namefile')
         row = layout.row()
         self.layout.operator("rename.ge", icon="META_DATA", text='Ren 4 GE')
+        row = layout.row()
+        op = self.layout.operator("remove.suffixnumber", icon="META_DATA", text='kill suffix')
+        op.suffix = context.window_manager.suffix_num.suffixnum
+        row = layout.row()
+        row.prop(context.window_manager.suffix_num, 'suffixnum', expand=True)
         # row = layout.row()
         # row.label(text="Switch engine")
         # self.layout.operator("activatenode.material", icon="PMARKER_SEL", text='Activate cycles nodes')
@@ -418,13 +423,14 @@ class ToolsPanelPhotogrTool:
         scene = context.scene
         cam_ob = None
         cam_ob = scene.camera
-        camera_type = context.scene.camera_type
+
 
         if cam_ob is None:
             row = layout.row()
             row.label(text="Please, add a Cam to see tools here")
 
         else:
+            camera_type = context.scene.camera_type
             obj = context.object
             obj_selected = context.view_layer.objects.active
             cam_cam = scene.camera.data
