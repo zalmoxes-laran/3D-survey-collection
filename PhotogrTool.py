@@ -183,8 +183,8 @@ class OBJECT_OT_CreateCameraImagePlane(bpy.types.Operator):
     def execute(self, context):
 #        camera = bpy.context.active_object #bpy.data.objects['Camera']
         scene = context.scene
-        undistortedpath = bpy.context.scene.BL_undistorted_path
-        cam_ob = bpy.context.scene.camera
+        undistortedpath = scene.BL_undistorted_path
+        cam_ob = scene.camera
 
         if not undistortedpath:
             raise Exception("Set the Undistort path before to activate this command")

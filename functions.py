@@ -727,7 +727,6 @@ def getnextobjname(name):
     return nextname
 
 
-
 def newimage2selpoly(ob, nametex):
 #    objectname = ob.name
     print("I'm creating texture: T_"+nametex+".png")
@@ -1082,8 +1081,6 @@ def setup_mat_panorama_3DSC(matname, img):
     teximgNode.location = (-1200, 50)
     links.new(mainNode.outputs[0], output.inputs[0])
     links.new(teximgNode.outputs[0], mainNode.inputs[0])
-
-
 
 def create_mat(ob):
     context = bpy.context
