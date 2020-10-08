@@ -146,29 +146,14 @@ class OBJECT_OT_CreateCameraImagePlane(bpy.types.Operator):
             self.SetupDriversForImagePlane(imageplane)
 
             #setup material
-            if( len( imageplane.material_slots) == 0 ):
-                bpy.ops.object.material_slot_add()
-                #imageplane.material_slots.
-            bpy.ops.material.new()
-            mat_index = len(bpy.data.materials)-1
-            imageplane.material_slots[0].material = bpy.data.materials[mat_index]
-            material =  imageplane.material_slots[0].material
-            # if not returned by new use imgeplane.material_slots[0].material
-            material.name = 'mat_imageplane_'+cameraname
-
-            material.use_nodes = True
-
             activename = bpy.path.clean_name(bpy.context.view_layer.objects.active.name)
-
             undistortedpath = bpy.context.scene.BL_undistorted_path
 
             if not undistortedpath:
                 raise Exception("Hey Buddy, you have to set the undistorted images path !")
 
-            
             image_cam = bpy.data.images.load(undistortedpath+cameraname)
-
-            setup_mat_panorama_3DSC(material.name, image_cam)
+            mat_from_image(image_cam,imageplane,True)
 
             #bpy.context.object.data.uv_layers.active.data[0].image = 
 
