@@ -805,6 +805,33 @@ def create_material_from_image(context,image,oggetto,connect):
 
     return mat, texImage, bsdf
 
+
+def mat_from_image(context,img,ob,alpha):
+    mat = bpy.data.materials.new(name='M_'+ ob.name)
+    mat.use_nodes = True
+    bsdf = mat.node_tree.nodes["Principled BSDF"]
+    texImage = mat.node_tree.nodes.new('ShaderNodeTexImage')
+    texImage.image = img
+
+    if alpha == True:
+        alpha_node = mat.node_tree.nodes.new('BSDF_TRANSPARENT)
+        alpha_node.location = (-80,-518)
+
+        mat.node_tree.links.new(bsdf.inputs['Base Color'], texImage.outputs['Color'])
+
+    # Assign it to object
+    if ob.data.materials:
+        ob.data.materials[0] = mat
+    else:
+        ob.data.materials.append(mat)
+
+    mat.node_tree.nodes.active = texImage
+
+    return mat, texImage, bsdf
+
+
+
+
 #sezione panorami
 
 # AGGIUNTA DI MODULO PER GIRARE LE UV
