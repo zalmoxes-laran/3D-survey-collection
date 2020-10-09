@@ -166,8 +166,6 @@ class OBJECT_OT_renameGEobject(bpy.types.Operator):
 
     def execute(self, context):
         context = bpy.context
-        scene = context.scene
-
         for ob in context.selected_objects:
             rename_ge(ob)
         return {'FINISHED'}

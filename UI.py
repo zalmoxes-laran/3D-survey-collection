@@ -203,7 +203,7 @@ class ToolsPanelQuickUtils:
 
         # self.layout.operator("tiff2png.relink", icon="META_DATA", text='Relink images from tiff to png')
         # row = layout.row()
-        self.layout.operator("rename.ge", icon="FILE_TEXT", text='Ren 4 GE')
+        self.layout.operator("rename.ge", icon="FILE_TEXT", text='Rename 4 GameEngines')
         # self.layout.operator("obname.ffn", icon="META_DATA", text='Ren active from namefile')
         box = layout.box()
         row = box.row()

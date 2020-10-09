@@ -47,10 +47,14 @@ class OBJECT_OT_createcyclesmat(bpy.types.Operator):
 
 def rename_ge(ob):
     if ob.name.startswith('OB_'):
-        ob_name = ob.name[-3:]
+        #print(ob.name)
+        ob_name = ob.name[3:]
+        #print(ob_name)
     else:
         ob_name = ob.name
+        #print(ob_name)
         ob.name = "OB_"+ob.name
+    
     ob.data.name = "ME_"+ob_name
     if ob.material_slots:
         mslot_index = 0
