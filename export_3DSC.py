@@ -223,6 +223,8 @@ class OBJECT_OT_fbxexportbatch(bpy.types.Operator):
     bl_label = "Fbx export batch UE4"
     bl_options = {"REGISTER", "UNDO"}
 
+    export_format : StringProperty()
+
     def execute(self, context):
 
         if bpy.context.scene.FBX_export_dir:
@@ -230,9 +232,7 @@ class OBJECT_OT_fbxexportbatch(bpy.types.Operator):
             subfolder = ''
         else:
             basedir = os.path.dirname(bpy.data.filepath)
-            subfolder = 'FBX'
-
-        #basedir = os.path.dirname(bpy.data.filepath)
+            subfolder = self.export_format
         
         createfolder(basedir, subfolder)
         subfolderpath = os.path.join(basedir, subfolder)
@@ -246,8 +246,12 @@ class OBJECT_OT_fbxexportbatch(bpy.types.Operator):
             createfolder(subfolderpath, colfolder)
             name = bpy.path.clean_name(obj.name)
             fn = os.path.join(basedir, subfolder, colfolder, name)
-#            bpy.ops.export_scene.fbx(filepath = fn + ".fbx", filter_glob="*.fbx", use_selection=True, global_scale=1.0, axis_forward='-Z', axis_up='Y', bake_space_transform=False, object_types={'MESH'}, use_mesh_modifiers=False, mesh_smooth_type='FACE', use_mesh_edges=False, use_tspace=False, use_armature_deform_only=False, bake_anim=False, bake_anim_use_nla_strips=False, bake_anim_step=1.0, bake_anim_simplify_factor=1.0, use_anim=False, use_anim_action_all=False, use_default_take=False, use_anim_optimize=False, anim_optimize_precision=6.0, path_mode='AUTO', embed_textures=False, batch_mode='OFF', use_batch_own_dir=True, use_metadata=True)
-            bpy.ops.export_scene.fbx(filepath = fn + ".fbx", check_existing=True, filter_glob="*.fbx", use_selection=True, use_active_collection=False, global_scale=1.0, apply_unit_scale=True, apply_scale_options='FBX_SCALE_NONE', bake_space_transform=False, object_types={'MESH'}, use_mesh_modifiers=True, use_mesh_modifiers_render=True, mesh_smooth_type='OFF', use_mesh_edges=False, use_tspace=False, use_custom_props=False, add_leaf_bones=True, primary_bone_axis='Y', secondary_bone_axis='X', use_armature_deform_only=False, armature_nodetype='NULL', bake_anim=False, bake_anim_use_all_bones=True, bake_anim_use_nla_strips=True, bake_anim_use_all_actions=True, bake_anim_force_startend_keying=True, bake_anim_step=1.0, bake_anim_simplify_factor=1.0, path_mode='AUTO', embed_textures=False, batch_mode='OFF', use_batch_own_dir=True, use_metadata=True, axis_forward='-Z', axis_up='Y')
+            if self.export_format == "FBX":
+                bpy.ops.export_scene.fbx(filepath = fn + ".fbx", check_existing=True, filter_glob="*.fbx", use_selection=True, use_active_collection=False, global_scale=1.0, apply_unit_scale=True, apply_scale_options='FBX_SCALE_NONE', bake_space_transform=False, object_types={'MESH'}, use_mesh_modifiers=True, use_mesh_modifiers_render=True, mesh_smooth_type='OFF', use_mesh_edges=False, use_tspace=False, use_custom_props=False, add_leaf_bones=True, primary_bone_axis='Y', secondary_bone_axis='X', use_armature_deform_only=False, armature_nodetype='NULL', bake_anim=False, bake_anim_use_all_bones=True, bake_anim_use_nla_strips=True, bake_anim_use_all_actions=True, bake_anim_force_startend_keying=True, bake_anim_step=1.0, bake_anim_simplify_factor=1.0, path_mode='AUTO', embed_textures=False, batch_mode='OFF', use_batch_own_dir=True, use_metadata=True, axis_forward='-Z', axis_up='Y')
+            elif self.export_format == "gltf":
+                #tex_dir = [directory textures]
+                copyright_txt = ''
+                bpy.ops.export_scene.gltf(export_format='GLTF_SEPARATE', ui_tab='GENERAL', export_copyright=copyright_txt, export_image_format='AUTO', export_texture_dir=tex_dir, export_texcoords=True, export_normals=True, export_draco_mesh_compression_enable=True, export_draco_mesh_compression_level=6, export_draco_position_quantization=14, export_draco_normal_quantization=10, export_draco_texcoord_quantization=12, export_draco_generic_quantization=12, export_tangents=True, export_materials=True, export_colors=True, export_cameras=False, export_selected=True, use_selection=True, export_extras=False, export_yup=True, export_apply=True, export_animations=False, export_frame_range=False, export_frame_step=1, export_force_sampling=False, export_nla_strips=False, export_def_bones=False, export_current_frame=False, export_skins=False, export_all_influences=False, export_morph=False, export_morph_normal=False, export_morph_tangent=False, export_lights=False, export_displacement=False, will_save_settings=False, filepath=fn, check_existing=True, filter_glob='*.glb;*.gltf')
             obj.select_set(False)
         return {'FINISHED'}
 
