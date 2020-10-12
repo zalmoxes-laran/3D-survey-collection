@@ -17,6 +17,8 @@ from bpy.props import (BoolProperty,
 
 from .import_Agisoft_xml import *
 
+from .functions import *
+
 # import points section ----------------------------------------------------------
 
 class OBJECT_OT_IMPORTPOINTS(Operator):
@@ -29,6 +31,16 @@ class OBJECT_OT_IMPORTPOINTS(Operator):
         bpy.ops.import_test.some_data('INVOKE_DEFAULT')
         return {'FINISHED'}
 
+def namefile_from_path(filepath):
+        o_filepath_abs = bpy.path.abspath(filepath)
+        o_imagedir, o_filename = os.path.split(o_filepath_abs)
+        filename = os.path.splitext(o_filename)[0]
+        return filename
+
+def create_new_col_from_file_name(filename):
+        newcol = bpy.data.collections.new(filename)
+        bpy.context.collection.children.link(newcol)
+        return newcol
 
 def read_point_data(context, filepath, shift, name_col, x_col, y_col, z_col, separator):
     print("running read point file...")
@@ -36,6 +48,8 @@ def read_point_data(context, filepath, shift, name_col, x_col, y_col, z_col, sep
 #    data = f.read()
     arr=f.readlines()  # store the entire file in a variable
     f.close()
+    
+    counter = 0
 
     for p in arr:
         p0 = p.split(separator)  # use separator variable as separator
@@ -54,8 +68,11 @@ def read_point_data(context, filepath, shift, name_col, x_col, y_col, z_col, sep
 
         # Generate object at x = lon and y = lat (and z = 0 )
         o = bpy.data.objects.new( ItemName, None )
-        context.collection.objects.link(o)
- #       collection.objects.link
+        if counter == 0:
+                newcol = create_new_col_from_file_name(namefile_from_path(filepath))
+                counter += 1
+
+        newcol.objects.link(o)
         o.location.x = x_coor
         o.location.y = y_coor
         o.location.z = z_coor
