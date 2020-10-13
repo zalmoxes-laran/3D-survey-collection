@@ -214,12 +214,14 @@ class ToolsPanelQuickUtils:
         op.suffix = context.window_manager.suffix_num.suffixnum
         #row = layout.row()
         row.prop(context.window_manager.suffix_num, 'suffixnum', expand=True)
-        # row = layout.row()
-        # row.label(text="Switch engine")
-        # self.layout.operator("activatenode.material", icon="PMARKER_SEL", text='Activate cycles nodes')
-        # self.layout.operator("deactivatenode.material", icon="PMARKER", text='De-activate cycles nodes')
-        # self.layout.operator("bi2cycles.material", icon="PARTICLES", text='Create cycles nodes')
-        # self.layout.operator("cycles2bi.material", icon="PMARKER", text='Cycles to BI')
+        box = layout.box()
+        row = box.row()
+        row.label(text="Batch material settings")
+        row = box.row()
+        op = row.operator("setmaterial.blend", icon="MESH_CUBE", text='opaque')
+        op.blendmode = "OPAQUE"
+        op = row.operator("setmaterial.blend", icon="CUBE", text='transparent')
+        op.blendmode = "BLEND"
 
 class ToolsPanelLODmanager:
     bl_label = "LOD manager"

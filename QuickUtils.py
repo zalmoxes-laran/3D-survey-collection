@@ -503,3 +503,19 @@ class OBJECT_OT_remove_suffixnumber(bpy.types.Operator):
         for ob in bpy.context.selected_objects:
             clean_suffix(ob,self.suffix)
         return {'FINISHED'}
+
+
+class OBJECT_OT_setmaterial_blend(bpy.types.Operator):
+    bl_idname = "setmaterial.blend"
+    bl_label = "Set material blend for materials"
+    bl_options = {"REGISTER", "UNDO"}
+
+    blendmode: StringProperty()
+
+    def execute(self, context):
+        for ob in bpy.context.selected_objects:
+            for mat in ob.material_slots:
+                mat.material.blend_method = self.blendmode
+        return {'FINISHED'}
+
+        
