@@ -33,7 +33,6 @@ class View3DCheckPanel:
         obj = context.active_object
         return obj is not None and obj.type == 'MESH' and obj.mode in {'OBJECT', 'EDIT'}
 
-
 class VIEW3D_PT_mesh_analyze(Panel, View3DCheckPanel):
     bl_category = "3DSC"
     bl_idname = "VIEW3D_PT_mesh_analyze"
@@ -79,6 +78,38 @@ class VIEW3D_PT_mesh_analyze(Panel, View3DCheckPanel):
 
         self.draw_report(context)
 
+class View3DSegmentationPanel:
+
+    bl_label = "Segmentation"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        return obj is not None and obj.type == 'MESH' and obj.mode in {'OBJECT', 'EDIT'}
+
+
+class VIEW3D_PT_segmentation_pan(Panel, View3DSegmentationPanel):
+    bl_category = "3DSC"
+    bl_idname = "VIEW3D_PT_segmentation_pan"
+    bl_context = "objectmode"
+
+    def draw(self, context):
+        layout = self.layout
+        scene = context.scene
+        layout.label(text="Set up cutter")
+        row = layout.row(align=True)
+        row.operator("set.cutter",
+                     icon="SCULPTMODE_HLT", text='Cutter set')
+        row.prop(scene, 'TILE_square_meters', icon='BLENDER', toggle=True, text="m2:")
+        row = layout.row(align=True)
+        row.operator("project.segmentation",icon="SCULPTMODE_HLT", text='Mono-cutter')
+        #row = layout.row()
+        row.operator("project.segmentationinv",
+                     icon="SCULPTMODE_HLT", text='Multi-cutter')
+        #row = layout.row()
+
 class ToolsPanelImport:
     bl_label = "Importers"
     bl_space_type = 'VIEW_3D'
@@ -93,7 +124,7 @@ class ToolsPanelImport:
         row = layout.row()
         self.layout.operator("import_scene.multiple_objs", icon="DUPLICATE", text='Multiple objs')
         row = layout.row()
-        self.layout.operator("import_cam.agixml", icon="DUPLICATE", text='Agisoft xml cams')
+        #self.layout.operator("import_cam.agixml", icon="DUPLICATE", text='Agisoft xml cams')
 
 class ToolsPanelExport:
     bl_label = "Exporters"
@@ -151,17 +182,15 @@ class ToolsPanelSHIFT:
         row = layout.row()
         row.label(text="Shift values:")
         row = layout.row()
-        #row.prop(context.scene, 'SRID', toggle = True)
-        #row = layout.row()
         row.prop(context.scene, 'BL_x_shift', toggle = True)
         row = layout.row()
         row.prop(context.scene, 'BL_y_shift', toggle = True)
         row = layout.row()
         row.prop(context.scene, 'BL_z_shift', toggle = True)
         row = layout.row()
-        #if scene['crs x'] is not None and scene['crs y'] is not None:
-        #    if scene['crs x'] > 0 or scene['crs y'] > 0:
-        #        self.layout.operator("shift_from.blendergis", icon="PASTEDOWN", text='from Bender GIS')
+        if scene['crs x'] is not None and scene['crs y'] is not None:
+            if scene['crs x'] > 0 or scene['crs y'] > 0:
+                self.layout.operator("shift_from.blendergis", icon="PASTEDOWN", text='from Bender GIS')
 
         addon_updater_ops.update_notice_box_ui(self, context)
 
@@ -193,10 +222,7 @@ class ToolsPanelQuickUtils:
         # row = layout.row()
         # self.layout.operator("lod0poly.reducer", icon="IMGDISPLAY", text='LOD0 mesh decimator')
         row = layout.row()
-        row.operator("project.segmentation", icon="SCULPTMODE_HLT", text='Mono-cutter')
-        #row = layout.row()
-        row.operator("project.segmentationinv", icon="SCULPTMODE_HLT", text='Multi-cutter')
-        #row = layout.row()
+
 
         self.layout.operator("circum.center", icon="PROP_OFF", text='CircumCenter')
         #row = layout.row()

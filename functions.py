@@ -1265,3 +1265,57 @@ def clean_suffix(ob,suffix):
     if ob.name.endswith(suffix):
         ob.name = ob.name[:-4]
     return
+
+def roundup(x):
+    return int(math.ceil(x / 1.0))  # * 1
+
+def create_cutter_series(cutter_name, x_tile_side, y_tile_side):
+    x_min = 10000000
+    y_min = 10000000
+    x_max = -10000000
+    y_max = -10000000
+    z_max = -10000000
+    x_lenght = 0
+    y_lenght = 0
+
+    for ob in bpy.context.selected_objects:
+        for ver in ob.bound_box:
+            if x_min > ver[0]:
+                x_min = ver[0]
+            if y_min > ver[1]:
+                y_min = ver[1]
+            if x_max < ver[0]:
+                x_max = ver[0]
+            if y_max < ver[1]:
+                y_max = ver[1]
+            if z_max < ver[2]:
+                z_max = ver[2]
+
+    x_lenght = x_max-x_min
+    y_lenght = y_max-y_min
+
+    x_tile_num = roundup(x_lenght/x_tile_side)
+    y_tile_num = roundup(y_lenght/y_tile_side)
+
+    bpy.context.scene.cursor.location = (x_min, y_min, z_max)
+
+    bpy.ops.mesh.primitive_plane_add(size=1, enter_editmode=True, align='WORLD', location=(
+        x_min, y_min, z_max+1), scale=(10, 10, 1))
+    bpy.ops.transform.translate(value=(0.49, 0.49, 0), orient_type='GLOBAL', orient_matrix=((1, 0, 0), (0, 1, 0), (0, 0, 1)), orient_matrix_type='GLOBAL', constraint_axis=(
+        True, False, False), mirror=True, use_proportional_edit=False, proportional_edit_falloff='SMOOTH', proportional_size=1, use_proportional_connected=False, use_proportional_projected=False)
+    bpy.ops.object.editmode_toggle()
+    cutter = bpy.context.active_object
+    cutter.name = cutter_name
+    cutter.scale = (x_tile_side, y_tile_side, 1)
+    bpy.ops.object.modifier_add(type='ARRAY')
+    cutter.modifiers[0].count = x_tile_num
+    bpy.ops.object.modifier_add(type='ARRAY')
+    cutter.modifiers[1].relative_offset_displace[0] = 0.0
+    cutter.modifiers[1].count = y_tile_num
+    cutter.modifiers[1].relative_offset_displace[1] = 1.0
+    cutter.display_type = 'WIRE'
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    bpy.ops.object.modifier_apply(modifier="Array")
+    bpy.ops.object.modifier_apply(modifier="Array.001")
+    bpy.ops.mesh.separate(type='LOOSE')
+    return

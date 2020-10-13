@@ -19,7 +19,7 @@
 bl_info = {
     "name": "3D Survey Collection",
     "author": "Emanuel Demetrescu",
-    "version": (1,4,55),
+    "version": (1,4,60),
     "blender": (2, 90, 1),
     "location": "3D View > Toolbox",
     "description": "A collection of tools for 3D Survey activities",
@@ -62,6 +62,7 @@ else:
             functions,
             shift,
             QuickUtils,
+            segmentation,
             LODgenerator,
             ccTool,
             PhotogrTool,
@@ -239,6 +240,7 @@ classes = (
     UI.VIEW3D_PT_Import_ToolBar,
     UI.VIEW3D_PT_Export_ToolBar,
     UI.VIEW3D_PT_QuickUtils_ToolBar,
+    UI.VIEW3D_PT_segmentation_pan,
     UI.VIEW3D_PT_LODgenerator,
     UI.VIEW3D_PT_LODmanager,
     UI.VIEW3D_PT_ccTool,
@@ -263,6 +265,9 @@ classes = (
     functions.OBJECT_OT_createcyclesmat,
     functions.OBJECT_OT_savepaintcam,
     shift.OBJECT_OT_IMPORTPOINTS,
+    segmentation.OBJECT_OT_projectsegmentation,
+    segmentation.OBJECT_OT_projectsegmentationinversed,
+    segmentation.OBJECT_OT_setcutter,
     QuickUtils.OBJECT_OT_activatematerial,
     QuickUtils.OBJECT_OT_CenterMass,
     QuickUtils.OBJECT_OT_CorrectMaterial,
@@ -274,8 +279,6 @@ classes = (
     QuickUtils.OBJECT_OT_LOD0polyreducer,
     QuickUtils.OBJECT_OT_multimateriallayout,
     QuickUtils.OBJECT_OT_objectnamefromfilename,
-    QuickUtils.OBJECT_OT_projectsegmentation,
-    QuickUtils.OBJECT_OT_projectsegmentationinversed,
     QuickUtils.OBJECT_OT_removealluvexcept1,
     QuickUtils.OBJECT_OT_removefromallgroups,
     QuickUtils.OBJECT_OT_renameGEobject,
@@ -468,6 +471,13 @@ def register():
     subtype = 'DIR_PATH'
     )
 
+
+    bpy.types.Scene.TILE_square_meters = IntProperty(
+    name="Tile square meters",
+    default=100,
+    description="Define the area of the tiles",
+    )
+
 def unregister():
 
     addon_updater_ops.unregister(bl_info)
@@ -503,3 +513,4 @@ def unregister():
     del bpy.types.Scene.lod_list_item
     del bpy.types.Scene.analysis_list
     del bpy.types.Scene.FBX_export_dir
+    del bpy.types.Scene.TILE_square_meters
