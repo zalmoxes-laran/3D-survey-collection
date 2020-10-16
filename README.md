@@ -1,7 +1,7 @@
 # 3D-survey-collection
 3D Survey Collection - shortly 3DS, an addon for Blender 2.8
 
-Hello there! I’m **3D Survey Collection** (Blender Add-on), an open source add-on (GPL3) for Blender that simplifies the tasks involved in the management and optimization of the archaeological and architectonic 3D record
+Hello there! I’m **3D Survey Collection**, an open source add-on (GPL3) for Blender that simplifies the tasks involved in the management and optimization of the archaeological and architectonic 3D record
 
 I can transform an extensive survey of an archaeological excavation into a real-time oriented asset that can be used inside a Game Engine to create Open World experiences (Unreal, Unity, Godot).
 
@@ -17,9 +17,11 @@ I can:
 
 I am under constant development by [Emanuel Demetrescu](http://www.itabc.cnr.it/team/emanuel-demetrescu) during his research activities at the [CNR-ISPC](http://www.ispc.cnr.it) (Italian National Council for Research, Institute of Heritage Science) (former CNR-ITABC) within the [VHLab](http://www.itabc.cnr.it/pagine/vh-lab) (Virtual Heritage Laboratory - old page, new page under development).
 
-Let me introduce myself with a short list the tools (sorry the images are related to the ol 2.79 version, my creator says he is too busy to update this page, but he is simply lazy..)
+Let me introduce myself with a short list of the tools (sorry the images are related to the ol 2.79 version, my creator says he is too busy to update this page, but he is simply lazy..)
 
 I need constant improvements and beta testing in real projects, so, developers out there, email my creator at emanuel.demetrescu at gmail dot com and contribute :-)
+
+Ah, you can also join the Telegram 3DSC User group: https://t.me/UserGroup3DSC
 
 * [**Importers** panel](#importers-pane)
 * [**Exporters** panel](#exporters-pane)
