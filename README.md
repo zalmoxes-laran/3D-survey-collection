@@ -5,7 +5,7 @@ Hello there! I’m **3D Survey Collection** (Blender Add-on), an open source col
 
 I am under constant development by [Emanuel Demetrescu](http://www.itabc.cnr.it/team/emanuel-demetrescu) during his research activities at the [CNR-ISPC](http://www.ispc.cnr.it) (Italian National Council for Research, Institute of Heritage Science) (former CNR-ITABC) within the [VHLab](http://www.itabc.cnr.it/pagine/vh-lab) (Virtual Heritage Laboratory - old page, new page under development).
 
-Let me introduce myself with a short list the tools (sorry the images are related to the ol 2.79 version, my creator says he is too busy to develop me, but he is simply lazy..)
+Let me introduce myself with a short list the tools (sorry the images are related to the ol 2.79 version, my creator says he is too busy to update this page, but he is simply lazy..)
 
 I need constant improvements and beta testing in real projects, so, developers out there, email my creator at emanuel.demetrescu at gmail dot com and contribute :-)
 
