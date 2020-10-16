@@ -123,7 +123,7 @@ class OBJECT_OT_CreateCameraImagePlane(bpy.types.Operator):
         if not bpy.context.scene.BL_undistorted_path:
             raise Exception("Hey Buddy, you have to set the undistorted images path !")
         try:
-            depth = 1
+            depth = 2
 
             #create imageplane
             bpy.ops.mesh.primitive_plane_add()#radius = 0.5)
