@@ -19,7 +19,7 @@
 bl_info = {
     "name": "3D Survey Collection",
     "author": "Emanuel Demetrescu",
-    "version": (1,4,60),
+    "version": (1,4,70),
     "blender": (2, 90, 1),
     "location": "3D View > Toolbox",
     "description": "A collection of tools for 3D Survey activities",
@@ -148,16 +148,6 @@ class CAMTypeList(PropertyGroup):
 class AnalysisListItem(PropertyGroup):
     """ Group of properties representing an item in the list """
 
-    # name : StringProperty(
-    #         name="Name",
-    #         description="A name for this item",
-    #         default="Untitled")
-
-    # icon : StringProperty(
-    #         name="code for icon",
-    #         description="",
-    #         default="GROUP_UVS")
-
     res_tex : IntProperty(
             name = "Res",
             default = 0,
@@ -168,6 +158,58 @@ class AnalysisListItem(PropertyGroup):
             default = 0,
             description = "Number of instances for a given resolution")
 
+class StatisticsListItem(PropertyGroup):
+    """ Group of properties representing an item in the list """
+
+    name : StringProperty(
+            name="Name",
+            description="Name of the object",
+            default="Untitled")
+
+    context_col : StringProperty(
+            name="context_col",
+            description="Name of the context",
+            default="Untitled")
+
+    tiles_num : IntProperty(
+            name = "Tiles",
+            default = 0,
+            description = "Number of tiles")    
+
+    area_mesh : FloatProperty(
+            name = "Area",
+            default = 0,
+            description = "Area of mesh")
+
+    poly_num : IntProperty(
+            name = "Polygons",
+            default = 0,
+            description = "Number of polygons")
+    
+    poly_res : FloatProperty(
+            name = "Polyres",
+            default = 0,
+            description = "Area of mesh")
+
+    res_tex : IntProperty(
+            name = "Res",
+            default = 0,
+            description = "Resolution of Image Texture")
+
+    res_counter : IntProperty(
+            name = "Number of instances",
+            default = 0,
+            description = "Number of instances for a given resolution")
+    
+    uv_ratio : FloatProperty(
+            name = "UVratio",
+            default = 0.6,
+            description = "Ratio coverage for UV")
+    
+    mean_res_tex : FloatProperty(
+            name = "meanrestex",
+            default = 0.0,
+            description = "Mean texture resolution of this group")
 
 class PANOListItem(PropertyGroup):
     """ Group of properties representing an item in the list """
@@ -325,6 +367,7 @@ classes = (
     qualitycheck.MESH_OT_info_area,
     qualitycheck.MESH_OT_info_texs,
     qualitycheck.MESH_OT_info_texres,
+    qualitycheck.ExportStatistics,
     PANO_UL_List,
     PANOListItem,
     CAMTypeList,
@@ -332,6 +375,7 @@ classes = (
     LODitemListItem,
     DemPreferences,
     AnalysisListItem,
+    StatisticsListItem,
 )
 
 def register():
@@ -443,6 +487,7 @@ def register():
     bpy.types.Scene.pano_list_index = IntProperty(name = "Index for my_list", default = 0)
     bpy.types.Scene.lod_list_item = CollectionProperty(type = LODitemListItem)
     bpy.types.Scene.analysis_list = CollectionProperty(type = AnalysisListItem)
+    bpy.types.Scene.statistics_list = CollectionProperty(type = StatisticsListItem)
 
     bpy.types.Scene.PANO_file = StringProperty(
     name = "TXT",
@@ -512,5 +557,6 @@ def unregister():
     del bpy.types.Scene.PANO_cam_lens
     del bpy.types.Scene.lod_list_item
     del bpy.types.Scene.analysis_list
+    del bpy.types.Scene.statistics_list
     del bpy.types.Scene.FBX_export_dir
     del bpy.types.Scene.TILE_square_meters

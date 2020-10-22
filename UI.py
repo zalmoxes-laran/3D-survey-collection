@@ -72,8 +72,8 @@ class VIEW3D_PT_mesh_analyze(Panel, View3DCheckPanel):
         layout.label(text="Statistics")
         row = layout.row(align=True)
         #row.operator("mesh.print3d_info_volume", text="Volume")
-        row.operator("mesh.info_area", text="Area")
-        row.operator("mesh.info_texs", text="TexStats")
+        row.operator("mesh.info_area", text="Geometry")
+        row.operator("mesh.info_texs", text="Textures")
         row.operator("mesh.info_texres", text="MeanRes")
 
         self.draw_report(context)
@@ -88,7 +88,6 @@ class View3DSegmentationPanel:
     def poll(cls, context):
         obj = context.active_object
         return obj is not None and obj.type == 'MESH' and obj.mode in {'OBJECT', 'EDIT'}
-
 
 class VIEW3D_PT_segmentation_pan(Panel, View3DSegmentationPanel):
     bl_category = "3DSC"
@@ -188,9 +187,9 @@ class ToolsPanelSHIFT:
         row = layout.row()
         row.prop(context.scene, 'BL_z_shift', toggle = True)
         row = layout.row()
-        if scene['crs x'] is not None and scene['crs y'] is not None:
-            if scene['crs x'] > 0 or scene['crs y'] > 0:
-                self.layout.operator("shift_from.blendergis", icon="PASTEDOWN", text='from Bender GIS')
+        # if scene['crs x'] is not None and scene['crs y'] is not None:
+        #     if scene['crs x'] > 0 or scene['crs y'] > 0:
+        #         self.layout.operator("shift_from.blendergis", icon="PASTEDOWN", text='from Bender GIS')
 
         addon_updater_ops.update_notice_box_ui(self, context)
 
