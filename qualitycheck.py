@@ -47,10 +47,10 @@ def tex_num_calc(x_res_a_terra,tex,ratio):
     #ratio = 0.6
     numtex = pow((10000 / x_res_a_terra), 2) / (tex*tex*ratio) #10066329.6
     print(str(numtex))
-    numtex_round = round(Numtex,0)
+    numtex_round = round(numtex,0)
     print(str(numtex_round))
     if numtex_round == 0:
-        fact = 1/Numtex
+        fact = 1/numtex
         texnum_def = 1
     else:
         fact = numtex/numtex_round
