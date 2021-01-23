@@ -1,5 +1,5 @@
 # 3D-survey-collection
-3D Survey Collection - shortly 3DS, an addon for Blender 2.8
+3D Survey Collection - shortly 3DS, an addon for Blender 2.9
 
 Hello there! I’m **3D Survey Collection**, an open source add-on (GPL3) for Blender that simplifies the tasks involved in the management and optimization of the archaeological and architectonic 3D record
 
