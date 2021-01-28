@@ -155,6 +155,7 @@ class ToolsPanelExport:
             row = box.row()
             row.operator("obj.exportbatch", icon="DUPLICATE", text='obj')
             row.operator("fbx.exportbatch", icon="DUPLICATE", text='fbx')
+            row.operator("gltf.exportbatch", icon="DUPLICATE", text='gltf')
             row = box.row()
             if not bpy.context.scene.FBX_export_dir:
                 row.label(text= "-> /objectname.obj")

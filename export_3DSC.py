@@ -150,7 +150,42 @@ class OBJECT_OT_ExportObjButton(bpy.types.Operator):
         # write active object in obj format
         bpy.ops.export_scene.obj(filepath=fn + ".obj", use_selection=True, axis_forward='Y', axis_up='Z', path_mode='RELATIVE')
         return {'FINISHED'}
-    
+
+class OBJECT_OT_gltfexportbatch(bpy.types.Operator):
+    bl_idname = "gltf.exportbatch"
+    bl_label = "Gltf export batch"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+
+        #basedir = 'F:\LOD1'
+        copyright = "CC-BY-NC E.Demetrescu"
+        draco_compression = 6
+
+
+        if bpy.context.scene.FBX_export_dir:
+            basedir = os.path.dirname(bpy.context.scene.FBX_export_dir)
+            #subfolder = ''
+        else:
+            basedir = os.path.dirname(bpy.data.filepath)
+            #subfolder = 'FBX'
+
+        if not basedir:
+            raise Exception("Blend file is not saved")
+
+        selection = bpy.context.selected_objects
+        bpy.ops.object.select_all(action='DESELECT')
+
+        for obj in selection:
+            obj.select_set(True)
+            name = bpy.path.clean_name(obj.name)
+            namefile = name + ".gltf"
+            file_path = os.path.join(basedir, namefile)
+            bpy.ops.export_scene.gltf(export_format='GLTF_SEPARATE', ui_tab='GENERAL', export_copyright=copyright, export_image_format='AUTO', export_texture_dir='', export_texcoords=True, export_normals=True, export_draco_mesh_compression_enable=True, export_draco_mesh_compression_level=draco_compression, export_draco_position_quantization=14, export_draco_normal_quantization=10, export_draco_texcoord_quantization=12, export_draco_generic_quantization=12, export_tangents=False, export_materials='EXPORT', export_colors=False, export_cameras=False, export_selected=True, use_selection=True, export_extras=False, export_yup=True, export_apply=False, export_animations=False, export_frame_range=False, export_frame_step=1, export_force_sampling=False, export_nla_strips=False, export_def_bones=False, export_current_frame=False, export_skins=False, export_all_influences=False, export_morph=True, export_morph_normal=False, export_morph_tangent=False, export_lights=False, export_displacement=False, will_save_settings=False, filepath=file_path, check_existing=False)#, filter_glob='*.glb;*.gltf')
+            obj.select_set(False)
+        return {'FINISHED'}
+
+
 class OBJECT_OT_objexportbatch(bpy.types.Operator):
     bl_idname = "obj.exportbatch"
     bl_label = "Obj export batch"
