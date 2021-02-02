@@ -1319,3 +1319,35 @@ def create_cutter_series(cutter_name, x_tile_side, y_tile_side):
     bpy.ops.object.modifier_apply(modifier="Array.001")
     bpy.ops.mesh.separate(type='LOOSE')
     return
+
+def diffuse2principled():
+    for obj in bpy.context.selected_objects:
+        for matslot in obj.material_slots:
+            material = matslot.material
+            #  store the reference to the node_tree in a variable
+            nodetree = material.node_tree
+            
+            #  loop through nodes in the nodetree
+            for node in nodetree.nodes:
+                #  if the node is a Diffuse node....
+                if node.type=="BSDF_DIFFUSE":
+                    
+                    #  store the nodes that are connected to it
+                    inputnode = node.inputs['Color'].links[0].from_node
+                    outputnode = node.outputs['BSDF'].links[0].to_node
+                    
+                    origCoordinates = node.location
+                    #  remove the diffuse node
+                    nodetree.nodes.remove(node)
+                    
+                    
+                    newnode = nodetree.nodes.new('ShaderNodeBsdfPrincipled')
+                    newnode.location = origCoordinates
+                    newnode.name = "diffuse"
+                    newnode.inputs['Roughness'].default_value = 1.0
+                    
+                    #  relink everything
+                    nodetree.links.new(inputnode.outputs[0], newnode.inputs[0])
+                    #nodetree.links.new(inputnode.outputs[0], newnode.inputs[1])
+                    nodetree.links.new(newnode.outputs[0], outputnode.inputs[0])
+    return

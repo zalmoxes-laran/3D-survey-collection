@@ -5,6 +5,23 @@ from random import randint, choice
 from .functions import *
 from .qualitycheck import *
 
+class OBJECT_OT_diffuseprincipled(bpy.types.Operator):
+    """Replace old diffuse shader with a principled shader"""
+    bl_idname = "diffuse.principled"
+    bl_label = "Replace old diffuse shader with a principled shader"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        turn_on_button = False
+        if context.active_object is not None:
+            if context.active_object.type == 'MESH':
+                turn_on_button = True
+        return turn_on_button
+
+    def execute(self, context):
+        diffuse2principled()
+        return {'FINISHED'}
 
 class OBJECT_OT_circumcenter(bpy.types.Operator):
     """Set the cursor in the center of a circumference"""

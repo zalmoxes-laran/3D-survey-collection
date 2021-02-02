@@ -329,6 +329,7 @@ classes = (
     QuickUtils.OBJECT_OT_circumcenter,
     QuickUtils.OBJECT_OT_remove_suffixnumber,
     QuickUtils.OBJECT_OT_setmaterial_blend,
+    QuickUtils.OBJECT_OT_diffuseprincipled,
     LODgenerator.OBJECT_OT_CreateGroupsLOD,
     LODgenerator.OBJECT_OT_ExportGroupsLOD,
     LODgenerator.OBJECT_OT_LOD,

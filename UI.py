@@ -248,6 +248,12 @@ class ToolsPanelQuickUtils:
         op.blendmode = "OPAQUE"
         op = row.operator("setmaterial.blend", icon="CUBE", text='transparent')
         op.blendmode = "BLEND"
+        box = layout.box()
+        row = box.row()
+        row.label(text="Batch legacy material conversion")
+        row = box.row()
+        row.operator("diffuse.principled", icon="DECORATE_DRIVER", text='Diffuse 2 Principled')
+
 
 class ToolsPanelLODmanager:
     bl_label = "LOD manager"
