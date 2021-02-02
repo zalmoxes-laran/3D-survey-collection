@@ -23,10 +23,11 @@ class OBJECT_OT_diffuseprincipled(bpy.types.Operator):
         diffuse2principled()
         return {'FINISHED'}
 
-class OBJECT_OT_circumcenter(bpy.types.Operator):
-    """Set the cursor in the center of a circumference"""
-    bl_idname = "circum.center"
-    bl_label = "Set the cursor in the center of a circumference"
+
+class OBJECT_OT_setroughness(bpy.types.Operator):
+    """Batch set roughness to principled shaders in selected objects"""
+    bl_idname = "set.roughness"
+    bl_label = "Batch set roughness to principled shaders in selected objects"
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
@@ -34,12 +35,43 @@ class OBJECT_OT_circumcenter(bpy.types.Operator):
         turn_on_button = False
         if context.active_object is not None:
             if context.active_object.type == 'MESH':
-                if len(context.active_object.data.vertices) == 3:
-                    turn_on_button = True
+                turn_on_button = True
         return turn_on_button
 
     def execute(self, context):
+        for obj in bpy.context.selected_objects:
+            for matslot in obj.material_slots:
+                material = matslot.material
+                #  store the reference to the node_tree in a variable
+                nodetree = material.node_tree
+                
+                #  loop through nodes in the nodetree
+                for node in nodetree.nodes:
+                    #  if the node is a Diffuse node....
+                    if node.type=="BSDF_PRINCIPLED":
+                        node.inputs['Roughness'].default_value = 1.0
+                        
+                        
+        return {'FINISHED'}
+
+class OBJECT_OT_circumcenter(bpy.types.Operator):
+    """Set the cursor in the center of a circumference"""
+    bl_idname = "circum.center"
+    bl_label = "Set the cursor in the center of a circumference"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    # @classmethod
+    # def poll(cls, context):
+    #     turn_on_button = False
+    #     if context.active_object is not None:
+    #         if context.active_object.type == 'MESH':
+    #             if len(context.active_object.data.vertices) == 3:
+    #                 turn_on_button = True
+    #     return turn_on_button
+
+    def execute(self, context):
             
+        obj = context.active_object
         co_final_1 = obj.matrix_world @ obj.data.vertices[0].co
         ax = co_final_1[0]
         ay = co_final_1[1]

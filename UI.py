@@ -223,8 +223,8 @@ class ToolsPanelQuickUtils:
         # self.layout.operator("lod0poly.reducer", icon="IMGDISPLAY", text='LOD0 mesh decimator')
         row = layout.row()
 
-
-        self.layout.operator("circum.center", icon="PROP_OFF", text='CircumCenter')
+        #DA RIATTIVARE
+        #self.layout.operator("circum.center", icon="PROP_OFF", text='CircumCenter')
         #row = layout.row()
 
         # self.layout.operator("tiff2png.relink", icon="META_DATA", text='Relink images from tiff to png')
@@ -248,6 +248,8 @@ class ToolsPanelQuickUtils:
         op.blendmode = "OPAQUE"
         op = row.operator("setmaterial.blend", icon="CUBE", text='transparent')
         op.blendmode = "BLEND"
+        row = box.row()
+        row.operator("set.roughness", icon="DECORATE_DRIVER", text='Roughness 1')
         box = layout.box()
         row = box.row()
         row.label(text="Batch legacy material conversion")
@@ -594,7 +596,7 @@ class VIEW3D_PT_Shift_ToolBar(Panel, ToolsPanelSHIFT):
 class VIEW3D_PT_QuickUtils_ToolBar(Panel, ToolsPanelQuickUtils):
     bl_category = "3DSC"
     bl_idname = "VIEW3D_PT_QuickUtils_ToolBar"
-    bl_context = "objectmode"
+    #bl_context = "objectmode"
 
 class VIEW3D_PT_LODgenerator(Panel, ToolsPanelLODgenerator):
     bl_category = "3DSC"
