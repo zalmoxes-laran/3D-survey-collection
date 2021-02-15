@@ -796,6 +796,8 @@ def create_material_from_image(context,image,oggetto,connect):
     mat = bpy.data.materials.new(name='M_'+ oggetto.name)
     mat.use_nodes = True
     bsdf = mat.node_tree.nodes["Principled BSDF"]
+    bsdf.inputs['Roughness'].default_value = 1.0
+    bsdf.inputs['Specular'].default_value = 0.0
     texImage = mat.node_tree.nodes.new('ShaderNodeTexImage')
     texImage.image = image
 #    imagepath = image.filepath_raw
@@ -1345,6 +1347,7 @@ def diffuse2principled():
                     newnode.location = origCoordinates
                     newnode.name = "diffuse"
                     newnode.inputs['Roughness'].default_value = 1.0
+                    newnode.inputs['Specular'].default_value = 0.0
                     
                     #  relink everything
                     nodetree.links.new(inputnode.outputs[0], newnode.inputs[0])

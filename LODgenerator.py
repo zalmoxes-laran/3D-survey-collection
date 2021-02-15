@@ -219,6 +219,12 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 mat.node_tree.links.new(bsdf.inputs['Base Color'], texImage.outputs['Color'])
                 obj_LODnew.data.name = 'SM_' + obj_LODnew.name
 
+                # select only the just created LOD obj
+
+                bpy.ops.object.select_all(action='DESELECT')
+                obj_LODnew.select_set(True)
+                context.view_layer.objects.active = obj_LODnew
+
                 # Saving on obj/mtl file for currentLOD
                 #-----------------------------------------------------------------
                 print('Saving on obj/mtl file for '+ currentLOD +'...')
