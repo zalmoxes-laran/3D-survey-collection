@@ -184,6 +184,7 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 context.scene.render.bake.use_pass_color = True
                 context.scene.render.bake.use_selected_to_active = True
                 context.scene.render.bake.cage_extrusion = 0.1
+                context.scene.render.bake.margin = 32
 
                 to_restore_samples = context.scene.cycles.samples
                 context.scene.cycles.samples = 1
