@@ -88,7 +88,7 @@ class OBJECT_OT_LOD(bpy.types.Operator):
         # iniziamo con un contatore i_lodbake_counter che parte da 0
 
         print("Number of LOD(s) to be created is: " + str(LODnum))
-
+        last_margin_val = context.scene.render.bake.margin
         # si producono ciclicamente i livelli di dettaglio ad esaurire i LOD richiesti dall'utente nell'UI (normalmente da 1 a 3 LOD)
         while i_lodbake_counter <= LODnum:
             currentLOD = 'LOD' + str(i_lodbake_counter)
@@ -184,7 +184,9 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 context.scene.render.bake.use_pass_color = True
                 context.scene.render.bake.use_selected_to_active = True
                 context.scene.render.bake.cage_extrusion = 0.1
-                context.scene.render.bake.margin = 32
+                if context.scene.LOD_pad_on:
+                    custommargin = "context.scene.render.bake.margin = context.scene.LOD"+str(i_lodbake_counter)+"_tex_res"
+                    exec(custommargin)
 
                 to_restore_samples = context.scene.cycles.samples
                 context.scene.cycles.samples = 1
@@ -238,6 +240,8 @@ class OBJECT_OT_LOD(bpy.types.Operator):
 
             i_lodbake_counter += 1
         end_time = time.time() - start_time
+        context.scene.render.bake.margin = last_margin_val
+
         print('<<<<<<< Process done >>>>>>')
         print('>>>'+str(ob_tot)+' objects processed in '+str(end_time)+' seconds')
         return {'FINISHED'}

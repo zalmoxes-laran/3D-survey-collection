@@ -19,7 +19,7 @@
 bl_info = {
     "name": "3D Survey Collection",
     "author": "Emanuel Demetrescu",
-    "version": (1,4,73),
+    "version": (1,4,74),
     "blender": (2, 91, 2),
     "location": "3D View > Toolbox",
     "description": "A collection of tools for 3D Survey activities",
@@ -422,6 +422,11 @@ def register():
         default = 128,
         description = "Enter the resolution for the texture of the LOD3")
 
+    bpy.types.Scene.LOD_pad_on = BoolProperty(
+        name = "Padding ratio of the LOD",
+        default = True,
+        description = "Enter the paddin ratio for the LOD")
+
     bpy.types.Scene.LOD1_dec_ratio = FloatProperty(
         name = "LOD1 decimation ratio",
         default = 0.5,
@@ -546,6 +551,7 @@ def unregister():
     del bpy.types.Scene.LOD1_dec_ratio
     del bpy.types.Scene.LOD2_dec_ratio
     del bpy.types.Scene.LOD3_dec_ratio
+    del bpy.types.Scene.LOD_pad_on
     del bpy.types.Scene.BL_undistorted_path
     del bpy.types.Scene.BL_x_shift
     del bpy.types.Scene.BL_y_shift

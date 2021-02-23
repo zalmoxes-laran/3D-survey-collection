@@ -302,6 +302,8 @@ class ToolsPanelLODgenerator:
             col.prop(scene, 'LODnum', icon='BLENDER', toggle=True)
             # Second column, aligned
             col = split.column(align=True)
+            col.prop(scene, 'LOD_pad_on', text="Pad")
+            col = split.column(align=True)
             #col.operator("lod.creation", icon="MOD_MULTIRES", text='')
             col.operator("lod.creation", text='generate')
             if scene.LODnum >= 1:
@@ -324,6 +326,7 @@ class ToolsPanelLODgenerator:
                     col = split.column()
                     # Second column, aligned
                     col.prop(scene, 'LOD2_tex_res', icon='BLENDER', toggle=True, text="")
+
                     if scene.LODnum >= 3:
                         split = layout.split()
                         # First column
