@@ -250,6 +250,8 @@ class ToolsPanelQuickUtils:
         op.blendmode = "BLEND"
         row = box.row()
         row.operator("set.roughness", icon="DECORATE_DRIVER", text='Roughness 1')
+        row = box.row()
+        row.operator("set.metalness", icon="DECORATE_DRIVER", text='Metalness 0')
         box = layout.box()
         row = box.row()
         row.label(text="Batch legacy material conversion")

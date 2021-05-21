@@ -19,7 +19,7 @@
 bl_info = {
     "name": "3D Survey Collection",
     "author": "Emanuel Demetrescu",
-    "version": (1,4,74),
+    "version": (1,4,75),
     "blender": (2, 91, 2),
     "location": "3D View > Toolbox",
     "description": "A collection of tools for 3D Survey activities",
@@ -331,6 +331,7 @@ classes = (
     QuickUtils.OBJECT_OT_setmaterial_blend,
     QuickUtils.OBJECT_OT_diffuseprincipled,
     QuickUtils.OBJECT_OT_setroughness,
+    QuickUtils.OBJECT_OT_setmetalness,
     LODgenerator.OBJECT_OT_CreateGroupsLOD,
     LODgenerator.OBJECT_OT_ExportGroupsLOD,
     LODgenerator.OBJECT_OT_LOD,
