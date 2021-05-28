@@ -38,9 +38,9 @@ class PANO_import(bpy.types.Operator):
             p0 = p.split(' ')  # use space as separator
             print(p0[0])
             ItemName = p0[0]
-            pos_x = float(p0[1])
-            pos_y = float(p0[2])
-            pos_z = (float(p0[3]))
+            pos_x = float(p0[1])-scene.BL_x_shift
+            pos_y = float(p0[2])-scene.BL_y_shift
+            pos_z = (float(p0[3]))-scene.BL_z_shift
             omega = float(p0[4])
             phi = float(p0[5])
             kappa = float(p0[6])
@@ -64,7 +64,8 @@ class PANO_import(bpy.types.Operator):
             pivot = Vector( (0.5, 0.5) )
             ScaleUV( uvMap, scale, pivot )
 
-            ItemName_res = (remove_extension(ItemName)+"-"+str(scene.RES_pano)+"k.jpg")
+            #ItemName_res = (remove_extension(ItemName)+"-"+str(scene.RES_pano)+"k.jpg")
+            ItemName_res = (remove_extension(ItemName)+".jpg")
             current_panores_foldername = str(scene.RES_pano)+"k"
             
             minimum_sChildPath = os.path.join(scene.PANO_dir,current_panores_foldername)
