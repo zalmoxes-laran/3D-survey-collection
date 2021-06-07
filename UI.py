@@ -174,7 +174,7 @@ class ToolsPanelSHIFT:
     #bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
-        addon_updater_ops.check_for_update_background()
+        #addon_updater_ops.check_for_update_background()
         layout = self.layout
         scene = context.scene
         obj = context.object
