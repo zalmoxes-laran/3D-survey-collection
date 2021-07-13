@@ -99,7 +99,6 @@ def rad(grad):
     return rad
 
 def get_nodegroupname_from_obj(obj):
-#    if 'cc_node' in [node.node_tree.name for node in obj.material_slots[0].material.node_tree.nodes]:
     if obj.material_slots[0].material.node_tree.nodes.find('cc_node') == -1 :
         nodegroupname = None
     else:
@@ -1113,7 +1112,7 @@ def setup_mat_panorama_3DSC(matname, img):
     mat.use_nodes = True
     mat.node_tree.nodes.clear()
 
-    mat.blend_method = "OPAQUE"
+    mat.blend_method = "BLEND"
     links = mat.node_tree.links
     nodes = mat.node_tree.nodes
     output = nodes.new('ShaderNodeOutputMaterial')
@@ -1125,8 +1124,19 @@ def setup_mat_panorama_3DSC(matname, img):
     teximgNode = nodes.new('ShaderNodeTexImage')
     teximgNode.image = img
     teximgNode.location = (-1200, 50)
-    links.new(mainNode.outputs[0], output.inputs[0])
+
+    mixNode = nodes.new('ShaderNodeMixShader')
+    mixNode.inputs[0].default_value = 0.5
+    mixNode.location = (-300, 0)
+
+    alphaNode = nodes.new('ShaderNodeBsdfTransparent')
+    #alphaNode.inputs[0].default_value = 0.5
+    alphaNode.location = (-600, -100)
+
+    links.new(mixNode.outputs[0], output.inputs[0])
+    links.new(mainNode.outputs[0], mixNode.inputs[1])
     links.new(teximgNode.outputs[0], mainNode.inputs[0])
+    links.new(alphaNode.outputs[0], mixNode.inputs[2])    
 
 def create_mat(ob):
     context = bpy.context
@@ -1317,8 +1327,9 @@ def create_cutter_series(cutter_name, x_tile_side, y_tile_side):
     cutter.modifiers[1].relative_offset_displace[1] = 1.0
     cutter.display_type = 'WIRE'
     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
-    bpy.ops.object.modifier_apply(modifier="Array")
-    bpy.ops.object.modifier_apply(modifier="Array.001")
+    cutter.modifiers[0].name
+    bpy.ops.object.modifier_apply(modifier=cutter.modifiers[0].name)
+    bpy.ops.object.modifier_apply(modifier=cutter.modifiers[0].name)
     bpy.ops.mesh.separate(type='LOOSE')
     return
 

@@ -258,7 +258,6 @@ class ToolsPanelQuickUtils:
         row = box.row()
         row.operator("diffuse.principled", icon="DECORATE_DRIVER", text='Diffuse 2 Principled')
 
-
 class ToolsPanelLODmanager:
     bl_label = "LOD manager"
     bl_space_type = 'VIEW_3D'
