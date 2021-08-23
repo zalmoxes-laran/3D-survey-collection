@@ -156,6 +156,7 @@ class ToolsPanelExport:
             row.operator("obj.exportbatch", icon="DUPLICATE", text='obj')
             row.operator("fbx.exportbatch", icon="DUPLICATE", text='fbx')
             row.operator("gltf.exportbatch", icon="DUPLICATE", text='gltf')
+            row.operator("glb.exportbatch", icon="DUPLICATE", text='glb')
             row = box.row()
             if not bpy.context.scene.FBX_export_dir:
                 row.label(text= "-> /objectname.obj")
@@ -489,7 +490,7 @@ class ToolsPanelPhotogrTool:
             col = split.column()
             col.prop(scene, 'camera_lens', icon='BLENDER', toggle=True, text='Lens')
 
-            if camera_type is not 'Not set':
+            if camera_type != 'Not set':
                 row = layout.row()
                 row.menu(Camera_menu.bl_idname, text=camera_type, icon='COLOR')
 

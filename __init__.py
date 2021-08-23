@@ -305,6 +305,7 @@ classes = (
     export_3DSC.OBJECT_OT_objexportbatch,
     export_3DSC.OBJECT_OT_osgtexportbatch,
     export_3DSC.OBJECT_OT_gltfexportbatch,
+    export_3DSC.OBJECT_OT_glbexportbatch,
     functions.OBJECT_OT_createcyclesmat,
     functions.OBJECT_OT_savepaintcam,
     shift.OBJECT_OT_IMPORTPOINTS,
