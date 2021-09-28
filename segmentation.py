@@ -90,11 +90,12 @@ class OBJECT_OT_projectsegmentationinversed(bpy.types.Operator):
                 print('>>> CUTTING >>>')
                 print('>>>>>> the object "' + ob.name + '" ('+str(ob_counter) +
                       '/'+str(ob_tot)+') is cutting the object' + ob_to_cut.name)
-                ob.select_set(True)
+                
                 #context.scene.objects.active = ob_to_cut
                 context.view_layer.objects.active = ob_to_cut
                 ob_to_cut.select_set(True)
                 bpy.ops.object.editmode_toggle()
+                ob.select_set(True)
                 bpy.ops.mesh.knife_project(cut_through=True)
                 try:
                     bpy.ops.mesh.separate(type='SELECTED')
