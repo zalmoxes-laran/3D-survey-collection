@@ -51,12 +51,27 @@ class PANO_import(bpy.types.Operator):
             sph = bpy.ops.mesh.primitive_uv_sphere_add(calc_uvs=True, radius=0.2, location=(pos_x,pos_y,pos_z))
             just_created_obj = context.active_object
             just_created_obj.name = remove_extension(ItemName)
+            
             just_created_obj.rotation_euler[2] = e2d(-90.0)
             bpy.ops.object.transform_apply(rotation = True, location = False)
+
+            #print(f"Il panorama {just_created_obj.name} ha rotazione z: {e2d(180.0+phi)}")
+            #just_created_obj.rotation_euler[0] = e2d(-(omega-90.0))
+            #just_created_obj.rotation_euler[1] = e2d(kappa)
+            #just_created_obj.rotation_euler[2] = e2d(180.0+phi)
+
+            if omega>0:
+                just_created_obj.rotation_euler[1] = e2d((omega-90.0))
+            else:
+                just_created_obj.rotation_euler[1] = e2d(-(omega-90.0))
+            just_created_obj.rotation_euler[0] = e2d(-kappa)
+            if omega>0:
+                just_created_obj.rotation_euler[2] = e2d(180.0+phi)
+            else:
+                just_created_obj.rotation_euler[2] = e2d(180-phi)
+
             
-            just_created_obj.rotation_euler[0] = e2d(-(omega-90.0))
-            just_created_obj.rotation_euler[1] = e2d(kappa)
-            just_created_obj.rotation_euler[2] = e2d(180.0+phi)
+
 
             uvMapName = 'UVMap'
             obj, uvMap = GetObjectAndUVMap( just_created_obj.name, uvMapName )

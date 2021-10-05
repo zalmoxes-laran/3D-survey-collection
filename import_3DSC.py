@@ -1,6 +1,7 @@
 import bpy
 import os
 
+from bpy import ops
 from bpy.types import Panel
 from bpy.types import Operator
 from bpy.types import PropertyGroup
@@ -301,16 +302,8 @@ class ImportMultipleObjs(Operator, ImportHelper):
             print(i)
             path_to_file = (os.path.join(folder, i.name))
 
-            bpy.ops.import_scene.obj(filepath = path_to_file,
-                                axis_forward = self.axis_forward_setting,
-                                axis_up = self.axis_up_setting,
-                                use_edges = self.edges_setting,
-                                use_smooth_groups = self.smooth_groups_setting,
-                                use_split_objects = self.split_objects_setting,
-                                use_split_groups = self.split_groups_setting,
-                                use_groups_as_vgroups = self.groups_as_vgroups_setting,
-                                use_image_search = self.image_search_setting,
-                                split_mode = self.split_mode_setting)#,
+            bpy.ops.import_scene.obj(filepath= path_to_file,filter_glob='*.obj;*.mtl', axis_forward = self.axis_forward_setting, axis_up = self.axis_up_setting, use_edges = self.edges_setting, use_smooth_groups = self.smooth_groups_setting, use_split_objects = self.split_objects_setting, use_split_groups = self.split_groups_setting, use_groups_as_vgroups = self.groups_as_vgroups_setting, use_image_search = self.image_search_setting, split_mode = self.split_mode_setting)
+
 
         return {'FINISHED'}
 
