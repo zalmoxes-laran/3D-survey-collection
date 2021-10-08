@@ -290,7 +290,7 @@ classes = (
     UI.Camera_menu,
     UI.Res_menu,
     UI.VIEW3D_PT_TexPatcher,
-    UI.VIEW3D_PT_SetupPanel,
+    # UI.VIEW3D_PT_SetupPanel,
     UI.VIEW3D_PT_mesh_analyze,
     import_3DSC.ImportMultipleObjs,
     import_3DSC.OBJECT_OT_IMPORTPOINTS,
@@ -309,6 +309,8 @@ classes = (
     functions.OBJECT_OT_createcyclesmat,
     functions.OBJECT_OT_savepaintcam,
     shift.OBJECT_OT_IMPORTPOINTS,
+    shift.ImportCoordinateShift,
+    shift.OBJECT_OT_IMPORTUNSHIFT,
     segmentation.OBJECT_OT_projectsegmentation,
     segmentation.OBJECT_OT_projectsegmentationinversed,
     segmentation.OBJECT_OT_setcutter,
@@ -472,6 +474,12 @@ def register():
         description = "Define the shift on the z axis",
         )
 
+    bpy.types.Scene.BL_epsg = StringProperty(
+        name = "EPSG",
+        default = "Not set",
+        description = "Epsg code"
+        )
+
     bpy.types.Scene.RES_pano = IntProperty(
         name = "Res",
         default = 1,
@@ -571,3 +579,4 @@ def unregister():
     del bpy.types.Scene.statistics_list
     del bpy.types.Scene.FBX_export_dir
     del bpy.types.Scene.TILE_square_meters
+    del bpy.types.Scene.BL_epsg

@@ -182,6 +182,7 @@ class ToolsPanelSHIFT:
 
         row = layout.row()
         row.label(text="Shift values:")
+        row.operator("shiftval_from.txtfile", icon="STICKY_UVS_DISABLE", text='import')
         row = layout.row()
         row.prop(context.scene, 'BL_x_shift', toggle = True)
         row = layout.row()
@@ -189,6 +190,8 @@ class ToolsPanelSHIFT:
         row = layout.row()
         row.prop(context.scene, 'BL_z_shift', toggle = True)
         row = layout.row()
+        row.prop(context.scene, 'BL_epsg', toggle = True)
+        row = layout.row() 
         # if scene['crs x'] is not None and scene['crs y'] is not None:
         #     if scene['crs x'] > 0 or scene['crs y'] > 0:
         #         self.layout.operator("shift_from.blendergis", icon="PASTEDOWN", text='from Bender GIS')

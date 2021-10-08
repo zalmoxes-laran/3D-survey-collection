@@ -17,6 +17,81 @@ from bpy.props import (BoolProperty,
                        CollectionProperty
                        )
 
+import json
+import os
+import shutil
+
+def panolistitem_to_obj(item_in_list):
+    obj = bpy.data.objects[item_in_list.name]
+    return obj
+
+def export_panoscene(scene, export_folder, EMviq, nodes, format_file, edges):
+    #EM_list_clear(bpy.context, "emviq_error_list")
+    edges["."] = []
+    for pano in scene.pano_list:
+        exec(pano.name+'_node = {}')
+        exec(panolistitem_to_obj(pano).location[0])
+        exec("nodes['"+pano.name+"'] = "+ pano.name + '_node')
+        pano.name
+ 
+        if len(ob.EM_ep_belong_ob) >= 2:
+            for ob_tagged in ob.EM_ep_belong_ob:
+                for epoch in scene.epoch_list:
+                    if ob_tagged.epoch == epoch.name:
+                        epochname1_var = epoch.name.replace(" ", "_")
+                        epochname_var = epochname1_var.replace(".", "")
+
+                        if EMviq:
+                            try:
+                                exec(epochname_var+'_node')
+                            except NameError:
+                                print("well, it WASN'T defined after all!")
+                                exec(epochname_var + '_node' + ' = {}')
+                                exec(epochname_var + '_urls = []')
+                                exec(epochname_var + "_node['urls'] = "+ epochname_var +"_urls")
+                                exec("nodes['"+epoch.name+"'] = "+ epochname_var + '_node')
+
+                                edges["."].append(epoch.name)
+
+                            else:
+                                print("sure, it was defined.")
+
+                            exec(epochname_var + '_urls.append("'+utente_aton+'/models/'+progetto_aton+'/shared/'+ ob.name + '.gltf")')
+
+                        ob.select_set(False)
+    return nodes, edges
+
+def json_writer(base_dir):
+    
+    pano_scene = {}
+    scenegraph = {}
+    nodes = {}
+    edges = {}
+    
+    pano_scene['scenegraph'] = scenegraph
+    nodes, edges = export_panoscene(scene, base_dir, True, nodes, self.em_export_format, edges)
+
+    scenegraph['nodes'] = nodes
+
+    # encode dict as JSON 
+    data = json.dumps(pano_scene, indent=4, ensure_ascii=True)
+
+    #'/users/emanueldemetrescu/Desktop/'
+    file_name = os.path.join(base_dir, "config.json")
+
+    # write JSON file
+    with open(file_name, 'w') as outfile:
+        outfile.write(data + '\n')
+
+    em_file_4_emviq = os.path.join(export_folder, "em.graphml")
+
+    em_file_fixed_path = bpy.path.abspath(scene.EM_file)
+    shutil.copyfile(em_file_fixed_path, em_file_4_emviq)
+
+
+    return
+
+
 class PANO_import(bpy.types.Operator):
     bl_idname = "import.pano"
     bl_label = "Import Panoramas from file"
@@ -34,7 +109,7 @@ class PANO_import(bpy.types.Operator):
         
         # Parse the array:
         for p in lines_in_file:
-#            p0 = p.split('\t')  # use space as separator
+            #p0 = p.split('\t')  # use space as separator
             p0 = p.split(' ')  # use space as separator
             print(p0[0])
             ItemName = p0[0]
@@ -69,9 +144,6 @@ class PANO_import(bpy.types.Operator):
                 just_created_obj.rotation_euler[2] = e2d(180.0+phi)
             else:
                 just_created_obj.rotation_euler[2] = e2d(180-phi)
-
-            
-
 
             uvMapName = 'UVMap'
             obj, uvMap = GetObjectAndUVMap( just_created_obj.name, uvMapName )
@@ -171,7 +243,7 @@ class VIEW_alignquad(bpy.types.Operator):
         pano_list_index = scene.pano_list_index
         current_camera_name = 'CAM_'+scene.pano_list[pano_list_index].name
         current_camera_obj = data.objects[current_camera_name]
-#        scene.camera = current_camera_obj
+        #scene.camera = current_camera_obj
         current_pano = data.objects[scene.pano_list[pano_list_index].name]
         object = context.active_object
 

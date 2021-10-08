@@ -46,7 +46,7 @@ def create_new_col_from_file_name(filename):
 def read_point_data(context, filepath, shift, name_col, x_col, y_col, z_col, separator):
     print("running read point file...")
     f = open(filepath, 'r', encoding='utf-8')
-#    data = f.read()
+    #data = f.read()
     arr=f.readlines()  # store the entire file in a variable
     f.close()
     
@@ -283,7 +283,7 @@ class ImportMultipleObjs(Operator, ImportHelper):
         else:
             row.prop(self, "groups_as_vgroups_setting")
 
-#        layout = self.layout.column_flow(2)
+        #layout = self.layout.column_flow(2)
 
         row.prop(self, "clamp_size_setting")
         layout.prop(self, "axis_forward_setting")
