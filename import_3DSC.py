@@ -262,6 +262,13 @@ class ImportMultipleObjs(Operator, ImportHelper):
             default='Z',
             )
 
+
+    enable_shift_coordinates: BoolProperty(
+            name="shifting coordinates",
+            description="Option to shift large coordinates",
+            default=True,
+            )
+
     def draw(self, context):
         layout = self.layout
 
@@ -290,11 +297,22 @@ class ImportMultipleObjs(Operator, ImportHelper):
         layout.prop(self, "axis_up_setting")
 
         layout.prop(self, "image_search_setting")
+        layout.prop(self, "enable_shift_coordinates")
+        
 
     def execute(self, context):
 
         # get the folder
         folder = (os.path.dirname(self.filepath))
+
+        if self.enable_shift_coordinates:
+                x_shift = context.scene.BL_x_shift
+                y_shift = context.scene.BL_y_shift
+                z_shift = context.scene.BL_z_shift
+        else:
+                x_shift = 0.0
+                y_shift = 0.0
+                z_shift = 0.0               
 
         # iterate through the selected files
         for i in self.files:
@@ -302,7 +320,7 @@ class ImportMultipleObjs(Operator, ImportHelper):
             print(i)
             path_to_file = (os.path.join(folder, i.name))
 
-            bpy.ops.import_scene.obj(filepath= path_to_file,filter_glob='*.obj;*.mtl', axis_forward = self.axis_forward_setting, axis_up = self.axis_up_setting, use_edges = self.edges_setting, use_smooth_groups = self.smooth_groups_setting, use_split_objects = self.split_objects_setting, use_split_groups = self.split_groups_setting, use_groups_as_vgroups = self.groups_as_vgroups_setting, use_image_search = self.image_search_setting, split_mode = self.split_mode_setting)
+            bpy.ops.import_scene.obj(filepath= path_to_file,filter_glob='*.obj;*.mtl', axis_forward = self.axis_forward_setting, axis_up = self.axis_up_setting, use_edges = self.edges_setting, use_smooth_groups = self.smooth_groups_setting, use_split_objects = self.split_objects_setting, use_split_groups = self.split_groups_setting, use_groups_as_vgroups = self.groups_as_vgroups_setting, use_image_search = self.image_search_setting, split_mode = self.split_mode_setting, global_shift_x = x_shift, global_shift_y = y_shift, global_shift_z = z_shift)
 
 
         return {'FINISHED'}

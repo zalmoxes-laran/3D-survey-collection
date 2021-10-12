@@ -91,7 +91,6 @@ def json_writer(base_dir):
 
     return
 
-
 class PANO_import(bpy.types.Operator):
     bl_idname = "import.pano"
     bl_label = "Import Panoramas from file"
@@ -227,9 +226,8 @@ class VIEW_pano(bpy.types.Operator):
         current_pano = data.objects[scene.pano_list[pano_list_index].name]
         context.view_layer.objects.active = current_pano
         bpy.ops.object.select_all(action='DESELECT')
-#        current_pano.select = True
+        #current_pano.select = True
         return {'FINISHED'}
-
 
 class VIEW_alignquad(bpy.types.Operator):
     bl_idname = "align.quad"
@@ -247,7 +245,6 @@ class VIEW_alignquad(bpy.types.Operator):
         current_pano = data.objects[scene.pano_list[pano_list_index].name]
         object = context.active_object
 
-
 #        area = next(area for area in bpy.context.screen.areas if area.type == 'VIEW_3D')
 #        area.spaces[0].region_3d.view_perspective = 'CAMERA'
 #
@@ -257,7 +254,6 @@ class VIEW_alignquad(bpy.types.Operator):
         set_rotation_to_bubble(context,object,current_camera_obj)
 
         return {'FINISHED'}
-
 
 class VIEW_setlens(bpy.types.Operator):
     bl_idname = "set.lens"
@@ -287,7 +283,6 @@ class VIEW_setlens(bpy.types.Operator):
 #        set_rotation_to_bubble(context,object,current_camera_obj)
 
         return {'FINISHED'}
-
 
 class SETpanoRES(bpy.types.Operator):
     bl_idname = "set.panores"
