@@ -35,7 +35,7 @@ Let me introduce myself with a short list of the tools (sorry the images are rel
 The **Importers** panel allows to
 
 * import multiple objs at once (with correct orientation), for instance a bunch of models made in Photoscan, Meshroom or Zephyr 3D.
-* import points as empty objects from a txt file, for instance a topographic survey made with a total station or DGPS. Optionally I can shift the values of the world coordinates (they are usually to big to be correctly managed by a computer graphic software like Blender and it is a good practice to shift them)
+* import points as empty objects from a txt file, for instance a topographic survey made with a total station or DGPS. Optionally I can shift the values of the world coordinates (they are usually too big to be correctly managed by a computer graphic software like Blender and it is a good practice to shift them)
 * If you are using BlenderGIS, I will recognize it and I can use its shifting parameters ;-), just click on "use BlenderGIS".
 
 ![Importers screenshot](https://raw.githubusercontent.com/zalmoxes-laran/BlenderLandscape/master/README_images/Importers_139.png)
