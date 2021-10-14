@@ -139,13 +139,20 @@ class OBJECT_OT_ExportObjButton(bpy.types.Operator):
         if not basedir:
             raise Exception("Save the blend file")
 
-#        selection = bpy.context.selected_objects
-#        bpy.ops.object.select_all(action='DESELECT')
         activename = bpy.path.clean_name(bpy.context.active_object.name)
         fn = os.path.join(basedir, activename)
 
+        if context.scene.SHIFT_OBJ_on:
+                x_shift = context.scene.BL_x_shift
+                y_shift = context.scene.BL_y_shift
+                z_shift = context.scene.BL_z_shift
+        else:
+                x_shift = 0.0
+                y_shift = 0.0
+                z_shift = 0.0  
+
         # write active object in obj format
-        bpy.ops.export_scene.obj(filepath=fn + ".obj", use_selection=True, axis_forward='Y', axis_up='Z', path_mode='RELATIVE')
+        bpy.ops.export_scene.obj(filepath=fn + ".obj", use_selection=True, axis_forward='Y', axis_up='Z', path_mode='RELATIVE', global_shift_x = x_shift, global_shift_y = y_shift, global_shift_z = z_shift)
         return {'FINISHED'}
 
 class OBJECT_OT_gltfexportbatch(bpy.types.Operator):
@@ -158,7 +165,6 @@ class OBJECT_OT_gltfexportbatch(bpy.types.Operator):
         #basedir = 'F:\LOD1'
         copyright = "CC-BY-NC E.Demetrescu"
         draco_compression = 6
-
 
         if bpy.context.scene.FBX_export_dir:
             basedir = os.path.dirname(bpy.context.scene.FBX_export_dir)
@@ -233,6 +239,15 @@ class OBJECT_OT_objexportbatch(bpy.types.Operator):
         if not basedir:
             raise Exception("Blend file is not saved")
 
+        if context.scene.SHIFT_OBJ_on:
+                x_shift = context.scene.BL_x_shift
+                y_shift = context.scene.BL_y_shift
+                z_shift = context.scene.BL_z_shift
+        else:
+                x_shift = 0.0
+                y_shift = 0.0
+                z_shift = 0.0    
+
         selection = bpy.context.selected_objects
         bpy.ops.object.select_all(action='DESELECT')
 
@@ -240,7 +255,7 @@ class OBJECT_OT_objexportbatch(bpy.types.Operator):
             obj.select_set(True)
             name = bpy.path.clean_name(obj.name)
             fn = os.path.join(basedir, name)
-            bpy.ops.export_scene.obj(filepath=str(fn + '.obj'), use_selection=True, axis_forward='Y', axis_up='Z', path_mode='RELATIVE')
+            bpy.ops.export_scene.obj(filepath=str(fn + '.obj'), use_selection=True, axis_forward='Y', axis_up='Z', path_mode='RELATIVE', global_shift_x = x_shift, global_shift_y = y_shift, global_shift_z = z_shift)
             obj.select_set(False)
         return {'FINISHED'}
 

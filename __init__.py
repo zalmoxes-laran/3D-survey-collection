@@ -402,14 +402,16 @@ def register():
         default = 1,
         min = 1,
         max = 3,
-        description = "Enter desired number of LOD (Level of Detail)")
+        description = "Enter desired number of LOD (Level of Detail)"
+        )
 
     bpy.types.Scene.setLODnum = IntProperty(
         name = "LOD",
         default = 0,
         min = 0,
         max = 3,
-        description = "Enter desired number of LOD (Level of Detail)")
+        description = "Enter desired number of LOD (Level of Detail)"
+        )
 
     bpy.types.Scene.LOD1_tex_res = IntProperty(
         name = "Resolution Texture of the LOD1",
@@ -419,17 +421,26 @@ def register():
     bpy.types.Scene.LOD2_tex_res = IntProperty(
         name = "Resolution Texture of the LOD2",
         default = 512,
-        description = "Enter the resolution for the texture of the LOD2")
+        description = "Enter the resolution for the texture of the LOD2"
+        )
 
     bpy.types.Scene.LOD3_tex_res = IntProperty(
         name = "Resolution Texture of the LOD3",
         default = 128,
-        description = "Enter the resolution for the texture of the LOD3")
+        description = "Enter the resolution for the texture of the LOD3"
+        )
 
     bpy.types.Scene.LOD_pad_on = BoolProperty(
         name = "Padding ratio of the LOD",
         default = True,
-        description = "Enter the paddin ratio for the LOD")
+        description = "Enter the paddin ratio for the LOD"
+        )
+
+    bpy.types.Scene.SHIFT_OBJ_on = BoolProperty(
+        name = "Shifting obj export",
+        default = False,
+        description = "Shifting obj export: slow with big models"
+        )
 
     bpy.types.Scene.LOD1_dec_ratio = FloatProperty(
         name = "LOD1 decimation ratio",
@@ -580,3 +591,4 @@ def unregister():
     del bpy.types.Scene.FBX_export_dir
     del bpy.types.Scene.TILE_square_meters
     del bpy.types.Scene.BL_epsg
+    del bpy.types.Scene.SHIFT_OBJ_on

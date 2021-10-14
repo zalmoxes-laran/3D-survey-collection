@@ -134,12 +134,16 @@ class ToolsPanelExport:
     def draw(self, context):
         layout = self.layout
         obj = context.object
+        scene = context.scene
         row = layout.row()
         if obj is not None:
             self.layout.operator("export.coordname", icon="STICKY_UVS_DISABLE", text='Coordinates')
             row = layout.row()
 
             box = layout.box()
+            row = box.row()
+            row.prop(scene, 'SHIFT_OBJ_on', text="Use Shift (slower, only obj)")
+
             row = box.row()
             row.label(text= "Export object(s) in one file:")
             row = box.row()
