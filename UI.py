@@ -159,6 +159,7 @@ class ToolsPanelExport:
             row = box.row()
             row.operator("obj.exportbatch", icon="DUPLICATE", text='obj')
             row.operator("fbx.exportbatch", icon="DUPLICATE", text='fbx')
+            row = box.row()
             row.operator("gltf.exportbatch", icon="DUPLICATE", text='gltf')
             row.operator("glb.exportbatch", icon="DUPLICATE", text='glb')
             row = box.row()
