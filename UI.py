@@ -163,6 +163,8 @@ class ToolsPanelExport:
             row.operator("gltf.exportbatch", icon="DUPLICATE", text='gltf')
             row.operator("glb.exportbatch", icon="DUPLICATE", text='glb')
             row = box.row()
+            row.prop(context.scene, 'author_sign_model', toggle = True, text='Author')
+            row = box.row()
             if not bpy.context.scene.FBX_export_dir:
                 row.label(text= "-> /objectname.obj")
                 row = box.row()

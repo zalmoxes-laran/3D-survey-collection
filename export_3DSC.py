@@ -163,7 +163,7 @@ class OBJECT_OT_gltfexportbatch(bpy.types.Operator):
     def execute(self, context):
 
         #basedir = 'F:\LOD1'
-        copyright = "CC-BY-NC E.Demetrescu"
+        copyright = context.scene.author_sign_model #"CC-BY-NC E.Demetrescu"
         draco_compression = 6
 
         if bpy.context.scene.FBX_export_dir:
@@ -196,7 +196,7 @@ class OBJECT_OT_glbexportbatch(bpy.types.Operator):
     def execute(self, context):
 
         #basedir = 'F:\LOD1'
-        copyright = "CC-BY-NC E.Demetrescu"
+        copyright = context.scene.author_sign_model #"CC-BY-NC E.Demetrescu"
         draco_compression = 6
 
 

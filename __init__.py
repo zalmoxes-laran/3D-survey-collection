@@ -19,8 +19,8 @@
 bl_info = {
     "name": "3D Survey Collection",
     "author": "Emanuel Demetrescu",
-    "version": (1,4,78),
-    "blender": (2, 93, 4),
+    "version": (1,4,79),
+    "blender": (2, 93, 5),
     "location": "3D View > Toolbox",
     "description": "A collection of tools for 3D Survey activities",
 #    "warning": "",
@@ -507,6 +507,13 @@ def register():
         default = 35,
         description = "Lens camera",
         )
+
+    bpy.types.Scene.author_sign_model = StringProperty(
+      name = "Credits of the model",
+      default = "",
+      description = "Define the author of the exported models (only gltf, glb)",
+      )
+
     bpy.types.Scene.info_log = []
 
 # panoramic
@@ -592,3 +599,4 @@ def unregister():
     del bpy.types.Scene.TILE_square_meters
     del bpy.types.Scene.BL_epsg
     del bpy.types.Scene.SHIFT_OBJ_on
+    del bpy.types.Scene.author_sign_model
