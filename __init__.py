@@ -19,7 +19,7 @@
 bl_info = {
     "name": "3D Survey Collection",
     "author": "Emanuel Demetrescu",
-    "version": (1,4,79),
+    "version": (1,4,80),
     "blender": (2, 93, 5),
     "location": "3D View > Toolbox",
     "description": "A collection of tools for 3D Survey activities",
@@ -278,7 +278,6 @@ class LODitemListItem(PropertyGroup):
             default="Untitled")
 
 classes = (
-    UI.VIEW3D_PT_Shift_ToolBar,
     UI.VIEW3D_PT_Import_ToolBar,
     UI.VIEW3D_PT_Export_ToolBar,
     UI.VIEW3D_PT_QuickUtils_ToolBar,
@@ -308,9 +307,6 @@ classes = (
     export_3DSC.OBJECT_OT_glbexportbatch,
     functions.OBJECT_OT_createcyclesmat,
     functions.OBJECT_OT_savepaintcam,
-    shift.OBJECT_OT_IMPORTPOINTS,
-    shift.ImportCoordinateShift,
-    shift.OBJECT_OT_IMPORTUNSHIFT,
     segmentation.OBJECT_OT_projectsegmentation,
     segmentation.OBJECT_OT_projectsegmentationinversed,
     segmentation.OBJECT_OT_setcutter,
@@ -467,30 +463,6 @@ def register():
       subtype = 'DIR_PATH'
       )
 
-    bpy.types.Scene.BL_x_shift = FloatProperty(
-      name = "X shift",
-      default = 0.0,
-      description = "Define the shift on the x axis",
-      )
-
-    bpy.types.Scene.BL_y_shift = FloatProperty(
-      name = "Y shift",
-      default = 0.0,
-      description = "Define the shift on the y axis",
-      )
-
-    bpy.types.Scene.BL_z_shift = FloatProperty(
-        name = "Z shift",
-        default = 0.0,
-        description = "Define the shift on the z axis",
-        )
-
-    bpy.types.Scene.BL_epsg = StringProperty(
-        name = "EPSG",
-        default = "Not set",
-        description = "Epsg code"
-        )
-
     bpy.types.Scene.RES_pano = IntProperty(
         name = "Res",
         default = 1,
@@ -559,6 +531,9 @@ def register():
     description="Define the area of the tiles",
     )
 
+    shift.register()
+
+
 def unregister():
 
     addon_updater_ops.unregister(bl_info)
@@ -567,6 +542,8 @@ def unregister():
                 bpy.utils.unregister_class(cls)
         except RuntimeError:
                 pass
+
+    shift.unregister()
 
     del bpy.types.Scene.setLODnum
     del bpy.types.WindowManager.interface_vars
@@ -581,9 +558,7 @@ def unregister():
     del bpy.types.Scene.LOD3_dec_ratio
     del bpy.types.Scene.LOD_pad_on
     del bpy.types.Scene.BL_undistorted_path
-    del bpy.types.Scene.BL_x_shift
-    del bpy.types.Scene.BL_y_shift
-    del bpy.types.Scene.BL_z_shift
+
     del bpy.types.Scene.RES_pano
     del bpy.types.Scene.camera_type
     del bpy.types.Scene.camera_lens
@@ -597,6 +572,5 @@ def unregister():
     del bpy.types.Scene.statistics_list
     del bpy.types.Scene.FBX_export_dir
     del bpy.types.Scene.TILE_square_meters
-    del bpy.types.Scene.BL_epsg
     del bpy.types.Scene.SHIFT_OBJ_on
     del bpy.types.Scene.author_sign_model

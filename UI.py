@@ -175,35 +175,7 @@ class ToolsPanelExport:
             row.label(text="Select object(s) to see tools here.")
             row = layout.row()
 
-class ToolsPanelSHIFT:
-    bl_label = "Shifting"
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    #bl_options = {'DEFAULT_CLOSED'}
 
-    def draw(self, context):
-        #addon_updater_ops.check_for_update_background()
-        layout = self.layout
-        scene = context.scene
-        obj = context.object
-
-        row = layout.row()
-        row.label(text="Shift values:")
-        row.operator("shiftval_from.txtfile", icon="STICKY_UVS_DISABLE", text='import')
-        row = layout.row()
-        row.prop(context.scene, 'BL_x_shift', toggle = True)
-        row = layout.row()
-        row.prop(context.scene, 'BL_y_shift', toggle = True)
-        row = layout.row()
-        row.prop(context.scene, 'BL_z_shift', toggle = True)
-        row = layout.row()
-        row.prop(context.scene, 'BL_epsg', toggle = True)
-        row = layout.row() 
-        # if scene['crs x'] is not None and scene['crs y'] is not None:
-        #     if scene['crs x'] > 0 or scene['crs y'] > 0:
-        #         self.layout.operator("shift_from.blendergis", icon="PASTEDOWN", text='from Bender GIS')
-
-        addon_updater_ops.update_notice_box_ui(self, context)
 
 class ToolsPanelQuickUtils:
     bl_label = "Quick Utils"
@@ -603,10 +575,6 @@ class VIEW3D_PT_Export_ToolBar(Panel, ToolsPanelExport):
     bl_idname = "VIEW3D_PT_Export_ToolBar"
     bl_context = "objectmode"
 
-class VIEW3D_PT_Shift_ToolBar(Panel, ToolsPanelSHIFT):
-    bl_category = "3DSC"
-    bl_idname = "VIEW3D_PT_Shift_ToolBar"
-    bl_context = "objectmode"
 
 class VIEW3D_PT_QuickUtils_ToolBar(Panel, ToolsPanelQuickUtils):
     bl_category = "3DSC"
