@@ -15,9 +15,9 @@ import logging
 log = logging.getLogger(__name__)
 
 
-class ImportCoordinateShift(Operator, ImportHelper):
+class ImportCoordinateShift_dsc(Operator, ImportHelper):
     """Tool to import shift coordinates from a txt file"""
-    bl_idname = "import_fromfile.shift_valcoor"  # important since its how bpy.ops.import_file.pano_data is constructed
+    bl_idname = "import_fromfile.shift_valcoor_dsc"  # important since its how bpy.ops.import_file.pano_data is constructed
     bl_label = "Import positions"
 
     # ImportHelper mixin class uses this
@@ -46,20 +46,20 @@ def read_shift_data(context, filepath):
     return {'FINISHED'}
 
 
-class OBJECT_OT_IMPORTUNSHIFT(bpy.types.Operator):
+class OBJECT_OT_IMPORT_SHIFT(bpy.types.Operator):
     """Import shift coordinates from a SHIFT txt file"""
-    bl_idname = "shiftval_from.txtfile"
+    bl_idname = "shiftval_from.txtfile_dsc"
     bl_label = "Import shift coordinates from file"
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
-        bpy.ops.import_fromfile.shift_valcoor('INVOKE_DEFAULT')
+        bpy.ops.import_fromfile.shift_valcoor_dsc('INVOKE_DEFAULT')
         return {'FINISHED'}
 
 
-class OBJECT_OT_IMPORTUNNTS(bpy.types.Operator):
+class OBJECT_OT_IMPORT_BG(bpy.types.Operator):
     """Import points as empty objects from a txt file"""
-    bl_idname = "shift_from.blendergis"
+    bl_idname = "shift_from.blendergis_dsc"
     bl_label = "Copy from BlenderGis"
     bl_options = {"REGISTER", "UNDO"}
 
@@ -69,7 +69,6 @@ class OBJECT_OT_IMPORTUNNTS(bpy.types.Operator):
         scene['BL_y_shift'] = scene['crs y']
 
         return {'FINISHED'}
-
 
 class ToolsPanel_dsc_SHIFT:
     bl_label = "Shifting"
@@ -85,10 +84,10 @@ class ToolsPanel_dsc_SHIFT:
 
         row = layout.row()
         row.label(text="Shift values:")
-        row.operator("shiftval_from.txtfile",
+        row.operator("shiftval_from.txtfile_dsc",
                      icon="STICKY_UVS_DISABLE", text='import')
-        row.operator("export.coordshift",
-                     icon="STICKY_UVS_DISABLE", text='export')
+        #row.operator("export.coordshift_dsc",
+        #             icon="STICKY_UVS_DISABLE", text='export')
         row = layout.row()
         row.prop(context.scene, 'BL_x_shift', toggle=True)
         row = layout.row()
@@ -109,9 +108,9 @@ class VIEW3D_PT_dsc_Shift_ToolBar(Panel, ToolsPanel_dsc_SHIFT):
 
 
 classes = [
-    OBJECT_OT_IMPORTUNSHIFT,
-    OBJECT_OT_IMPORTUNNTS,
-    ImportCoordinateShift,
+    OBJECT_OT_IMPORT_SHIFT,
+    OBJECT_OT_IMPORT_BG,
+    ImportCoordinateShift_dsc,
     VIEW3D_PT_dsc_Shift_ToolBar
 ]
 
