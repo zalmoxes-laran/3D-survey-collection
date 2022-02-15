@@ -9,7 +9,20 @@ from bpy_extras.io_utils import ExportHelper
 from bpy.props import StringProperty, BoolProperty, EnumProperty
 from bpy.types import Operator
 
+'''
+def image2image():
+    # create new image or just find your image in bpy.data
+    image_new = bpy.data.images.new(name = 'newimage',width=1024,height=1024,alpha=True)
+    image_old = bpy.data.images[0]
 
+    # saving image_new which is created above
+    mypath = 'D:/01 Projects/mytexture.png'
+    image_new.filepath = mypath
+    image_new.save()
+
+    # and you can save loaded images without setting filepath attribute:
+    image_old.save_render(filepath='D:/01 Projects/mytexture.png')
+'''
 ############## from here operators to export text ########################
 
 
