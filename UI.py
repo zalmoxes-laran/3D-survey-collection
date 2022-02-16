@@ -165,6 +165,9 @@ class ToolsPanelExport:
             row = box.row()
             row.prop(context.scene, 'author_sign_model', toggle = True, text='Author')
             row = box.row()
+            row.prop(context.scene, 'gltf_export_maxres', toggle = True, text='Max resolution of jpg images')
+            row.prop(context.scene, 'gltf_export_quality', toggle = True, text='Quality of jpg images')
+            row = box.row()
             if not bpy.context.scene.FBX_export_dir:
                 row.label(text= "-> /objectname.obj")
                 row = box.row()
