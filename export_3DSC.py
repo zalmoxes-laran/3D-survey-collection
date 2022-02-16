@@ -9,20 +9,41 @@ from bpy_extras.io_utils import ExportHelper
 from bpy.props import StringProperty, BoolProperty, EnumProperty
 from bpy.types import Operator
 
-'''
-def image2image():
+def check_if_scalable(image_block):
+    is_scalable = False
+    if image_block.size[0] > bpy.context.scene.gltf_export_maxres and image_block.size[1] > bpy.context.scene.gltf_export_maxres:
+        is_scalable =True
+    return is_scalable
+
+def image_compression(dir_path):
     # create new image or just find your image in bpy.data
-    image_new = bpy.data.images.new(name = 'newimage',width=1024,height=1024,alpha=True)
-    image_old = bpy.data.images[0]
+    scene = bpy.context.scene
+    temp_image_format = scene.render.image_settings.file_format
+    temp_image_quality = scene.render.image_settings.quality
+    scene.render.image_settings.file_format = 'JPEG'
+    scene.render.image_settings.quality = scene.gltf_export_quality
+    for entry in os.listdir(dir_path):
+        if os.path.isfile(os.path.join(dir_path, entry)):
+            if entry.lower().endswith('.jpg') or entry.lower().endswith('.png'):
+                print(f'inizio a comprimere {entry}')
+                image_file_path = bpy.path.abspath(os.path.join(dir_path, entry))
+                image_dblock = bpy.data.images.load(image_file_path)
+                print(f"l'immagine importata ha lato {str(image_dblock.size[0])}")
+                if check_if_scalable(image_dblock):
+                    
+                    image_dblock.scale(scene.gltf_export_maxres,scene.gltf_export_maxres)
+                    print(f"l'immagine importata ha ora lato {str(image_dblock.size[0])}")
+                    print(f"ho compresso {image_dblock.name} con path {image_dblock.filepath}")
+                    #image_dblock.filepath = image_file_path
+                    image_dblock.update()
 
-    # saving image_new which is created above
-    mypath = 'D:/01 Projects/mytexture.png'
-    image_new.filepath = mypath
-    image_new.save()
+                    image_dblock.save_render(image_file_path,scene= bpy.context.scene)
 
-    # and you can save loaded images without setting filepath attribute:
-    image_old.save_render(filepath='D:/01 Projects/mytexture.png')
-'''
+    scene.render.image_settings.file_format = temp_image_format 
+    scene.render.image_settings.quality = temp_image_quality 
+    return 
+
+
 ############## from here operators to export text ########################
 
 
@@ -199,6 +220,9 @@ class OBJECT_OT_gltfexportbatch(bpy.types.Operator):
             file_path = os.path.join(basedir, namefile)
             bpy.ops.export_scene.gltf(export_format='GLTF_SEPARATE', ui_tab='GENERAL', export_copyright=copyright, export_image_format='AUTO', export_texture_dir='', export_texcoords=True, export_normals=True, export_draco_mesh_compression_enable=True, export_draco_mesh_compression_level=draco_compression, export_draco_position_quantization=14, export_draco_normal_quantization=10, export_draco_texcoord_quantization=12, export_draco_generic_quantization=12, export_tangents=False, export_materials='EXPORT', export_colors=False, export_cameras=False, use_selection=True, export_extras=False, export_yup=True, export_apply=False, export_animations=False, export_frame_range=False, export_frame_step=1, export_force_sampling=False, export_nla_strips=False, export_def_bones=False, export_current_frame=False, export_skins=False, export_all_influences=False, export_morph=True, export_morph_normal=False, export_morph_tangent=False, export_lights=False, export_displacement=False, will_save_settings=False, filepath=file_path, check_existing=False)#, filter_glob='*.glb;*.gltf')
             obj.select_set(False)
+        
+        image_compression(basedir)
+
         return {'FINISHED'}
 
 class OBJECT_OT_glbexportbatch(bpy.types.Operator):
@@ -294,10 +318,6 @@ class OBJECT_OT_fbxexp(bpy.types.Operator):
         fn = os.path.join(basedir, subfolder, name)
         bpy.ops.export_scene.fbx(filepath = fn + ".fbx", check_existing=True, filter_glob="*.fbx", use_selection=True, use_active_collection=False, global_scale=1.0, apply_unit_scale=True, apply_scale_options='FBX_SCALE_NONE', bake_space_transform=False, object_types={'MESH'}, use_mesh_modifiers=True, use_mesh_modifiers_render=True, mesh_smooth_type='OFF', use_mesh_edges=False, use_tspace=False, use_custom_props=False, add_leaf_bones=True, primary_bone_axis='Y', secondary_bone_axis='X', use_armature_deform_only=False, armature_nodetype='NULL', bake_anim=False, bake_anim_use_all_bones=True, bake_anim_use_nla_strips=True, bake_anim_use_all_actions=True, bake_anim_force_startend_keying=True, bake_anim_step=1.0, bake_anim_simplify_factor=1.0, path_mode='AUTO', embed_textures=False, batch_mode='OFF', use_batch_own_dir=True, use_metadata=True, axis_forward='-Z', axis_up='Y')
 
-#       bpy.ops.export_scene.fbx(filepath= fn + ".fbx", check_existing=True, axis_forward='-Z', axis_up='Y', filter_glob="*.fbx", ui_tab='MAIN', use_selection=True, global_scale=1.0, apply_unit_scale=True, bake_space_transform=False, object_types={'MESH'}, use_mesh_modifiers=True, mesh_smooth_type='EDGE', use_mesh_edges=False, use_tspace=False, use_custom_props=False, add_leaf_bones=True, primary_bone_axis='Y', secondary_bone_axis='X', use_armature_deform_only=False, bake_anim=True, bake_anim_use_all_bones=True, bake_anim_use_nla_strips=True, bake_anim_use_all_actions=True, bake_anim_force_startend_keying=True, bake_anim_step=1.0, bake_anim_simplify_factor=1.0, use_anim=True, use_anim_action_all=True, use_default_take=True, use_anim_optimize=True, anim_optimize_precision=6.0, path_mode='AUTO', embed_textures=False, batch_mode='OFF', use_batch_own_dir=True, use_metadata=True)
-#       filepath = fn + ".fbx", filter_glob="*.fbx", version='BIN7400', use_selection=True, global_scale=100.0, axis_forward='-Z', axis_up='Y', bake_space_transform=False, object_types={'MESH','EMPTY'}, use_mesh_modifiers=False, mesh_smooth_type='EDGE', use_mesh_edges=False, use_tspace=False, use_armature_deform_only=False, bake_anim=False, bake_anim_use_nla_strips=False, bake_anim_step=1.0, bake_anim_simplify_factor=1.0, use_anim=False, use_anim_action_all=False, use_default_take=False, use_anim_optimize=False, anim_optimize_precision=6.0, path_mode='AUTO', embed_textures=False, batch_mode='OFF', use_batch_own_dir=True, use_metadata=True)
-
-#        obj.select = False
         return {'FINISHED'}
 
 #_______________________________________________________________________________________________________________
@@ -347,8 +367,6 @@ class OBJECT_OT_fbxexportbatch(bpy.types.Operator):
                 bpy.ops.export_scene.gltf(export_format='GLTF_SEPARATE', ui_tab='GENERAL', export_copyright=copyright_txt, export_image_format='AUTO', export_texture_dir=tex_dir, export_texcoords=True, export_normals=True, export_draco_mesh_compression_enable=True, export_draco_mesh_compression_level=6, export_draco_position_quantization=14, export_draco_normal_quantization=10, export_draco_texcoord_quantization=12, export_draco_generic_quantization=12, export_tangents=True, export_materials=True, export_colors=True, export_cameras=False, use_selection=True, export_extras=False, export_yup=True, export_apply=True, export_animations=False, export_frame_range=False, export_frame_step=1, export_force_sampling=False, export_nla_strips=False, export_def_bones=False, export_current_frame=False, export_skins=False, export_all_influences=False, export_morph=False, export_morph_normal=False, export_morph_tangent=False, export_lights=False, export_displacement=False, will_save_settings=False, filepath=fn, check_existing=True, filter_glob='*.glb;*.gltf')
             obj.select_set(False)
         return {'FINISHED'}
-
-#_______________________________________________________________________________________________________________
 
 class OBJECT_OT_osgtexportbatch(bpy.types.Operator):
     bl_idname = "osgt.exportbatch"

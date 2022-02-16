@@ -531,6 +531,18 @@ def register():
     description="Define the area of the tiles",
     )
 
+    bpy.types.Scene.gltf_export_quality = IntProperty(
+    name="export quality",
+    default=100,
+    description="Define the quality of the output images",
+    )
+
+    bpy.types.Scene.gltf_export_maxres = IntProperty(
+    name="export max resolution",
+    default=2048,
+    description="Define the resolution of the output images",
+    )
+
     shift.register()
 
 
@@ -574,3 +586,5 @@ def unregister():
     del bpy.types.Scene.TILE_square_meters
     del bpy.types.Scene.SHIFT_OBJ_on
     del bpy.types.Scene.author_sign_model
+    del bpy.types.Scene.gltf_export_quality
+    del bpy.types.Scene.gltf_export_maxres
