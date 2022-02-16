@@ -13,6 +13,8 @@ def check_if_scalable(image_block):
     is_scalable = False
     if image_block.size[0] > bpy.context.scene.gltf_export_maxres and image_block.size[1] > bpy.context.scene.gltf_export_maxres:
         is_scalable =True
+    if bpy.context.scene.gltf_export_quality < 100:
+        is_scalable =True
     return is_scalable
 
 def image_compression(dir_path):
