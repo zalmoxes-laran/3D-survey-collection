@@ -338,10 +338,10 @@ class OBJECT_OT_fbxexportbatch(bpy.types.Operator):
     bl_label = "Fbx export batch UE4"
     bl_options = {"REGISTER", "UNDO"}
 
-    export_format : StringProperty()
+    #export_format : StringProperty()
 
     def execute(self, context):
-        print(self.export_format)
+        #print(self.export_format)
 
         if bpy.context.scene.FBX_export_dir:
             basedir = os.path.dirname(bpy.context.scene.FBX_export_dir)
@@ -365,7 +365,7 @@ class OBJECT_OT_fbxexportbatch(bpy.types.Operator):
             #print(fn)
             #if self.export_format == "FBX":
             print(f"Provo ad esportare il formato FBX in {fn} .fbx")
-            bpy.ops.export_scene.fbx(filepath = fn+".fbx", check_existing = True, filter_glob = '*.fbx', use_selection = True, use_active_collection = False, global_scale = 1.0, apply_unit_scale = True, apply_scale_options = 'FBX_SCALE_NONE', use_space_transform = True, bake_space_transform = False, object_types = {'MESH'}, use_mesh_modifiers = True, use_mesh_modifiers_render = True, mesh_smooth_type = 'OFF', use_subsurf = False, use_mesh_edges = False, use_tspace = False, use_custom_props = False, add_leaf_bones = False, primary_bone_axis = 'Y', secondary_bone_axis = 'X', use_armature_deform_only = False, armature_nodetype = 'NULL', bake_anim = False, bake_anim_use_all_bones = False, bake_anim_use_nla_strips = False, bake_anim_use_all_actions = False, bake_anim_force_startend_keying = False, bake_anim_step = 1.0, bake_anim_simplify_factor = 1.0, path_mode = 'AUTO', embed_textures = False, batch_mode = 'OFF', use_batch_own_dir = True, use_metadata = True, axis_forward = '-Z', axis_up ='Y')
+            bpy.ops.export_scene.fbx(filepath = fn+".fbx", check_existing = True, filter_glob = '*.fbx', use_selection = True, use_active_collection = False, global_scale = 1.0, apply_unit_scale = True, apply_scale_options = 'FBX_SCALE_NONE', use_space_transform = True, bake_space_transform = False, object_types = {'MESH'}, use_mesh_modifiers = True, use_mesh_modifiers_render = True, mesh_smooth_type = 'OFF', use_subsurf = False, use_mesh_edges = False, use_tspace = False, use_custom_props = False, add_leaf_bones = False, primary_bone_axis = 'Y', secondary_bone_axis = 'X', use_armature_deform_only = False, armature_nodetype = 'NULL', bake_anim = False, bake_anim_use_all_bones = False, bake_anim_use_nla_strips = False, bake_anim_use_all_actions = False, bake_anim_force_startend_keying = False, bake_anim_step = 1.0, bake_anim_simplify_factor = 1.0, path_mode = 'COPY', embed_textures = True, batch_mode = 'OFF', use_batch_own_dir = True, use_metadata = True, axis_forward = '-Z', axis_up ='Y')
 
             obj.select_set(False)
         return {'FINISHED'}
