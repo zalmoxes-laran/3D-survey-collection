@@ -181,7 +181,6 @@ class ToolsPanelExport:
             row = layout.row()
 
 
-
 class ToolsPanelQuickUtils:
     bl_label = "Quick Utils"
     bl_space_type = 'VIEW_3D'
