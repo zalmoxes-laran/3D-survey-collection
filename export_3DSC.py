@@ -140,8 +140,8 @@ class ExportCoordinates(Operator, ExportHelper):
             )
 
     rot: BoolProperty(
-            name="Add coordinates of rotation",
-            description="This tool includes name, position and rotation",
+            name="Add rotation and scale",
+            description="This tool includes name, position, rotation and scale",
             default=False,
             )
 
