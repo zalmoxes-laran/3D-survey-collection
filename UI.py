@@ -141,9 +141,8 @@ class ToolsPanelExport:
             row = layout.row()
 
             box = layout.box()
-            row = box.row()
-            row.prop(scene, 'SHIFT_OBJ_on', text="Use Shift (slower, only obj)")
 
+            
             row = box.row()
             row.label(text= "Export object(s) in one file:")
             row = box.row()
@@ -164,6 +163,7 @@ class ToolsPanelExport:
             row.operator("gltf.exportbatch", icon="DUPLICATE", text='gltf')
 
             row.operator("glb.exportbatch", icon="DUPLICATE", text='glb')
+
             row = box.row()
             row.prop(context.scene, 'author_sign_model', toggle = True, text='Author')
             row = box.row()
@@ -176,6 +176,11 @@ class ToolsPanelExport:
                 row.label(text= "-> /FBX/objectname.fbx")
             row = box.row()
             row.prop(context.scene, 'FBX_export_dir', toggle = True, text='Export to')
+            row = box.row()
+            row.prop(scene, 'instanced_export', text="Enable instanced_export (only FBX)")
+            row = box.row()
+            row.prop(scene, 'SHIFT_OBJ_on',
+                     text="Use Shift (slower, only obj)")
         else:
             row.label(text="Select object(s) to see tools here.")
             row = layout.row()

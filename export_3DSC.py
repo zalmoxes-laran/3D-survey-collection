@@ -342,9 +342,10 @@ class OBJECT_OT_fbxexportbatch(bpy.types.Operator):
 
     def execute(self, context):
         #print(self.export_format)
+        scene = context.scene
 
-        if bpy.context.scene.FBX_export_dir:
-            basedir = os.path.dirname(bpy.context.scene.FBX_export_dir)
+        if scene.FBX_export_dir:
+            basedir = os.path.dirname(scene.FBX_export_dir)
             subfolder = ''
         else:
             basedir = os.path.dirname(bpy.data.filepath)
@@ -353,21 +354,34 @@ class OBJECT_OT_fbxexportbatch(bpy.types.Operator):
         createfolder(basedir, subfolder)
         subfolderpath = os.path.join(basedir, subfolder)
 
-        selection = bpy.context.selected_objects
-        bpy.ops.object.select_all(action='DESELECT')
+        if scene.instanced_export:
+            #annotate the name of the active object (for instanced mode only)
+            active_object = context.active_object
+            file_instance_matrix_name = active_object.name+"-inst.txt"
+            file_instance_matrix_path = os.path.join(subfolderpath, file_instance_matrix_name)
+            #calling function to write instanced data to disk
+            write_some_data(context, file_instance_matrix_path, scene.SHIFT_OBJ_on,
+                    True, False, False)
+            bpy.ops.object.select_all(action='DESELECT')
+            active_object.select_set(True)
+            
+            
+        else:
+            selection = bpy.context.selected_objects
+            bpy.ops.object.select_all(action='DESELECT')
 
-        for obj in selection:
-            obj.select_set(True)
-            colfolder = obj.users_collection[0].name
-            createfolder(subfolderpath, colfolder)
-            name = bpy.path.clean_name(obj.name)
-            fn = os.path.join(basedir, subfolder, colfolder, name)
-            #print(fn)
-            #if self.export_format == "FBX":
-            print(f"Provo ad esportare il formato FBX in {fn} .fbx")
-            bpy.ops.export_scene.fbx(filepath = fn+".fbx", check_existing = True, filter_glob = '*.fbx', use_selection = True, use_active_collection = False, global_scale = 1.0, apply_unit_scale = True, apply_scale_options = 'FBX_SCALE_NONE', use_space_transform = True, bake_space_transform = False, object_types = {'MESH'}, use_mesh_modifiers = True, use_mesh_modifiers_render = True, mesh_smooth_type = 'OFF', use_subsurf = False, use_mesh_edges = False, use_tspace = False, use_custom_props = False, add_leaf_bones = False, primary_bone_axis = 'Y', secondary_bone_axis = 'X', use_armature_deform_only = False, armature_nodetype = 'NULL', bake_anim = False, bake_anim_use_all_bones = False, bake_anim_use_nla_strips = False, bake_anim_use_all_actions = False, bake_anim_force_startend_keying = False, bake_anim_step = 1.0, bake_anim_simplify_factor = 1.0, path_mode = 'COPY', embed_textures = True, batch_mode = 'OFF', use_batch_own_dir = True, use_metadata = True, axis_forward = '-Z', axis_up ='Y')
+            for obj in selection:
+                obj.select_set(True)
+                colfolder = obj.users_collection[0].name
+                createfolder(subfolderpath, colfolder)
+                name = bpy.path.clean_name(obj.name)
+                fn = os.path.join(basedir, subfolder, colfolder, name)
+                #print(fn)
+                #if self.export_format == "FBX":
+                print(f"Provo ad esportare il formato FBX in {fn} .fbx")
+                bpy.ops.export_scene.fbx(filepath = fn+".fbx", check_existing = True, filter_glob = '*.fbx', use_selection = True, use_active_collection = False, global_scale = 1.0, apply_unit_scale = True, apply_scale_options = 'FBX_SCALE_NONE', use_space_transform = True, bake_space_transform = False, object_types = {'MESH'}, use_mesh_modifiers = True, use_mesh_modifiers_render = True, mesh_smooth_type = 'OFF', use_subsurf = False, use_mesh_edges = False, use_tspace = False, use_custom_props = False, add_leaf_bones = False, primary_bone_axis = 'Y', secondary_bone_axis = 'X', use_armature_deform_only = False, armature_nodetype = 'NULL', bake_anim = False, bake_anim_use_all_bones = False, bake_anim_use_nla_strips = False, bake_anim_use_all_actions = False, bake_anim_force_startend_keying = False, bake_anim_step = 1.0, bake_anim_simplify_factor = 1.0, path_mode = 'COPY', embed_textures = True, batch_mode = 'OFF', use_batch_own_dir = True, use_metadata = True, axis_forward = '-Z', axis_up ='Y')
 
-            obj.select_set(False)
+                obj.select_set(False)
         return {'FINISHED'}
 
 class OBJECT_OT_osgtexportbatch(bpy.types.Operator):

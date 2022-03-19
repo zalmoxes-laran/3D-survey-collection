@@ -486,6 +486,12 @@ def register():
       description = "Define the author of the exported models (only gltf, glb)",
       )
 
+    bpy.types.Scene.instanced_export = BoolProperty(
+        name="Enable instances export",
+        default=False,
+        description="Enable instances export: select a group of objects and it will generate a single file [name]-inst.txt using the name of the active object."
+    )
+
     bpy.types.Scene.info_log = []
 
 # panoramic
@@ -588,3 +594,4 @@ def unregister():
     del bpy.types.Scene.author_sign_model
     del bpy.types.Scene.gltf_export_quality
     del bpy.types.Scene.gltf_export_maxres
+    del bpy.types.Scene.instanced_export
