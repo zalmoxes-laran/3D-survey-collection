@@ -123,7 +123,7 @@ class ToolsPanelImport:
         row = layout.row()
         self.layout.operator("import_scene.multiple_objs", icon="DUPLICATE", text='Multiple objs')
         row = layout.row()
-        #self.layout.operator("import_cam.agixml", icon="DUPLICATE", text='Agisoft xml cams')
+        self.layout.operator("import_cam.agixml", icon="DUPLICATE", text='Agisoft xml cams')
 
 class ToolsPanelExport:
     bl_label = "Exporters"
