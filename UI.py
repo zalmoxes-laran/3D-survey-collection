@@ -183,7 +183,7 @@ class ToolsPanelExport:
                      text="Use Shift (slower, only obj)")
         else:
             row.label(text="Select object(s) to see tools here.")
-            row = layout.row()
+            row = layout.row() 
 
 
 class ToolsPanelQuickUtils:
