@@ -297,7 +297,8 @@ class OBJECT_OT_objexportbatch(bpy.types.Operator):
             obj.select_set(True)
             name = bpy.path.clean_name(obj.name)
             fn = os.path.join(basedir, name)
-            bpy.ops.export_scene.obj(filepath=str(fn + '.obj'), use_selection=True, axis_forward='Y', axis_up='Z', path_mode='RELATIVE', global_shift_x = x_shift, global_shift_y = y_shift, global_shift_z = z_shift)
+            #bpy.ops.export_scene.obj(filepath=str(fn + '.obj'), use_selection=True, axis_forward='Y', axis_up='Z', path_mode='RELATIVE', global_shift_x = x_shift, global_shift_y = y_shift, global_shift_z = z_shift)
+            bpy.ops.export_scene.obj(filepath=str(fn + '.obj'), use_selection=True, axis_forward='Y', axis_up='Z', path_mode='RELATIVE')
             obj.select_set(False)
         return {'FINISHED'}
 
