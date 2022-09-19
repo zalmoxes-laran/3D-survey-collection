@@ -1365,3 +1365,5 @@ def diffuse2principled():
                     #nodetree.links.new(inputnode.outputs[0], newnode.inputs[1])
                     nodetree.links.new(newnode.outputs[0], outputnode.inputs[0])
     return
+
+#def 

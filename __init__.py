@@ -297,12 +297,13 @@ classes = (
     export_3DSC.ExportCoordinates,
     import_3DSC.OBJECT_OT_IMPORTAGIXML,
     import_3DSC.ImportCamAgiXML,
+    export_3DSC.OBJECT_OT_exportbatch,
     export_3DSC.OBJECT_OT_ExportButtonName,
     export_3DSC.OBJECT_OT_ExportObjButton,
     export_3DSC.OBJECT_OT_fbxexp,
     export_3DSC.OBJECT_OT_fbxexportbatch,
     export_3DSC.OBJECT_OT_objexportbatch,
-    export_3DSC.OBJECT_OT_osgtexportbatch,
+    #export_3DSC.OBJECT_OT_osgtexportbatch,
     export_3DSC.OBJECT_OT_gltfexportbatch,
     export_3DSC.OBJECT_OT_glbexportbatch,
     functions.OBJECT_OT_createcyclesmat,
@@ -438,6 +439,12 @@ def register():
         description = "Shifting obj export: slow with big models"
         )
 
+    bpy.types.Scene.collgerarchy_to_foldtree = BoolProperty(
+        name = "Use collection gerarchy",
+        default = False,
+        description = "Collection gerarchy will be used to create a tree of subfolders (usefull for GE like Unreal)"
+        )
+
     bpy.types.Scene.LOD1_dec_ratio = FloatProperty(
         name = "LOD1 decimation ratio",
         default = 0.5,
@@ -523,10 +530,10 @@ def register():
     description = "Define the lens of the cameras",
     )
 
-    bpy.types.Scene.FBX_export_dir = StringProperty(
+    bpy.types.Scene.model_export_dir = StringProperty(
     name = "Export folder",
     default = "",
-    description = "Define the path to the FBX export folder",
+    description = "Define the path to the export folder",
     subtype = 'DIR_PATH'
     )
 
@@ -588,10 +595,11 @@ def unregister():
     del bpy.types.Scene.lod_list_item
     del bpy.types.Scene.analysis_list
     del bpy.types.Scene.statistics_list
-    del bpy.types.Scene.FBX_export_dir
+    del bpy.types.Scene.model_export_dir
     del bpy.types.Scene.TILE_square_meters
     del bpy.types.Scene.SHIFT_OBJ_on
     del bpy.types.Scene.author_sign_model
     del bpy.types.Scene.gltf_export_quality
     del bpy.types.Scene.gltf_export_maxres
     del bpy.types.Scene.instanced_export
+    del bpy.types.Scene.collgerarchy_to_foldtree
