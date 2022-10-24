@@ -206,7 +206,7 @@ class OBJECT_OT_gltfexportbatch(bpy.types.Operator):
         draco_compression = 6
 
         if scene.model_export_dir:
-            basedir = os.path.dirname(bpy.context.scene.FBX_export_dir)
+            basedir = os.path.dirname(bpy.context.scene.model_export_dir)
             #subfolder = ''
         else:
             basedir = os.path.dirname(bpy.data.filepath)
@@ -242,8 +242,8 @@ class OBJECT_OT_glbexportbatch(bpy.types.Operator):
         draco_compression = 6
 
 
-        if bpy.context.scene.FBX_export_dir:
-            basedir = os.path.dirname(bpy.context.scene.FBX_export_dir)
+        if bpy.context.scene.model_export_dir:
+            basedir = os.path.dirname(bpy.context.scene.model_export_dir)
             #subfolder = ''
         else:
             basedir = os.path.dirname(bpy.data.filepath)
@@ -271,8 +271,8 @@ class OBJECT_OT_objexportbatch(bpy.types.Operator):
 
     def execute(self, context):
 
-        if bpy.context.scene.FBX_export_dir:
-            basedir = os.path.dirname(bpy.context.scene.FBX_export_dir)
+        if bpy.context.scene.model_export_dir:
+            basedir = os.path.dirname(bpy.context.scene.model_export_dir)
             #subfolder = ''
         else:
             basedir = os.path.dirname(bpy.data.filepath)
@@ -348,8 +348,8 @@ class OBJECT_OT_fbxexportbatch(bpy.types.Operator):
         #print(self.export_format)
         scene = context.scene
 
-        if scene.FBX_export_dir:
-            basedir = os.path.dirname(scene.FBX_export_dir)
+        if scene.model_export_dir:
+            basedir = os.path.dirname(scene.model_export_dir)
             subfolder = ''
         else:
             basedir = os.path.dirname(bpy.data.filepath)
