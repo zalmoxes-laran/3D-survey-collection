@@ -349,7 +349,7 @@ class ToolsPanelLODgenerator:
             row = layout.row()
             row.label(text="LOD cluster(s) export:")
             row = layout.row()
-            row.prop(context.scene, 'FBX_export_dir', toggle = True, text='folder')
+            row.prop(context.scene, 'model_export_dir', toggle = True, text='folder')
             self.layout.operator("exportfbx.grouplod", icon="MESH_GRID", text='FBX')
 
 class ToolsPanel_ccTool:
