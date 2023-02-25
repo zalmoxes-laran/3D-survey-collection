@@ -303,6 +303,9 @@ class ToolsPanelLODgenerator:
             col = split.column(align=True)
             col.prop(scene, 'LOD_pad_on', text="Pad")
             col = split.column(align=True)
+            col.prop(scene, 'LOD_use_scene_settings', text="Scene light")
+            col = split.column(align=True)
+            
             #col.operator("lod.creation", icon="MOD_MULTIRES", text='')
             col.operator("lod.creation", text='generate')
             if scene.LODnum >= 1:

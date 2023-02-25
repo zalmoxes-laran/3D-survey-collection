@@ -187,12 +187,13 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 if context.scene.LOD_pad_on:
                     custommargin = "context.scene.render.bake.margin = context.scene.LOD"+str(i_lodbake_counter)+"_tex_res"
                     exec(custommargin)
+                
+                if context.scene.LOD_use_scene_settings:
+                    to_restore_samples = context.scene.cycles.samples
+                    context.scene.cycles.samples = 1
 
-                to_restore_samples = context.scene.cycles.samples
-                context.scene.cycles.samples = 1
-
-                to_restore_bounces = context.scene.cycles.diffuse_bounces
-                context.scene.cycles.diffuse_bounces = 1
+                    to_restore_bounces = context.scene.cycles.diffuse_bounces
+                    context.scene.cycles.diffuse_bounces = 1
 
                 # creating a new material
                 #--------------------------------------------------------------
@@ -216,9 +217,10 @@ class OBJECT_OT_LOD(bpy.types.Operator):
 
                 # annotate current cycles render settings to maintain things clean
                 #-----------------------------------------------------------------
-                context.scene.cycles.diffuse_bounces = to_restore_bounces
-                context.scene.cycles.samples = to_restore_samples
-                context.scene.render.engine = to_be_restored_render_engine
+                if context.scene.LOD_use_scene_settings:
+                    context.scene.cycles.diffuse_bounces = to_restore_bounces
+                    context.scene.cycles.samples = to_restore_samples
+                    context.scene.render.engine = to_be_restored_render_engine
                 mat.node_tree.links.new(bsdf.inputs['Base Color'], texImage.outputs['Color'])
                 obj_LODnew.data.name = 'SM_' + obj_LODnew.name
 

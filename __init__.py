@@ -433,6 +433,12 @@ def register():
         description = "Enter the paddin ratio for the LOD"
         )
 
+    bpy.types.Scene.LOD_use_scene_settings = BoolProperty(
+        name = "Using scene settings for bake LOD",
+        default = False,
+        description = "Enter the paddin ratio for the LOD"
+        )
+
     bpy.types.Scene.SHIFT_OBJ_on = BoolProperty(
         name = "Shifting obj export",
         default = False,
@@ -582,6 +588,7 @@ def unregister():
     del bpy.types.Scene.LOD2_dec_ratio
     del bpy.types.Scene.LOD3_dec_ratio
     del bpy.types.Scene.LOD_pad_on
+    del bpy.types.Scene.LOD_use_scene_settings
     del bpy.types.Scene.BL_undistorted_path
 
     del bpy.types.Scene.RES_pano
