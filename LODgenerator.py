@@ -177,18 +177,24 @@ class OBJECT_OT_LOD(bpy.types.Operator):
 
                 to_be_restored_render_engine = context.scene.render.engine
                 context.scene.render.engine = 'CYCLES'
-
                 context.scene.cycles.bake_type = 'DIFFUSE'
-                context.scene.render.bake.use_pass_direct = False
-                context.scene.render.bake.use_pass_indirect = False
+
+                if context.scene.LOD_use_scene_settings:
+                    context.scene.render.bake.use_pass_direct = True
+                    context.scene.render.bake.use_pass_indirect = True
+                else:
+                    context.scene.render.bake.use_pass_direct = False
+                    context.scene.render.bake.use_pass_indirect = False  
+
                 context.scene.render.bake.use_pass_color = True
                 context.scene.render.bake.use_selected_to_active = True
                 context.scene.render.bake.cage_extrusion = 0.1
+
                 if context.scene.LOD_pad_on:
                     custommargin = "context.scene.render.bake.margin = context.scene.LOD"+str(i_lodbake_counter)+"_tex_res"
                     exec(custommargin)
                 
-                if context.scene.LOD_use_scene_settings:
+                if not context.scene.LOD_use_scene_settings:
                     to_restore_samples = context.scene.cycles.samples
                     context.scene.cycles.samples = 1
 
@@ -217,10 +223,12 @@ class OBJECT_OT_LOD(bpy.types.Operator):
 
                 # annotate current cycles render settings to maintain things clean
                 #-----------------------------------------------------------------
-                if context.scene.LOD_use_scene_settings:
+                if not context.scene.LOD_use_scene_settings:
                     context.scene.cycles.diffuse_bounces = to_restore_bounces
                     context.scene.cycles.samples = to_restore_samples
-                    context.scene.render.engine = to_be_restored_render_engine
+                    
+                context.scene.render.engine = to_be_restored_render_engine
+
                 mat.node_tree.links.new(bsdf.inputs['Base Color'], texImage.outputs['Color'])
                 obj_LODnew.data.name = 'SM_' + obj_LODnew.name
 
