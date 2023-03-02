@@ -83,6 +83,9 @@ def write_some_data(context, filepath, shift, rot, cam, nam):
             rotation_grad_x = math.degrees(obj.rotation_euler[0])
             rotation_grad_y = math.degrees(obj.rotation_euler[1])
             rotation_grad_z = math.degrees(obj.rotation_euler[2])
+            scale_grad_x = obj.scale[0]
+            scale_grad_y = obj.scale[1]
+            scale_grad_z = obj.scale[2]
 
         if shift == True:
             shift_x = context.scene.BL_x_shift
@@ -96,9 +99,9 @@ def write_some_data(context, filepath, shift, rot, cam, nam):
 
         if rot == True:
             if nam == True:
-                f.write("%s %s %s %s %s %s %s\n" % (obj.name, x_coor, y_coor, z_coor, rotation_grad_x, rotation_grad_y, rotation_grad_z))
-            else:    
-                f.write("%s %s %s %s %s %s\n" % (x_coor, y_coor, z_coor, rotation_grad_x, rotation_grad_y, rotation_grad_z))
+                f.write("%s %s %s %s %s %s %s %s %s %s\n" % (obj.name, x_coor, y_coor, z_coor, rotation_grad_x, rotation_grad_y, rotation_grad_z, scale_grad_x, scale_grad_y, scale_grad_z))
+            else:
+                f.write("%s %s %s %s %s %s %s %s %s\n" % (x_coor, y_coor, z_coor, rotation_grad_x, rotation_grad_y, rotation_grad_z, scale_grad_x, scale_grad_y, scale_grad_z))
         if cam == True:
             if obj.type == 'CAMERA':
                 f.write("%s %s %s %s %s %s %s %s\n" % (obj.name, x_coor, y_coor, z_coor, rotation_grad_x, rotation_grad_y, rotation_grad_z, obj.data.lens))        
@@ -137,8 +140,8 @@ class ExportCoordinates(Operator, ExportHelper):
             )
 
     rot: BoolProperty(
-            name="Add coordinates of rotation",
-            description="This tool includes name, position and rotation",
+            name="Add rotation and scale",
+            description="This tool includes name, position, rotation and scale",
             default=False,
             )
 
@@ -197,13 +200,13 @@ class OBJECT_OT_gltfexportbatch(bpy.types.Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
-
+        scene = context.scene
         #basedir = 'F:\LOD1'
         copyright = context.scene.author_sign_model #"CC-BY-NC E.Demetrescu"
         draco_compression = 6
 
-        if bpy.context.scene.FBX_export_dir:
-            basedir = os.path.dirname(bpy.context.scene.FBX_export_dir)
+        if scene.model_export_dir:
+            basedir = os.path.dirname(bpy.context.scene.model_export_dir)
             #subfolder = ''
         else:
             basedir = os.path.dirname(bpy.data.filepath)
@@ -239,8 +242,8 @@ class OBJECT_OT_glbexportbatch(bpy.types.Operator):
         draco_compression = 6
 
 
-        if bpy.context.scene.FBX_export_dir:
-            basedir = os.path.dirname(bpy.context.scene.FBX_export_dir)
+        if bpy.context.scene.model_export_dir:
+            basedir = os.path.dirname(bpy.context.scene.model_export_dir)
             #subfolder = ''
         else:
             basedir = os.path.dirname(bpy.data.filepath)
@@ -257,7 +260,7 @@ class OBJECT_OT_glbexportbatch(bpy.types.Operator):
             name = bpy.path.clean_name(obj.name)
             namefile = name + ".glb"
             file_path = os.path.join(basedir, namefile)
-            bpy.ops.export_scene.gltf(export_format='GLB', ui_tab='GENERAL', export_copyright=copyright, export_image_format='AUTO', export_texture_dir='', export_texcoords=True, export_normals=True, export_draco_mesh_compression_enable=False, export_draco_mesh_compression_level=draco_compression, export_draco_position_quantization=14, export_draco_normal_quantization=10, export_draco_texcoord_quantization=12, export_draco_generic_quantization=12, export_tangents=False, export_materials='EXPORT', export_colors=False, export_cameras=False, use_selection=True, export_extras=False, export_yup=True, export_apply=True, export_animations=True, export_frame_range=False, export_frame_step=1, export_force_sampling=False, export_nla_strips=False, export_def_bones=False, export_current_frame=False, export_skins=False, export_all_influences=False, export_morph=True, export_morph_normal=False, export_morph_tangent=False, export_lights=False, export_displacement=False, will_save_settings=False, filepath=file_path, check_existing=False)#, filter_glob='*.glb;*.gltf')
+            bpy.ops.export_scene.gltf(export_format='GLB', ui_tab='GENERAL', export_copyright=copyright, export_image_format='AUTO', export_texture_dir='', export_texcoords=True, export_normals=True, export_draco_mesh_compression_enable=False, export_draco_mesh_compression_level=draco_compression, export_draco_position_quantization=14, export_draco_normal_quantization=10, export_draco_texcoord_quantization=12, export_draco_generic_quantization=12, export_tangents=False, export_materials='EXPORT', export_colors=False, export_cameras=False, use_selection=True, export_extras=False, export_yup=True, export_apply=True, export_animations=True, export_frame_range=False, export_frame_step=1, export_force_sampling=False, export_nla_strips=False, export_def_bones=False, export_current_frame=False, export_skins=False, export_all_influences=False, export_morph=True, export_morph_normal=False, export_morph_tangent=False, export_lights=False,  will_save_settings=False, filepath=file_path, check_existing=False)#, filter_glob='*.glb;*.gltf')
             obj.select_set(False)
         return {'FINISHED'}
 
@@ -268,8 +271,8 @@ class OBJECT_OT_objexportbatch(bpy.types.Operator):
 
     def execute(self, context):
 
-        if bpy.context.scene.FBX_export_dir:
-            basedir = os.path.dirname(bpy.context.scene.FBX_export_dir)
+        if bpy.context.scene.model_export_dir:
+            basedir = os.path.dirname(bpy.context.scene.model_export_dir)
             #subfolder = ''
         else:
             basedir = os.path.dirname(bpy.data.filepath)
@@ -294,7 +297,8 @@ class OBJECT_OT_objexportbatch(bpy.types.Operator):
             obj.select_set(True)
             name = bpy.path.clean_name(obj.name)
             fn = os.path.join(basedir, name)
-            bpy.ops.export_scene.obj(filepath=str(fn + '.obj'), use_selection=True, axis_forward='Y', axis_up='Z', path_mode='RELATIVE', global_shift_x = x_shift, global_shift_y = y_shift, global_shift_z = z_shift)
+            #bpy.ops.export_scene.obj(filepath=str(fn + '.obj'), use_selection=True, axis_forward='Y', axis_up='Z', path_mode='RELATIVE', global_shift_x = x_shift, global_shift_y = y_shift, global_shift_z = z_shift)
+            bpy.ops.export_scene.obj(filepath=str(fn + '.obj'), use_selection=True, axis_forward='Y', axis_up='Z', path_mode='RELATIVE')
             obj.select_set(False)
         return {'FINISHED'}
 
@@ -338,38 +342,92 @@ class OBJECT_OT_fbxexportbatch(bpy.types.Operator):
     bl_label = "Fbx export batch UE4"
     bl_options = {"REGISTER", "UNDO"}
 
-    export_format : StringProperty()
+    #export_format : StringProperty()
 
     def execute(self, context):
+        #print(self.export_format)
+        scene = context.scene
 
-        if bpy.context.scene.FBX_export_dir:
-            basedir = os.path.dirname(bpy.context.scene.FBX_export_dir)
+        if scene.model_export_dir:
+            basedir = os.path.dirname(scene.model_export_dir)
             subfolder = ''
         else:
             basedir = os.path.dirname(bpy.data.filepath)
-            subfolder = self.export_format
+            subfolder = 'FBX'
         
         createfolder(basedir, subfolder)
         subfolderpath = os.path.join(basedir, subfolder)
 
-        selection = bpy.context.selected_objects
-        bpy.ops.object.select_all(action='DESELECT')
-
-        for obj in selection:
-            obj.select_set(True)
-            colfolder = obj.users_collection[0].name
+        if scene.instanced_export:
+            #annotate the name of the active object (for instanced mode only)
+            active_object = context.active_object
+            
+            # This part will incapsulate the file + file-inst in a single Folder
+            colfolder = active_object.users_collection[0].name
             createfolder(subfolderpath, colfolder)
-            name = bpy.path.clean_name(obj.name)
-            fn = os.path.join(basedir, subfolder, colfolder, name)
-            if self.export_format == "FBX":
-                bpy.ops.export_scene.fbx(filepath = fn + ".fbx", check_existing=True, filter_glob="*.fbx", use_selection=True, use_active_collection=False, global_scale=1.0, apply_unit_scale=True, apply_scale_options='FBX_SCALE_NONE', bake_space_transform=False, object_types={'MESH'}, use_mesh_modifiers=True, use_mesh_modifiers_render=True, mesh_smooth_type='OFF', use_mesh_edges=False, use_tspace=False, use_custom_props=False, add_leaf_bones=True, primary_bone_axis='Y', secondary_bone_axis='X', use_armature_deform_only=False, armature_nodetype='NULL', bake_anim=False, bake_anim_use_all_bones=True, bake_anim_use_nla_strips=True, bake_anim_use_all_actions=True, bake_anim_force_startend_keying=True, bake_anim_step=1.0, bake_anim_simplify_factor=1.0, path_mode='AUTO', embed_textures=False, batch_mode='OFF', use_batch_own_dir=True, use_metadata=True, axis_forward='-Z', axis_up='Y')
-            elif self.export_format == "gltf":
-                #tex_dir = [directory textures]
-                copyright_txt = ''
-                bpy.ops.export_scene.gltf(export_format='GLTF_SEPARATE', ui_tab='GENERAL', export_copyright=copyright_txt, export_image_format='AUTO', export_texture_dir=tex_dir, export_texcoords=True, export_normals=True, export_draco_mesh_compression_enable=True, export_draco_mesh_compression_level=6, export_draco_position_quantization=14, export_draco_normal_quantization=10, export_draco_texcoord_quantization=12, export_draco_generic_quantization=12, export_tangents=True, export_materials=True, export_colors=True, export_cameras=False, use_selection=True, export_extras=False, export_yup=True, export_apply=True, export_animations=False, export_frame_range=False, export_frame_step=1, export_force_sampling=False, export_nla_strips=False, export_def_bones=False, export_current_frame=False, export_skins=False, export_all_influences=False, export_morph=False, export_morph_normal=False, export_morph_tangent=False, export_lights=False, export_displacement=False, will_save_settings=False, filepath=fn, check_existing=True, filter_glob='*.glb;*.gltf')
-            obj.select_set(False)
+
+            # selecting a brand new name for the instanced file
+            name = bpy.path.clean_name(active_object.name)
+            fn = os.path.join(subfolderpath, colfolder, name)
+
+            # defining the paths for the new files
+            file_instance_matrix_path = fn+"-inst.txt"
+            file_instance_fbx_path = fn+".fbx"
+
+            #calling function to write file-inst to disk
+            # write_some_data(context, filepath, shift, rot, cam, nam)
+            write_some_data(context, file_instance_matrix_path, scene.SHIFT_OBJ_on, True, False, False)
+            
+            bpy.ops.object.select_all(action='DESELECT')
+            active_object.select_set(True)
+
+            # store present matrix of the ative object 
+            obj_location_x = active_object.location[0]
+            obj_location_y = active_object.location[1]
+            obj_location_z = active_object.location[2]
+            obj_rot_x = active_object.rotation_euler[0]
+            obj_rot_y = active_object.rotation_euler[1]
+            obj_rot_z = active_object.rotation_euler[2]
+            obj_scale_x = active_object.scale[0]
+            obj_scale_y = active_object.scale[1]
+            obj_scale_z = active_object.scale[2]
+
+            #set to zero the loc rot and to one the scale
+            active_object.location = [0.0,0.0,0.0]
+            active_object.rotation_euler = [0.0,0.0,0.0]
+            active_object.scale = [1.0,1.0,1.0]
+
+            bpy.ops.export_scene.fbx(filepath=file_instance_fbx_path, check_existing=True, filter_glob='*.fbx', use_selection=True, use_active_collection=False, global_scale=1.0, apply_unit_scale=True, apply_scale_options='FBX_SCALE_NONE', use_space_transform=True, bake_space_transform=False, object_types={
+                                     'MESH', 'EMPTY'}, use_mesh_modifiers=True, use_mesh_modifiers_render=True, mesh_smooth_type='EDGE', use_subsurf=False, use_mesh_edges=False, use_tspace=False, use_custom_props=False, add_leaf_bones=False, primary_bone_axis='Y', secondary_bone_axis='X', use_armature_deform_only=False, armature_nodetype='NULL', bake_anim=False, bake_anim_use_all_bones=False, bake_anim_use_nla_strips=False, bake_anim_use_all_actions=False, bake_anim_force_startend_keying=False, bake_anim_step=1.0, bake_anim_simplify_factor=1.0, path_mode='COPY', embed_textures=True, batch_mode='OFF', use_batch_own_dir=True, use_metadata=True, axis_forward='-Z', axis_up='Y')
+            
+            #restore the original values to the object
+            active_object.location = [obj_location_x,obj_location_y,obj_location_z]
+            active_object.rotation_euler =[obj_rot_x,obj_rot_y,obj_rot_z]
+            active_object.scale =[obj_scale_x,obj_scale_y,obj_scale_z]
+             
+        else:
+            selection = bpy.context.selected_objects
+            bpy.ops.object.select_all(action='DESELECT')
+
+            for obj in selection:
+                obj.select_set(True)
+                name = bpy.path.clean_name(obj.name)
+
+                #check if the collection gerarchy is enabled
+                if scene.collgerarchy_to_foldtree:
+                    colfolder = obj.users_collection[0].name
+                    createfolder(subfolderpath, colfolder)    
+                    fn = os.path.join(basedir, subfolder, colfolder, name)
+                else:
+                    fn = os.path.join(basedir, subfolder, name)
+
+                print(f"Provo ad esportare il formato FBX in {fn} .fbx")
+                bpy.ops.export_scene.fbx(filepath = fn+".fbx", check_existing = True, filter_glob = '*.fbx', use_selection = True, use_active_collection = False, global_scale = 1.0, apply_unit_scale = True, apply_scale_options = 'FBX_SCALE_NONE', use_space_transform = True, bake_space_transform = False, object_types = {'MESH','EMPTY'}, use_mesh_modifiers = True, use_mesh_modifiers_render = True, mesh_smooth_type = 'EDGE', use_subsurf = False, use_mesh_edges = False, use_tspace = False, use_custom_props = False, add_leaf_bones = False, primary_bone_axis = 'Y', secondary_bone_axis = 'X', use_armature_deform_only = False, armature_nodetype = 'NULL', bake_anim = False, bake_anim_use_all_bones = False, bake_anim_use_nla_strips = False, bake_anim_use_all_actions = False, bake_anim_force_startend_keying = False, bake_anim_step = 1.0, bake_anim_simplify_factor = 1.0, path_mode = 'COPY', embed_textures = True, batch_mode = 'OFF', use_batch_own_dir = True, use_metadata = True, axis_forward = '-Z', axis_up ='Y')
+
+                obj.select_set(False)
         return {'FINISHED'}
 
+'''
 class OBJECT_OT_osgtexportbatch(bpy.types.Operator):
     bl_idname = "osgt.exportbatch"
     bl_label = "osgt export batch"
@@ -382,5 +440,103 @@ class OBJECT_OT_osgtexportbatch(bpy.types.Operator):
             raise Exception("Blend file is not saved")
         bpy.ops.osg.export(SELECTED=True)
         return {'FINISHED'}
+'''
 
+class OBJECT_OT_exportbatch(bpy.types.Operator):
+    bl_idname = "model.exportbatch"
+    bl_label = "Objects export batch"
+    bl_options = {"REGISTER", "UNDO"}
 
+    export_format : StringProperty()
+
+    def execute(self, context):
+        #print(self.export_format)
+        scene = context.scene
+
+        copyright = context.scene.author_sign_model #"CC-BY-NC E.Demetrescu"
+        draco_compression = 6
+
+        if scene.model_export_dir:
+            basedir = os.path.dirname(scene.model_export_dir)
+            subfolder = ''
+        else:
+            basedir = os.path.dirname(bpy.data.filepath)
+            subfolder = self.export_format
+        if not basedir:
+            raise Exception("Blend file is not saved")
+        
+        createfolder(basedir, subfolder)
+        subfolderpath = os.path.join(basedir, subfolder)
+
+        if scene.instanced_export:
+            #annotate the name of the active object (for instanced mode only)
+            active_object = context.active_object
+            
+            # This part will incapsulate the file + file-inst in a single Folder
+            colfolder = active_object.users_collection[0].name
+            createfolder(subfolderpath, colfolder)
+
+            # selecting a brand new name for the instanced file
+            name = bpy.path.clean_name(active_object.name)
+            fn = os.path.join(subfolderpath, colfolder, name)
+
+            # defining the paths for the new files
+            file_instance_matrix_path = fn+"-inst.txt"
+            file_instance_path = fn+"."+self.export_format
+
+            #calling function to write file-inst to disk
+            # write_some_data(context, filepath, shift, rot, cam, nam)
+            write_some_data(context, file_instance_matrix_path, scene.SHIFT_OBJ_on, True, False, False)
+            
+            bpy.ops.object.select_all(action='DESELECT')
+            active_object.select_set(True)
+
+            # store present matrix of the ative object 
+            obj_location_x = active_object.location[0]
+            obj_location_y = active_object.location[1]
+            obj_location_z = active_object.location[2]
+            obj_rot_x = active_object.rotation_euler[0]
+            obj_rot_y = active_object.rotation_euler[1]
+            obj_rot_z = active_object.rotation_euler[2]
+            obj_scale_x = active_object.scale[0]
+            obj_scale_y = active_object.scale[1]
+            obj_scale_z = active_object.scale[2]
+
+            #set to zero the loc rot and to one the scale
+            active_object.location = [0.0,0.0,0.0]
+            active_object.rotation_euler = [0.0,0.0,0.0]
+            active_object.scale = [1.0,1.0,1.0]
+
+            if self.export_format == "fbx":
+                bpy.ops.export_scene.fbx(filepath=file_instance_path, check_existing=True, filter_glob='*.fbx', use_selection=True, use_active_collection=False, global_scale=1.0, apply_unit_scale=True, apply_scale_options='FBX_SCALE_NONE', use_space_transform=True, bake_space_transform=False, object_types={'MESH', 'EMPTY'}, use_mesh_modifiers=True, use_mesh_modifiers_render=True, mesh_smooth_type='EDGE', use_subsurf=False, use_mesh_edges=False, use_tspace=False, use_custom_props=False, add_leaf_bones=False, primary_bone_axis='Y', secondary_bone_axis='X', use_armature_deform_only=False, armature_nodetype='NULL', bake_anim=False, bake_anim_use_all_bones=False, bake_anim_use_nla_strips=False, bake_anim_use_all_actions=False, bake_anim_force_startend_keying=False, bake_anim_step=1.0, bake_anim_simplify_factor=1.0, path_mode='COPY', embed_textures=True, batch_mode='OFF', use_batch_own_dir=True, use_metadata=True, axis_forward='-Z', axis_up='Y')
+            elif self.export_format == "gltf":
+                bpy.ops.export_scene.gltf(export_format='GLTF_SEPARATE', ui_tab='GENERAL', export_copyright=copyright, export_image_format='AUTO', export_texture_dir='', export_texcoords=True, export_normals=True, export_draco_mesh_compression_enable=True, export_draco_mesh_compression_level=draco_compression, export_draco_position_quantization=14, export_draco_normal_quantization=10, export_draco_texcoord_quantization=12, export_draco_generic_quantization=12, export_tangents=False, export_materials='EXPORT', export_colors=False, export_cameras=False, use_selection=True, export_extras=False, export_yup=True, export_apply=True, export_animations=False, export_frame_range=False, export_frame_step=1, export_force_sampling=False, export_nla_strips=False, export_def_bones=False, export_current_frame=False, export_skins=False, export_all_influences=False, export_morph=True, export_morph_normal=False, export_morph_tangent=False, export_lights=False, export_displacement=False, will_save_settings=False, filepath=file_instance_path, check_existing=False)
+            #restore the original values to the object
+            active_object.location = [obj_location_x,obj_location_y,obj_location_z]
+            active_object.rotation_euler =[obj_rot_x,obj_rot_y,obj_rot_z]
+            active_object.scale =[obj_scale_x,obj_scale_y,obj_scale_z]
+             
+        else:
+            selection = bpy.context.selected_objects
+            bpy.ops.object.select_all(action='DESELECT')
+
+            for obj in selection:
+                obj.select_set(True)
+                name = bpy.path.clean_name(obj.name)
+
+                #check if the collection gerarchy is enabled
+                if scene.collgerarchy_to_foldtree:
+                    colfolder = obj.users_collection[0].name
+                    createfolder(subfolderpath, colfolder)    
+                    fn = os.path.join(basedir, subfolder, colfolder, name)
+                else:
+                    fn = os.path.join(basedir, subfolder, name)
+
+                if self.export_format == "fbx":
+                    print(f"Provo ad esportare il formato FBX in {fn} .fbx")
+                    bpy.ops.export_scene.fbx(filepath = fn+".fbx", check_existing = True, filter_glob = '*.fbx', use_selection = True, use_active_collection = False, global_scale = 1.0, apply_unit_scale = True, apply_scale_options = 'FBX_SCALE_NONE', use_space_transform = True, bake_space_transform = False, object_types = {'MESH','EMPTY'}, use_mesh_modifiers = True, use_mesh_modifiers_render = True, mesh_smooth_type = 'EDGE', use_subsurf = False, use_mesh_edges = False, use_tspace = False, use_custom_props = False, add_leaf_bones = False, primary_bone_axis = 'Y', secondary_bone_axis = 'X', use_armature_deform_only = False, armature_nodetype = 'NULL', bake_anim = False, bake_anim_use_all_bones = False, bake_anim_use_nla_strips = False, bake_anim_use_all_actions = False, bake_anim_force_startend_keying = False, bake_anim_step = 1.0, bake_anim_simplify_factor = 1.0, path_mode = 'COPY', embed_textures = True, batch_mode = 'OFF', use_batch_own_dir = True, use_metadata = True, axis_forward = '-Z', axis_up ='Y')
+                elif self.export_format == "gltf":
+                    bpy.ops.export_scene.gltf(export_format='GLTF_SEPARATE', ui_tab='GENERAL', export_copyright=copyright, export_image_format='AUTO', export_texture_dir='', export_texcoords=True, export_normals=True, export_draco_mesh_compression_enable=True, export_draco_mesh_compression_level=draco_compression, export_draco_position_quantization=14, export_draco_normal_quantization=10, export_draco_texcoord_quantization=12, export_draco_generic_quantization=12, export_tangents=False, export_materials='EXPORT', export_colors=False, export_cameras=False, use_selection=True, export_extras=False, export_yup=True, export_apply=True, export_animations=False, export_frame_range=False, export_frame_step=1, export_force_sampling=False, export_nla_strips=False, export_def_bones=False, export_current_frame=False, export_skins=False, export_all_influences=False, export_morph=True, export_morph_normal=False, export_morph_tangent=False, export_lights=False, export_displacement=False, will_save_settings=False, filepath=file_instance_path, check_existing=False)
+                obj.select_set(False)
+
+        return {'FINISHED'}

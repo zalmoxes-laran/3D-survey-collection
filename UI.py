@@ -123,7 +123,7 @@ class ToolsPanelImport:
         row = layout.row()
         self.layout.operator("import_scene.multiple_objs", icon="DUPLICATE", text='Multiple objs')
         row = layout.row()
-        #self.layout.operator("import_cam.agixml", icon="DUPLICATE", text='Agisoft xml cams')
+        self.layout.operator("import_cam.agixml", icon="DUPLICATE", text='Agisoft xml cams')
 
 class ToolsPanelExport:
     bl_label = "Exporters"
@@ -141,9 +141,8 @@ class ToolsPanelExport:
             row = layout.row()
 
             box = layout.box()
-            row = box.row()
-            row.prop(scene, 'SHIFT_OBJ_on', text="Use Shift (slower, only obj)")
 
+            
             row = box.row()
             row.label(text= "Export object(s) in one file:")
             row = box.row()
@@ -152,32 +151,45 @@ class ToolsPanelExport:
             row.operator("fbx.exp", icon="OBJECT_DATA", text='fbx')
             row = box.row()
             row.label(text= "-> "+obj.name + ".obj/.fbx")
-
+            
             box = layout.box()
             row = box.row()
             row.label(text= "Export objects in several files:")
             row = box.row()
             row.operator("obj.exportbatch", icon="DUPLICATE", text='obj')
-            row.operator("fbx.exportbatch", icon="DUPLICATE", text='fbx')
+            op = row.operator("model.exportbatch", icon="DUPLICATE", text='fbx')
+            op.export_format = "fbx"
+            #op = layout.operator("set_camera.type", text=camera_type_list[idx].name_cam, emboss=False, icon="RIGHTARROW")
+            #op.name_cam = camera_type_list[idx].name_cam
+
             row = box.row()
-            row.operator("gltf.exportbatch", icon="DUPLICATE", text='gltf')
+            op = row.operator("model.exportbatch", icon="DUPLICATE", text='gltf')
+            op.export_format = "gltf"
+
             row.operator("glb.exportbatch", icon="DUPLICATE", text='glb')
+
             row = box.row()
             row.prop(context.scene, 'author_sign_model', toggle = True, text='Author')
             row = box.row()
             row.prop(context.scene, 'gltf_export_maxres', toggle = True, text='Max resolution of jpg images')
             row.prop(context.scene, 'gltf_export_quality', toggle = True, text='Quality of jpg images')
             row = box.row()
-            if not bpy.context.scene.FBX_export_dir:
+            if not bpy.context.scene.model_export_dir:
                 row.label(text= "-> /objectname.obj")
                 row = box.row()
-                row.label(text= "-> /FBX/objectname.fbx")
+                row.label(text= "-> /[fileformat]/objectname.fbx")
             row = box.row()
-            row.prop(context.scene, 'FBX_export_dir', toggle = True, text='Export to')
+            row.prop(context.scene, 'model_export_dir', toggle = True, text='Export to')
+            row = box.row()
+            row.prop(scene, 'instanced_export', text="Enable instanced_export (only FBX)")
+            row = box.row()
+            row.prop(scene, 'SHIFT_OBJ_on',
+                     text="Use Shift (slower, only obj)")
+            row = box.row()
+            row.prop(scene, 'collgerarchy_to_foldtree', text="Use collection gerarchy")
         else:
             row.label(text="Select object(s) to see tools here.")
-            row = layout.row()
-
+            row = layout.row() 
 
 
 class ToolsPanelQuickUtils:
@@ -291,6 +303,9 @@ class ToolsPanelLODgenerator:
             col = split.column(align=True)
             col.prop(scene, 'LOD_pad_on', text="Pad")
             col = split.column(align=True)
+            col.prop(scene, 'LOD_use_scene_settings', text="Scene light")
+            col = split.column(align=True)
+            
             #col.operator("lod.creation", icon="MOD_MULTIRES", text='')
             col.operator("lod.creation", text='generate')
             if scene.LODnum >= 1:
@@ -337,7 +352,7 @@ class ToolsPanelLODgenerator:
             row = layout.row()
             row.label(text="LOD cluster(s) export:")
             row = layout.row()
-            row.prop(context.scene, 'FBX_export_dir', toggle = True, text='folder')
+            row.prop(context.scene, 'model_export_dir', toggle = True, text='folder')
             self.layout.operator("exportfbx.grouplod", icon="MESH_GRID", text='FBX')
 
 class ToolsPanel_ccTool:

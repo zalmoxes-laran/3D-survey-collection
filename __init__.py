@@ -19,7 +19,7 @@
 bl_info = {
     "name": "3D Survey Collection",
     "author": "Emanuel Demetrescu",
-    "version": (1,5,1),
+    "version": (1,5,4),
     "blender": (3, 0, 1),
     "location": "3D View > Toolbox",
     "description": "A collection of tools for 3D Survey activities",
@@ -297,12 +297,13 @@ classes = (
     export_3DSC.ExportCoordinates,
     import_3DSC.OBJECT_OT_IMPORTAGIXML,
     import_3DSC.ImportCamAgiXML,
+    export_3DSC.OBJECT_OT_exportbatch,
     export_3DSC.OBJECT_OT_ExportButtonName,
     export_3DSC.OBJECT_OT_ExportObjButton,
     export_3DSC.OBJECT_OT_fbxexp,
     export_3DSC.OBJECT_OT_fbxexportbatch,
     export_3DSC.OBJECT_OT_objexportbatch,
-    export_3DSC.OBJECT_OT_osgtexportbatch,
+    #export_3DSC.OBJECT_OT_osgtexportbatch,
     export_3DSC.OBJECT_OT_gltfexportbatch,
     export_3DSC.OBJECT_OT_glbexportbatch,
     functions.OBJECT_OT_createcyclesmat,
@@ -311,7 +312,7 @@ classes = (
     segmentation.OBJECT_OT_projectsegmentationinversed,
     segmentation.OBJECT_OT_setcutter,
     QuickUtils.OBJECT_OT_activatematerial,
-    QuickUtils.OBJECT_OT_CenterMass,
+    #QuickUtils.OBJECT_OT_CenterMass,
     QuickUtils.OBJECT_OT_CorrectMaterial,
     QuickUtils.OBJECT_OT_createpersonalgroups,
     QuickUtils.OBJECT_OT_cycles2bi,
@@ -432,10 +433,22 @@ def register():
         description = "Enter the paddin ratio for the LOD"
         )
 
+    bpy.types.Scene.LOD_use_scene_settings = BoolProperty(
+        name = "Using scene settings for bake LOD",
+        default = False,
+        description = "Enter the paddin ratio for the LOD"
+        )
+
     bpy.types.Scene.SHIFT_OBJ_on = BoolProperty(
         name = "Shifting obj export",
         default = False,
         description = "Shifting obj export: slow with big models"
+        )
+
+    bpy.types.Scene.collgerarchy_to_foldtree = BoolProperty(
+        name = "Use collection gerarchy",
+        default = False,
+        description = "Collection gerarchy will be used to create a tree of subfolders (usefull for GE like Unreal)"
         )
 
     bpy.types.Scene.LOD1_dec_ratio = FloatProperty(
@@ -486,6 +499,12 @@ def register():
       description = "Define the author of the exported models (only gltf, glb)",
       )
 
+    bpy.types.Scene.instanced_export = BoolProperty(
+        name="Enable instances export",
+        default=False,
+        description="Enable instances export: select a group of objects and it will generate a single file [name]-inst.txt using the name of the active object."
+    )
+
     bpy.types.Scene.info_log = []
 
 # panoramic
@@ -517,10 +536,10 @@ def register():
     description = "Define the lens of the cameras",
     )
 
-    bpy.types.Scene.FBX_export_dir = StringProperty(
+    bpy.types.Scene.model_export_dir = StringProperty(
     name = "Export folder",
     default = "",
-    description = "Define the path to the FBX export folder",
+    description = "Define the path to the export folder",
     subtype = 'DIR_PATH'
     )
 
@@ -569,6 +588,7 @@ def unregister():
     del bpy.types.Scene.LOD2_dec_ratio
     del bpy.types.Scene.LOD3_dec_ratio
     del bpy.types.Scene.LOD_pad_on
+    del bpy.types.Scene.LOD_use_scene_settings
     del bpy.types.Scene.BL_undistorted_path
 
     del bpy.types.Scene.RES_pano
@@ -582,9 +602,11 @@ def unregister():
     del bpy.types.Scene.lod_list_item
     del bpy.types.Scene.analysis_list
     del bpy.types.Scene.statistics_list
-    del bpy.types.Scene.FBX_export_dir
+    del bpy.types.Scene.model_export_dir
     del bpy.types.Scene.TILE_square_meters
     del bpy.types.Scene.SHIFT_OBJ_on
     del bpy.types.Scene.author_sign_model
     del bpy.types.Scene.gltf_export_quality
     del bpy.types.Scene.gltf_export_maxres
+    del bpy.types.Scene.instanced_export
+    del bpy.types.Scene.collgerarchy_to_foldtree
