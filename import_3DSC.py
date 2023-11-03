@@ -155,13 +155,11 @@ class ImportCoorPoints(Operator, ImportHelper):
     def execute(self, context):
         return read_point_data(context, self.filepath, self.shift, self.col_name, self.col_x, self.col_y, self.col_z, self.separator)
 
-
 # Only needed if you want to add into a dynamic menu
 def menu_func_import(self, context):
     self.layout.operator(ImportCoorPoints.bl_idname, text="Coordinate points Import Operator")
 
     bpy.ops.import_test.some_data('INVOKE_DEFAULT')
-
 
 # import multiple objs section ---------------------------------------------------
 
@@ -325,7 +323,6 @@ class ImportMultipleObjs(Operator, ImportHelper):
 
         return {'FINISHED'}
 
-
 # import agisoft xml section ----------------------------------------------------------
 
 class OBJECT_OT_IMPORTAGIXML(Operator):
@@ -337,7 +334,6 @@ class OBJECT_OT_IMPORTAGIXML(Operator):
     def execute(self, context):
         bpy.ops.import_cam.agixml('INVOKE_DEFAULT')
         return {'FINISHED'}
-
 
 def read_agixml_data(context, filepath, shift, chunk, allchunks):
     print("reading agisoft xml file...")
@@ -389,5 +385,3 @@ def menu_func_import(self, context):
     self.layout.operator(ImportCoorPoints.bl_idname, text="Coordinate points Import Operator")
 
     bpy.ops.import_cam.agixml('INVOKE_DEFAULT')
-
-

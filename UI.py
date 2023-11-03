@@ -110,7 +110,7 @@ class VIEW3D_PT_segmentation_pan(Panel, View3DSegmentationPanel):
         #row = layout.row()
 
 class ToolsPanelImport:
-    bl_label = "Importers"
+    bl_label = "3DSC 1.5.7 dev2 - Importers"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
 
