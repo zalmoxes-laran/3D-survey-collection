@@ -205,12 +205,7 @@ class OBJECT_OT_gltfexportbatch(bpy.types.Operator):
         copyright = context.scene.author_sign_model #"CC-BY-NC E.Demetrescu"
         draco_compression = 6
 
-        if scene.model_export_dir:
-            basedir = os.path.dirname(bpy.context.scene.model_export_dir)
-            #subfolder = ''
-        else:
-            basedir = os.path.dirname(bpy.data.filepath)
-            #subfolder = 'FBX'
+        basedir = bpy.path.abspath(bpy.context.scene.model_export_dir) if bpy.context.scene.model_export_dir else bpy.path.abspath(os.path.dirname(bpy.data.filepath))
 
         if not basedir:
             raise Exception("Blend file is not saved")
@@ -242,12 +237,7 @@ class OBJECT_OT_glbexportbatch(bpy.types.Operator):
         draco_compression = 6
 
 
-        if bpy.context.scene.model_export_dir:
-            basedir = os.path.dirname(bpy.context.scene.model_export_dir)
-            #subfolder = ''
-        else:
-            basedir = os.path.dirname(bpy.data.filepath)
-            #subfolder = 'FBX'
+        basedir = bpy.path.abspath(bpy.context.scene.model_export_dir) if bpy.context.scene.model_export_dir else bpy.path.abspath(os.path.dirname(bpy.data.filepath))
 
         if not basedir:
             raise Exception("Blend file is not saved")
@@ -270,13 +260,7 @@ class OBJECT_OT_objexportbatch(bpy.types.Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
-
-        if bpy.context.scene.model_export_dir:
-            basedir = os.path.dirname(bpy.context.scene.model_export_dir)
-            #subfolder = ''
-        else:
-            basedir = os.path.dirname(bpy.data.filepath)
-            #subfolder = 'FBX'
+        basedir = bpy.path.abspath(bpy.context.scene.model_export_dir) if bpy.context.scene.model_export_dir else bpy.path.abspath(os.path.dirname(bpy.data.filepath))
 
         if not basedir:
             raise Exception("Blend file is not saved")
@@ -349,10 +333,10 @@ class OBJECT_OT_fbxexportbatch(bpy.types.Operator):
         scene = context.scene
 
         if scene.model_export_dir:
-            basedir = os.path.dirname(scene.model_export_dir)
+            basedir = bpy.path.abspath(os.path.dirname(scene.model_export_dir))
             subfolder = ''
         else:
-            basedir = os.path.dirname(bpy.data.filepath)
+            basedir = bpy.path.abspath(os.path.dirname(bpy.data.filepath))
             subfolder = 'FBX'
         
         createfolder(basedir, subfolder)
@@ -457,11 +441,12 @@ class OBJECT_OT_exportbatch(bpy.types.Operator):
         draco_compression = 6
 
         if scene.model_export_dir:
-            basedir = os.path.dirname(scene.model_export_dir)
+            basedir = bpy.path.abspath(os.path.dirname(scene.model_export_dir))
             subfolder = ''
         else:
-            basedir = os.path.dirname(bpy.data.filepath)
+            basedir = bpy.path.abspath(os.path.dirname(bpy.data.filepath))
             subfolder = self.export_format
+
         if not basedir:
             raise Exception("Blend file is not saved")
         

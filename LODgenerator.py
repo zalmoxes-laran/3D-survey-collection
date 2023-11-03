@@ -268,10 +268,10 @@ class OBJECT_OT_ExportGroupsLOD(bpy.types.Operator):
         start_time = time.time()
 
         if bpy.context.scene.model_export_dir:
-            basedir = os.path.dirname(bpy.context.scene.model_export_dir)
+            basedir = bpy.path.abspath(os.path.dirname(bpy.context.scene.model_export_dir))
             subfolder = ''
         else:
-            basedir = os.path.dirname(bpy.data.filepath)
+            basedir = bpy.path.abspath(os.path.dirname(bpy.data.filepath))
             subfolder = 'FBX'
 
         #basedir = os.path.dirname(bpy.data.filepath)
