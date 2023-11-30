@@ -255,6 +255,9 @@ class ToolsPanelQuickUtils:
         row.label(text="Batch legacy material conversion")
         row = box.row()
         row.operator("diffuse.principled", icon="DECORATE_DRIVER", text='Diffuse 2 Principled')
+        row = box.row()
+        row.operator("invert.coordinates", icon="DECORATE_DRIVER", text='Invert x and y')
+
 
 class ToolsPanelLODmanager:
     bl_label = "LOD manager"

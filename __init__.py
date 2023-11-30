@@ -332,6 +332,7 @@ classes = (
     QuickUtils.OBJECT_OT_diffuseprincipled,
     QuickUtils.OBJECT_OT_setroughness,
     QuickUtils.OBJECT_OT_setmetalness,
+    QuickUtils.OBJECT_OT_invertcoordinates,
     LODgenerator.OBJECT_OT_CreateGroupsLOD,
     LODgenerator.OBJECT_OT_ExportGroupsLOD,
     LODgenerator.OBJECT_OT_LOD,
