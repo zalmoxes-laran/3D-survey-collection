@@ -300,6 +300,12 @@ class ImportMultipleObjs(Operator, ImportHelper):
 
     def execute(self, context):
 
+        # Ottieni la versione corrente di Blender
+        versione_blender = bpy.app.version
+
+        # La versione è una tupla (major, minor, patch), per esempio (3, 6, 0) per la versione 3.6.0
+        major, minor, _ = versione_blender
+
         # get the folder
         folder = (os.path.dirname(self.filepath))
 
@@ -315,11 +321,21 @@ class ImportMultipleObjs(Operator, ImportHelper):
         # iterate through the selected files
         for i in self.files:
         
-            print(i)
-            path_to_file = (os.path.join(folder, i.name))
+                print(i)
+                path_to_file = (os.path.join(folder, i.name))
 
-            bpy.ops.import_scene.obj(filepath= path_to_file,filter_glob='*.obj;*.mtl', axis_forward = self.axis_forward_setting, axis_up = self.axis_up_setting, use_edges = self.edges_setting, use_smooth_groups = self.smooth_groups_setting, use_split_objects = self.split_objects_setting, use_split_groups = self.split_groups_setting, use_groups_as_vgroups = self.groups_as_vgroups_setting, use_image_search = self.image_search_setting, split_mode = self.split_mode_setting)#, global_shift_x = x_shift, global_shift_y = y_shift, global_shift_z = z_shift)
-
+                if major >= 4:
+                        # Codice per Blender 4.0 e versioni successive
+                        #print("Stai eseguendo Blender versione 4.0 o successiva.")
+                        bpy.ops.wm.obj_import(filepath= path_to_file,filter_glob='*.obj;*.mtl', forward_axis = self.axis_forward_setting, up_axis = self.axis_up_setting)#, global_shift_x = x_shift, global_shift_y = y_shift, global_shift_z = z_shift)
+                elif major == 3 and minor >= 6:
+                        # Codice specifico per Blender 3.6
+                        bpy.ops.import_scene.obj(filepath= path_to_file,filter_glob='*.obj;*.mtl', axis_forward = self.axis_forward_setting, axis_up = self.axis_up_setting, use_edges = self.edges_setting, use_smooth_groups = self.smooth_groups_setting, use_split_objects = self.split_objects_setting, use_split_groups = self.split_groups_setting, use_groups_as_vgroups = self.groups_as_vgroups_setting, use_image_search = self.image_search_setting, split_mode = self.split_mode_setting)
+                        #print("Stai eseguendo Blender versione 3.6.")
+                else:
+                        # Codice per versioni precedenti
+                        #print("Stai eseguendo una versione di Blender precedente alla 3.6.")
+                        pass
 
         return {'FINISHED'}
 
