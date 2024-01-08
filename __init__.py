@@ -20,10 +20,10 @@ bl_info = {
     "name": "3D Survey Collection",
     "author": "Emanuel Demetrescu",
     "version": (1,5,7),
-    "blender": (3, 6, 4),
+    "blender": (4, 0, 2),
     "location": "3D View > Toolbox",
     "description": "A collection of tools for 3D Survey activities",
-    "warning": "Beta version of 1.5.7 3DSC dev2",
+    "warning": "Beta version of 1.5.7 3DSC dev3",
     "wiki_url": "",
 #    "tracker_url": "",
     "category": "Tools",
@@ -71,16 +71,27 @@ else:
             report_data,
             addon_updater_ops,
             qualitycheck,
+            external_modules_install,
             )
+
+from .external_modules_install import check_external_modules
+
 
 # demo bare-bones preferences
 @addon_updater_ops.make_annotations
+
 class DemPreferences(bpy.types.AddonPreferences):
     bl_idname = __package__
     # addon updater preferences
+
+
     auto_check_update : bpy.props.BoolProperty(
         name="Auto-check for Update",
         description="If enabled, auto-check for updates using an interval",
+        default=False
+                )
+    is_external_module : bpy.props.BoolProperty(
+        name="Py3dtiles module (to convert cesium tiled files) is present",
         default=False
                 )
     updater_intrval_months : bpy.props.IntProperty(
@@ -127,6 +138,25 @@ class DemPreferences(bpy.types.AddonPreferences):
         # col = mainrow.column()
         # col.scale_y = 2
         # col.operator("wm.url_open","Open webpage ").url=addon_updater_ops.updater.website
+
+        layout = self.layout
+        layout.label(text="Export cesium tiles setup")
+        #layout.prop(self, "filepath", text="Credentials path:")
+        if self.is_external_module:
+                layout.label(text="Py3dtiles module (to convert 3d tiles) is correctly installed")
+        else:
+                layout.label(text="Py3dtiles module is missing: install with the button below")
+                row = layout.row()
+                #row.label(text="")
+        row = layout.row()              
+        op = row.operator("install_3dsc_missing.modules", icon="STICKY_UVS_DISABLE", text='Install Py3dtiles modules (waiting some minutes is normal)')
+        op.is_install = True
+        op.list_modules_to_install = "py3dtiles"
+        row = layout.row()
+        op = row.operator("install_3dsc_missing.modules", icon="STICKY_UVS_DISABLE", text='Uninstall Py3dtiles modules (waiting some minutes is normal)')
+        op.is_install = False
+        op.list_modules_to_install = "py3dtiles"
+
 
 
 class RES_list(PropertyGroup):
@@ -389,10 +419,12 @@ def register():
 
     for cls in classes:
         bpy.utils.register_class(cls)
-
+    external_modules_install.register()
+    export_3DSC.register()
+    check_external_modules()
     bpy.types.WindowManager.interface_vars = bpy.props.PointerProperty(type=InterfaceVars)
     bpy.types.WindowManager.ccToolViewVar = bpy.props.PointerProperty(type=ccToolViewVar)
-    bpy.types.WindowManager.suffix_num = bpy.props.PointerProperty(type=SuffixVars)    
+    bpy.types.WindowManager.suffix_num = bpy.props.PointerProperty(type=SuffixVars)  
 
 #def initSceneProperties(scn):
     bpy.types.Scene.LODnum = IntProperty(
@@ -574,7 +606,8 @@ def unregister():
                 bpy.utils.unregister_class(cls)
         except RuntimeError:
                 pass
-
+    external_modules_install.unregister()
+    export_3DSC.unregister()
     shift.unregister()
 
     del bpy.types.Scene.setLODnum

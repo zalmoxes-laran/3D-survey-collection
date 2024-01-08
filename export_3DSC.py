@@ -9,6 +9,77 @@ from bpy_extras.io_utils import ExportHelper
 from bpy.props import StringProperty, BoolProperty, EnumProperty
 from bpy.types import Operator
 
+import shutil
+
+
+class ExportConvert3DTiles(bpy.types.Operator):
+    """Esporta e converte oggetti selezionati in 3D Tiles"""
+    bl_idname = "object.export_convert_3dtiles"
+    bl_label = "Esporta e Converti in 3D Tiles"
+
+    @classmethod
+    def poll(cls, context):
+        
+        #scene = context.scene
+        is_active_button = False
+        prefs = context.preferences.addons.get(__package__, None)
+        if prefs.preferences.is_external_module:# and scene.EMdb_xlsx_filepath is not None:
+            is_active_button = True
+        return is_active_button
+
+    def execute(self, context):
+        #from py3dtiles.convert import convert
+        from py3dtiles import convert as convert_to_3dtiles
+        try:
+            # Seleziona una cartella di destinazione (questo è solo un placeholder)
+            
+            dest_folder = context.scene.model_export_dir
+            temp_folder = os.path.join(dest_folder, "temp")
+
+            # Crea una cartella temporanea
+            os.makedirs(temp_folder, exist_ok=True)
+
+            # Esporta ogni oggetto selezionato in glTF
+            for obj in bpy.context.selected_objects:
+                self.export_gltf(obj, temp_folder)
+
+            # Converti i file glTF in 3D Tiles
+            self.convert_to_3dtiles_files(temp_folder, dest_folder)
+
+            # Rimuovi la cartella temporanea
+            shutil.rmtree(temp_folder)
+
+        except OSError as e:
+            self.report({'ERROR'}, "Errore nel file system: " + str(e))
+            # Pulisci i file temporanei in caso di errore
+            if os.path.exists(temp_folder):
+                shutil.rmtree(temp_folder)
+            return {'CANCELLED'}
+
+        return {'FINISHED'}
+
+    def export_gltf(self, obj, temp_folder):
+        # Salva il nome originale dell'oggetto e imposta il nome del file
+        original_name = obj.name
+        obj.name = "TempExport"
+        file_path = os.path.join(temp_folder, obj.name + ".gltf")
+
+        # Esporta l'oggetto in glTF
+        bpy.ops.export_scene.gltf(filepath=file_path, use_selection=True)
+
+        # Ripristina il nome originale
+        obj.name = original_name
+
+    def convert_to_3dtiles_files(self, input_folder, output_folder):
+        # Usa py3dtiles per convertire ogni file glTF in 3D Tiles
+        for file in os.listdir(input_folder):
+            if file.endswith(".gltf"):
+                input_path = os.path.join(input_folder, file)
+                output_path = os.path.join(output_folder, os.path.splitext(file)[0] + "_3DTiles")
+                convert_to_3dtiles([input_path], output_path, 'batched')
+                #convert(input=input_path, output=output_path, format='3dtiles')
+
+
 def check_if_scalable(image_block):
     is_scalable = False
     if image_block.size[0] > bpy.context.scene.gltf_export_maxres and image_block.size[1] > bpy.context.scene.gltf_export_maxres:
@@ -532,3 +603,18 @@ class OBJECT_OT_exportbatch(bpy.types.Operator):
                 obj.select_set(False)
 
         return {'FINISHED'}
+    
+#SETUP MENU
+#####################################################################
+
+classes = [
+    ExportConvert3DTiles]
+
+def register():
+    for cls in classes:
+        bpy.utils.register_class(cls)
+
+
+def unregister():
+    for cls in classes:
+        bpy.utils.unregister_class(cls)

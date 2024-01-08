@@ -169,6 +169,9 @@ class ToolsPanelExport:
             row.operator("glb.exportbatch", icon="DUPLICATE", text='glb')
 
             row = box.row()
+            row.operator("object.export_convert_3dtiles", icon="DUPLICATE", text='cesium')
+
+            row = box.row()
             row.prop(context.scene, 'author_sign_model', toggle = True, text='Author')
             row = box.row()
             row.prop(context.scene, 'gltf_export_maxres', toggle = True, text='Max resolution of jpg images')
