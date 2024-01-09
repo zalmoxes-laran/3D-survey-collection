@@ -35,6 +35,7 @@ class ExportConvert3DTiles(bpy.types.Operator):
             
             dest_folder = context.scene.model_export_dir
             temp_folder = os.path.join(dest_folder, "temp")
+            print(temp_folder)
 
             # Crea una cartella temporanea
             os.makedirs(temp_folder, exist_ok=True)
@@ -42,12 +43,13 @@ class ExportConvert3DTiles(bpy.types.Operator):
             # Esporta ogni oggetto selezionato in glTF
             for obj in bpy.context.selected_objects:
                 self.export_gltf(obj, temp_folder)
+                print(obj)
 
             # Converti i file glTF in 3D Tiles
             self.convert_to_3dtiles_files(temp_folder, dest_folder)
 
             # Rimuovi la cartella temporanea
-            shutil.rmtree(temp_folder)
+            #shutil.rmtree(temp_folder)
 
         except OSError as e:
             self.report({'ERROR'}, "Errore nel file system: " + str(e))
@@ -62,10 +64,15 @@ class ExportConvert3DTiles(bpy.types.Operator):
         # Salva il nome originale dell'oggetto e imposta il nome del file
         original_name = obj.name
         obj.name = "TempExport"
-        file_path = os.path.join(temp_folder, obj.name + ".gltf")
+        #file_path = os.path.join(temp_folder, obj.name + ".gltf")
+        file_path = os.path.join(temp_folder, obj.name + ".ply")
 
         # Esporta l'oggetto in glTF
-        bpy.ops.export_scene.gltf(filepath=file_path, use_selection=True)
+        #bpy.ops.export_scene.gltf(filepath=file_path, use_selection=True, export_format='GLTF_SEPARATE')
+
+        # work-around via ply in attesa che sviluppino la nuova libreria py3dtiles con supporto gltf
+        bpy.ops.wm.ply_export(filepath=file_path, export_selected_objects=True)
+
 
         # Ripristina il nome originale
         obj.name = original_name
@@ -73,7 +80,9 @@ class ExportConvert3DTiles(bpy.types.Operator):
     def convert_to_3dtiles_files(self, input_folder, output_folder):
         # Usa py3dtiles per convertire ogni file glTF in 3D Tiles
         for file in os.listdir(input_folder):
-            if file.endswith(".gltf"):
+            #if file.endswith(".gltf"):
+            if file.endswith(".ply"):
+                from py3dtiles.convert import convert as convert_to_3dtiles
                 input_path = os.path.join(input_folder, file)
                 output_path = os.path.join(output_folder, os.path.splitext(file)[0] + "_3DTiles")
                 convert_to_3dtiles([input_path], output_path, 'batched')

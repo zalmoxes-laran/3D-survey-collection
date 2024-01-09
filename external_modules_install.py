@@ -98,8 +98,22 @@ def EMdb_xlsx_modules():
     return list_of_modules
 
 def py3dtiles_modules():
-    list_of_modules =["py3dtiles==7.0.0","psutil","pyzmq","pyproj","lz4","setuptools","numba","llvmlite"]
+    #list_of_modules =["py3dtiles==7.0.0","psutil","pyzmq","pyproj","lz4","setuptools","numba","llvmlite"]
     #list_of_modules =["py3dtiles==7.0.0"]
+    list_of_modules = (
+        "cython",
+        "earcut==1.1.5",
+        "lz4",
+        "numba",
+        "numpy>=1.24.0,<2.0.0",
+        "psutil",
+        "pyproj",
+        "pyzmq",
+        "plyfile",
+        "laspy>=2.0,<3.0",
+        "py3dtiles=7.0.0",
+    )
+
     return list_of_modules 
 
 def install_modules(list_of_modules):
