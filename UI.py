@@ -194,7 +194,6 @@ class ToolsPanelExport:
             row.label(text="Select object(s) to see tools here.")
             row = layout.row() 
 
-
 class ToolsPanelQuickUtils:
     bl_label = "Quick Utils"
     bl_space_type = 'VIEW_3D'
@@ -260,7 +259,6 @@ class ToolsPanelQuickUtils:
         row.operator("diffuse.principled", icon="DECORATE_DRIVER", text='Diffuse 2 Principled')
         row = box.row()
         row.operator("invert.coordinates", icon="DECORATE_DRIVER", text='Invert x and y')
-
 
 class ToolsPanelLODmanager:
     bl_label = "LOD manager"

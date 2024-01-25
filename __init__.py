@@ -23,7 +23,7 @@ bl_info = {
     "blender": (4, 0, 2),
     "location": "3D View > Toolbox",
     "description": "A collection of tools for 3D Survey activities",
-    "warning": "Beta version of 1.5.7 3DSC dev3",
+    "warning": "Beta version of 1.5.7 3DSC dev4",
     "wiki_url": "",
 #    "tracker_url": "",
     "category": "Tools",
@@ -73,6 +73,8 @@ else:
             qualitycheck,
             external_modules_install,
             )
+    from .exporter_cesium import export_tile_model
+
 
 from .external_modules_install import check_external_modules
 
@@ -84,6 +86,12 @@ class DemPreferences(bpy.types.AddonPreferences):
     bl_idname = __package__
     # addon updater preferences
 
+    # Path to file .exe
+    exe_path: bpy.props.StringProperty(
+        name="Path to .exe File",
+        description="Path to the .exe file used by the exporter",
+        subtype='FILE_PATH'
+    )
 
     auto_check_update : bpy.props.BoolProperty(
         name="Auto-check for Update",
@@ -138,7 +146,9 @@ class DemPreferences(bpy.types.AddonPreferences):
         # col = mainrow.column()
         # col.scale_y = 2
         # col.operator("wm.url_open","Open webpage ").url=addon_updater_ops.updater.website
-
+        layout = self.layout
+        layout.label(text="Path to Obj2Tiles.exe")
+        layout.prop(self, "exe_path")
         layout = self.layout
         layout.label(text="Export cesium tiles setup")
         #layout.prop(self, "filepath", text="Credentials path:")
@@ -419,8 +429,10 @@ def register():
 
     for cls in classes:
         bpy.utils.register_class(cls)
+    shift.register()
     external_modules_install.register()
     export_3DSC.register()
+    exporter_cesium.export_tile_model.register()
     check_external_modules()
     bpy.types.WindowManager.interface_vars = bpy.props.PointerProperty(type=InterfaceVars)
     bpy.types.WindowManager.ccToolViewVar = bpy.props.PointerProperty(type=ccToolViewVar)
@@ -595,12 +607,11 @@ def register():
     description="Define the resolution of the output images",
     )
 
-    shift.register()
-
-
+    
 def unregister():
 
     addon_updater_ops.unregister(bl_info)
+    shift.unregister()
     for cls in classes:
         try:
                 bpy.utils.unregister_class(cls)
@@ -608,7 +619,7 @@ def unregister():
                 pass
     external_modules_install.unregister()
     export_3DSC.unregister()
-    shift.unregister()
+    
 
     del bpy.types.Scene.setLODnum
     del bpy.types.WindowManager.interface_vars
