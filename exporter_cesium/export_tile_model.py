@@ -87,7 +87,9 @@ class GeometryExporterOperator(bpy.types.Operator):
 
     # Metodo execute
     def execute(self, context):
-        # Qui implementi la logica per l'esportazione
+        # Creare un'istanza di GeometryExporter con i parametri necessari
+        exporter = GeometryExporter(some_parameters=self.some_operator_property)
+        exporter.execute_export()
         return {'FINISHED'}
 
 class GeometryExporter:
