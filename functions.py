@@ -796,7 +796,7 @@ def create_material_from_image(context,image,oggetto,connect):
     mat.use_nodes = True
     bsdf = mat.node_tree.nodes["Principled BSDF"]
     bsdf.inputs['Roughness'].default_value = 1.0
-    bsdf.inputs['Specular'].default_value = 0.0
+    #bsdf.inputs['Specular'].default_value = 0.0
     texImage = mat.node_tree.nodes.new('ShaderNodeTexImage')
     texImage.image = image
 #    imagepath = image.filepath_raw
