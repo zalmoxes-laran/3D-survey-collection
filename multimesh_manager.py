@@ -1,233 +1,126 @@
-# ##### BEGIN GPL LICENSE BLOCK #####
-#
-#  This program is free software; you can redistribute it and/or
-#  modify it under the terms of the GNU General Public License
-#  as published by the Free Software Foundation; either version 2
-#  of the License, or (at your option) any later version.
-#
-#  This program is distributed in the hope that it will be useful,
-#  but WITHOUT ANY WARRANTY; without even the implied warranty of
-#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#  GNU General Public License for more details.
-#
-#  You should have received a copy of the GNU General Public License
-#  along with this program; if not, write to the Free Software Foundation,
-#  Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
-#
-# ##### END GPL LICENSE BLOCK #####
-
-####### ORIGINAL CODE FROM Andreas Esau #############
-
-###### https://github.com/ndee85/Multi-Object-UV-Editing/tree/master
-
 
 import bpy
-from bpy.props import IntProperty, FloatProperty
 
-def deselect_all(context):
-    for obj in context.selected_objects:
-        obj.select = False
+import bpy
 
-def get_selected_mesh_objects(context):
-    return [obj for obj in context.selected_objects if obj.type=='MESH']
+class OBJECT_OT_unify_meshes(bpy.types.Operator):
+    bl_idname = "object.unify_meshes"
+    bl_label = "Unify Selected Meshes"
+    bl_options = {'REGISTER', 'UNDO'}
 
-class MultiObjectUVEdit(bpy.types.Operator):
-    """This operator allow to paint multiple objects at once."""
-    bl_idname = "object.multi_object_manager"
-    bl_label = "Multi object manager"
-    bl_options = {"REGISTER","UNDO"}
-    
-    multi_object = None
-    initial_objects = []
-    initial_objects_hide_render = []
-    active_object = None
-
-    def leave_editing_mode(self,context):
-        mesh_select_mode = list(context.tool_settings.mesh_select_mode)
-        context.tool_settings.mesh_select_mode = (True,False,False)
-        self.multi_object.select = True
-        context.scene.objects.active = self.multi_object
+    def execute(self, context):
+        selected_objects = context.selected_objects
         
-        ### if edit mode is left with ui interface instead of tab key go back into edit mode first
-        if self.multi_object.mode == "OBJECT":
-            bpy.ops.object.mode_set(mode="EDIT")
+        # Filtro per mesh
+        mesh_objects = [obj for obj in selected_objects if obj.type == 'MESH']
+        if len(mesh_objects) < 2:
+            self.report({'WARNING'}, "Select at least two mesh objects.")
+            return {'CANCELLED'}
         
-        ### unhide all vertices
-        bpy.ops.mesh.reveal()
-    
-        ### copy uvs based on the vertex groups to its final object
-        for v_group in self.multi_object.vertex_groups:
-            
-            ### select object vertex group and separate mesh into its own object
-            num_verts = self.select_vertex_group(self.multi_object,v_group.name)
-            if num_verts > 0:
-                bpy.ops.mesh.separate(type="SELECTED")
-                tmp_obj = context.selected_objects[0]
-                
-                ### go into object mode select newely created object and transfer the uv's to its final object
-                bpy.ops.object.mode_set(mode='OBJECT')
-                
-                deselect_all(context)
-                    
-                tmp_obj.select = True   
-                context.scene.objects.active = tmp_obj
-                original_object = bpy.data.objects[v_group.name]
-                original_object.hide = False
-                original_object.select = True
-                
-                if len(tmp_obj.data.uv_textures) > 0:
-                    if tmp_obj.data.uv_textures.active.name not in bpy.data.objects[v_group.name].data.uv_textures:
-                        new_uv_layer = bpy.data.objects[v_group.name].data.uv_textures.new(tmp_obj.data.uv_textures.active.name)
-                        original_object.data.uv_textures.active = new_uv_layer
-                    else:
-                        original_object.data.uv_textures.active = original_object.data.uv_textures[self.multi_object.data.uv_textures.active.name]
+        # Deseleziona tutti gli oggetti
+        bpy.ops.object.select_all(action='DESELECT')
+        
+        # Prepara la mesh unificata
+        unified_mesh_name = "unimesh_temp_"
+        for mesh_obj in mesh_objects:
+            mesh_obj.select_set(True)  # Seleziona l'oggetto (aggiornato per Blender 2.8x+)
+            context.view_layer.objects.active = mesh_obj  # Imposta come attivo per il vertex group
+            unified_mesh_name += mesh_obj.name + "_"
+            # Aggiungi ogni oggetto a un vertex group nominato come l'oggetto
+            vg = mesh_obj.vertex_groups.new(name=mesh_obj.name)
+            vg.add(range(len(mesh_obj.data.vertices)), 1.0, 'ADD')
+        
+        # Unisci le mesh
+        bpy.ops.object.join()
+        
+        # Rinomina la mesh unificata
+        unified_mesh = context.view_layer.objects.active
+        unified_mesh.name = unified_mesh_name
+        
+        self.report({'INFO'}, "Meshes unified into {}".format(unified_mesh_name))
+        return {'FINISHED'}
 
-                    bpy.ops.object.join_uvs()
-                    self.assign_tex_to_uv(tmp_obj.data.uv_textures.active,original_object.data.uv_textures.active)
-                    
-                ### delete the tmp object
-                original_object.select = False
-                tmp_obj.select = False
-                context.scene.objects.active = self.multi_object
-                bpy.context.scene.objects.unlink(tmp_obj)
-                bpy.data.objects.remove(tmp_obj)
-                bpy.ops.object.mode_set(mode='EDIT')        
-            
-        ### restore everything
-        context.tool_settings.mesh_select_mode = mesh_select_mode
-        bpy.ops.object.mode_set(mode="OBJECT")
-        bpy.context.scene.objects.unlink(self.multi_object)
-        bpy.data.objects.remove(self.multi_object)
-        for i,object in enumerate(self.initial_objects):
-            object.select = True
-            object.hide_render = self.initial_objects_hide_render[i]
-            
-        context.scene.objects.active = self.active_object
-        bpy.ops.ed.undo_push(message="Multi UV edit") 
-    
-    def assign_tex_to_uv(self,src_uv,dst_uv):
-        if len(src_uv.data) == len(dst_uv.data):
-            for i,data in enumerate(src_uv.data):
-                image = data.image
-                dst_uv.data[i].image = image
-        else:
-            self.report({'INFO'}, "Mesh has been edited. Modifying UVS is not possible for edited meshes.")
+class OBJECT_OT_separate_meshes(bpy.types.Operator):
+    bl_idname = "object.separate_meshes"
+    bl_label = "Separate Unified Mesh into Original Meshes"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        unified_mesh = context.object
         
-    def select_vertex_group(self,ob,group_name):
+        if not unified_mesh or not unified_mesh.name.startswith("unimesh_temp_"):
+            self.report({'WARNING'}, "No unified mesh selected or mesh name doesn't start with 'unimesh_temp_'.")
+            return {'CANCELLED'}
+        
+        original_mesh_names = [vg.name for vg in unified_mesh.vertex_groups]
+
         bpy.ops.object.mode_set(mode='EDIT')
         bpy.ops.mesh.select_all(action='DESELECT')
         bpy.ops.object.mode_set(mode='OBJECT')
-        
-        num_selected_verts = 0
-        for i,vert in enumerate(ob.data.vertices):
-            try:
-                ob.vertex_groups[group_name].weight(i)
-                vert.select = True
-                num_selected_verts += 1
-            except:
-                pass
-        bpy.ops.object.mode_set(mode='EDIT')
-        return num_selected_verts
-        
-    def merge_selected_objects(self,context):       
-        objects = list(context.selected_objects)
-        dupli_objects = []
-        ### deselect objects
-        for ob in objects:
-            ob.select = False
 
-        for i,ob in enumerate(objects):
-            if ob.type == 'MESH':
-                dupli_ob = ob.copy()
-                context.scene.objects.link(dupli_ob)
-                dupli_me = dupli_ob.data.copy()
-                dupli_ob.data = dupli_me
-                
-                dupli_objects.append(dupli_ob)
-                for group in dupli_ob.vertex_groups:
-                    dupli_ob.vertex_groups.remove(group)
-                v_group = dupli_ob.vertex_groups.new(name=ob.name)
-                v_group.add(range(len(dupli_ob.data.vertices)),1,"REPLACE")  
+        for name in original_mesh_names:
+            vg = unified_mesh.vertex_groups.get(name)
+            if vg is None:
+                continue
             
-        ### select all the new objects, and make the first one active, so we can do a join
-        for ob in dupli_objects:
-            if ob.type == 'MESH':
-                ob.select = True
-        self.multi_object = context.scene.objects.active = dupli_objects[0]
-        ### copy the mesh, because we will join into that mesh 
-        self.multi_object.data = self.multi_object.data.copy()
-        bpy.ops.object.join()
-        self.multi_object.name = "Multi_UV_Object"
-          
-    def modal(self, context, event):
-        if (event.type in ['TAB'] and not event.ctrl and not event.shift and not event.oskey) or self.multi_object.mode == "OBJECT":
-            self.report({'INFO'}, "Multi Object UV Editing done.")
-            self.leave_editing_mode(context)
-            return {'CANCELLED'}
-        return {'PASS_THROUGH'}
+            # Seleziona i vertici del gruppo
+            bpy.ops.object.mode_set(mode='EDIT')
+            bpy.ops.object.vertex_group_set_active(group=name)
+            bpy.ops.object.vertex_group_select()
+            bpy.ops.mesh.separate(type='SELECTED')
+            bpy.ops.object.mode_set(mode='OBJECT')
 
-    def invoke(self, context, event):
-        ### leave local view, prevents blender to crash when joining objects
-        if context.area.spaces.active.local_view != None:
-            override = bpy.context.copy()
-            override["area"] = context.area
-            bpy.ops.view3d.localview(override)
-        
-        ### reset variables
-        self.multi_object = None
-        context.window_manager.modal_handler_add(self)
-        
-        ### store active and selected objects
-        self.initial_objects = context.selected_objects
-        self.initial_objects_hide_render = [obj.hide_render for obj in self.initial_objects]
-        self.active_object = context.scene.objects.active
-       
-        ### make merged copy of all selected objects, that we can edit
-        self.merge_selected_objects(context)
-        self.multi_object.hide_render = False
-        self.multi_object.hide = False
-        
-        ### hide the initial objects
-        for obj in self.initial_objects:
-            if obj.type == 'MESH':
-                obj.hide = True
-                obj.hide_render = True
-            
-        ###switch to edit mode
-        bpy.ops.object.mode_set(mode="EDIT")
-        bpy.ops.mesh.select_all(action='SELECT')
-        if len(self.multi_object.data.uv_textures) > 0:
-            bpy.ops.uv.select_all(action='SELECT')
+        # Dopo la separazione, rinomina gli oggetti separati
+        separated_meshes = [obj for obj in context.selected_objects if obj != unified_mesh and obj.type == 'MESH']
+        for mesh in separated_meshes:
+            # Cerca il nome originale basato sul vertex group che ora sarà il nome della mesh
+            for name in original_mesh_names:
+                if name in mesh.name:
+                    mesh.name = name
+                    break
+            self.remove_unused_materials(mesh)
 
-        return {'RUNNING_MODAL'}
+        bpy.data.objects.remove(unified_mesh)
+        self.report({'INFO'}, "Unified mesh separated into original meshes.")
+        return {'FINISHED'}
 
-def add_object_tools(self,context):
 
-    if len(get_selected_mesh_objects(context)) > 1:
-        self.layout.operator_context = "INVOKE_DEFAULT"
-        self.layout.separator()
-        self.layout.label("UV Tools:")
-        self.layout.operator("object.multi_object_manager",text="Multi Object UV Editing",icon="IMAGE_RGB")
+    def remove_unused_materials(self, obj):
+        if obj.type != 'MESH':
+            return
 
-def add_object_specials(self,context):
-    if len(get_selected_mesh_objects(context)) > 1:
-        self.layout.operator_context = "INVOKE_DEFAULT"
-        self.layout.operator("object.multi_object_manager",text="Multi Object UV Editing",icon="IMAGE_RGB")  
+        mesh = obj.data
+        materiali_usati = set()
+
+        # Itera su tutti i poligoni dell'oggetto per trovare i materiali utilizzati
+        for poligono in mesh.polygons:
+            materiali_usati.add(poligono.material_index)
+
+        # Crea una lista dei materiali non utilizzati
+        materiali_non_utilizzati = [mat for idx, mat in enumerate(mesh.materials) if idx not in materiali_usati]
+
+        # Rimuovi i materiali non utilizzati
+        for mat in materiali_non_utilizzati:
+            # Aggiornato per usare solo l'indice come argomento
+            mesh.materials.pop(index=mesh.materials.find(mat.name))
+            print(f"Rimosso materiale non utilizzato: {mat.name}")
+
+        # Rimuovere i vertex groups
+        for vg in obj.vertex_groups:
+            obj.vertex_groups.remove(vg)
+
 
 classes = [
-    MultiObjectUVEdit
+    OBJECT_OT_unify_meshes,
+    OBJECT_OT_separate_meshes
     ]
 
 def register():
-    #bpy.types.VIEW3D_PT_tools_object.append(add_object_tools)
-    #bpy.types.VIEW3D_MT_object_specials.append(add_object_specials)
     for cls in classes:
         bpy.utils.register_class(cls)
 
 
 def unregister():
-    #bpy.types.VIEW3D_PT_tools_object.remove(add_object_tools)
-    #bpy.types.VIEW3D_MT_object_specials.remove(add_object_specials)
     for cls in classes:
         bpy.utils.unregister_class(cls)
 

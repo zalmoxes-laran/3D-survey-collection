@@ -328,12 +328,9 @@ class ToolsPanelPhotogrTool:
             row.operator("set_camera.type", icon="FILE_TICK", text='Apply')
 
             row = layout.row()
-            row.operator("object.multi_object_manager", icon="PLUS", text='Temporary Merge')
+            row.operator("object.unify_meshes", icon="PLUS", text='Temporary Merge')
+            row.operator("object.separate_meshes", icon="PLUS", text='Respawn meshes')
 
-            # RIMUOVI QUESTA SEZIONE E LE SUE
-            #if camera_type != 'Not set':
-            #row = layout.row()
-            #row.menu(Camera_menu.bl_idname, text=camera_type, icon='COLOR')
 
             if obj_selected:
                 if obj.type in ['MESH']:
