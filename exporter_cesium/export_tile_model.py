@@ -15,20 +15,20 @@ class GeometryExporterOperator(bpy.types.Operator):
                ('SPLITTING', "Splitting", ""),
                ('TILING', "Tiling", "")],
         default='TILING'
-    )
+    ) # type: ignore
 
     divisions: bpy.props.IntProperty(
         name="Divisions",
         description="Number of tile divisions",
         default=2,
         min=1
-    )
+    ) # type: ignore
 
     zsplit: bpy.props.BoolProperty(
         name="Split along Z-axis",
         description="Splits along z-axis too",
         default=False
-    )
+    ) # type: ignore
 
     lods: bpy.props.IntProperty(
         name="Levels of Details",
@@ -83,7 +83,7 @@ class GeometryExporterOperator(bpy.types.Operator):
         name="Keep Intermediate Files",
         description="Keeps the intermediate files",
         default=False
-    )
+    ) # type: ignore
 
     # Metodo execute
     def execute(self, context):

@@ -490,13 +490,15 @@ class ToolsPanelPhotogrTool:
             row = layout.row()
             split = row.split()
             col = split.column()
-            col.operator("xmlcam.parse", icon="FILE_TICK", text='Refresh')
+            col.operator("parse.cams", icon="FILE_TICK", text='Refresh')
             col = split.column()
             col.prop(scene, 'camera_lens', icon='BLENDER', toggle=True, text='Lens')
+            row = layout.row()
+            layout.prop(scene, "camera_enum", text="Camera")
 
-            if camera_type != 'Not set':
-                row = layout.row()
-                row.menu(Camera_menu.bl_idname, text=camera_type, icon='COLOR')
+            #if camera_type != 'Not set':
+            row = layout.row()
+            row.menu(Camera_menu.bl_idname, text=camera_type, icon='COLOR')
 
             if obj_selected:
                 if obj.type in ['MESH']:

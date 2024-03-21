@@ -78,7 +78,6 @@ else:
 
 from .external_modules_install import check_external_modules
 
-
 # demo bare-bones preferences
 @addon_updater_ops.make_annotations
 
@@ -384,7 +383,6 @@ classes = (
     PhotogrTool.OBJECT_OT_NoBetterCameras,
     PhotogrTool.OBJECT_OT_paintcam,
     PhotogrTool.OBJECT_OT_CreateCameraImagePlane,
-    PhotogrTool.XML_CAM_parse,
     PhotogrTool.set_camera_type,
     PhotogrTool.set_background_cam,
     ccTool.OBJECT_OT_createccsetup,
@@ -423,6 +421,8 @@ classes = (
     StatisticsListItem,
 )
 
+
+
 def register():
 
     addon_updater_ops.register(bl_info)
@@ -433,6 +433,8 @@ def register():
     external_modules_install.register()
     export_3DSC.register()
     exporter_cesium.export_tile_model.register()
+    PhotogrTool.register()
+    
     check_external_modules()
     bpy.types.WindowManager.interface_vars = bpy.props.PointerProperty(type=InterfaceVars)
     bpy.types.WindowManager.ccToolViewVar = bpy.props.PointerProperty(type=ccToolViewVar)
@@ -619,8 +621,9 @@ def unregister():
                 pass
     external_modules_install.unregister()
     export_3DSC.unregister()
-    
+    PhotogrTool.unregister()
 
+    
     del bpy.types.Scene.setLODnum
     del bpy.types.WindowManager.interface_vars
     del bpy.types.WindowManager.suffix_num

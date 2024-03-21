@@ -137,36 +137,6 @@ def get_cc_node_in_mat(mat,type):
     node = mat.nodes
     return node
 
-def parse_cam_xml(name_cam):
-    # if name_cam is not "just_parse", the function will return the parameters for the cam
-    path = bpy.utils.script_paths(subdir="Addons/3D-survey-collection/src/", user_pref=True, check_all=False, use_user=True)
-    path2xml = os.path.join(path[0],"cams.xml")
-    tree = ET.parse(path2xml)
-    root = tree.getroot()
-    scene = bpy.context.scene
-    
-    if name_cam == "just_parse":
-        #scene.camera_list = []
-        scene.camera_list.clear()
-        idx = 0
-        for cam in root.findall('cam'):
-            #rank = country.find('rank').text
-            name = cam.get('name')
-            scene.camera_list.add()
-            scene.camera_list[idx].name_cam = name
-            idx +=1
-            print(name)
-        return
-    else:
-        for cam in root.findall('cam'):
-            name = cam.get('name')
-            if name_cam == name:
-                s_width = cam.find('s_width').text
-                s_height = cam.find('s_height').text
-                x = cam.find('x').text
-                y = cam.find('y').text
-        return s_width, s_height, x, y
-
 
 def set_up_lens(obj,sens_width,sens_lenght,lens):
     #obj.select_set(True)
