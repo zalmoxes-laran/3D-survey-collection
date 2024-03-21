@@ -73,10 +73,11 @@ else:
             report_data,
             addon_updater_ops,
             qualitycheck,
-            external_modules_install
+            external_modules_install,
+            multimesh_manager
             )
+    
     from .exporter_cesium import export_tile_model
-
 
 from .external_modules_install import check_external_modules
 
@@ -409,8 +410,6 @@ classes = (
     StatisticsListItem,
 )
 
-
-
 def register():
 
     addon_updater_ops.register(bl_info)
@@ -424,13 +423,14 @@ def register():
     export_3DSC.register()
     exporter_cesium.export_tile_model.register()
     PhotogrTool.register()
+    multimesh_manager.register()
     
     check_external_modules()
     bpy.types.WindowManager.interface_vars = bpy.props.PointerProperty(type=InterfaceVars)
     bpy.types.WindowManager.ccToolViewVar = bpy.props.PointerProperty(type=ccToolViewVar)
     bpy.types.WindowManager.suffix_num = bpy.props.PointerProperty(type=SuffixVars)  
 
-#def initSceneProperties(scn):
+    #def initSceneProperties(scn):
     bpy.types.Scene.LODnum = IntProperty(
         name = "LODs",
         default = 1,
@@ -615,6 +615,7 @@ def unregister():
     export_3DSC.unregister()
     PhotogrTool.unregister()
     exporter_cesium.export_tile_model.unregister()
+    multimesh_manager.unregister()
 
     
     del bpy.types.Scene.setLODnum

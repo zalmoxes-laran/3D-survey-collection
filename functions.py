@@ -292,11 +292,11 @@ def check_children_plane(cam_ob):
 def correctcameraname(cameraname):
 #        extensions = ['.jpg','.JPG']
 #        for extension in extensions:
-    if cameraname.endswith('.JPG'):
+    if cameraname.endswith('.PNG'):
         return cameraname
         pass
     else:
-        cameranamecor = cameraname + ".JPG"
+        cameranamecor = cameraname + ".PNG"
 #                print(cameranamecor)
         return cameranamecor
 

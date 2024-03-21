@@ -298,7 +298,7 @@ class ToolsPanelPhotogrTool:
             row.label(text="Please, add a Cam to see tools here")
 
         else:
-            camera_type = context.scene.camera_type
+            #camera_type = context.scene.camera_type
             obj = context.object
             obj_selected = context.view_layer.objects.active
             cam_cam = scene.camera.data
@@ -327,6 +327,9 @@ class ToolsPanelPhotogrTool:
             row = layout.row()
             row.operator("set_camera.type", icon="FILE_TICK", text='Apply')
 
+            row = layout.row()
+            row.operator("object.multi_object_manager", icon="PLUS", text='Temporary Merge')
+
             # RIMUOVI QUESTA SEZIONE E LE SUE
             #if camera_type != 'Not set':
             #row = layout.row()
@@ -335,6 +338,7 @@ class ToolsPanelPhotogrTool:
             if obj_selected:
                 if obj.type in ['MESH']:
                     pass
+
                 elif obj.type in ['CAMERA']:
                     row = layout.row()
                     row.label(text="Visual mode:", icon='PLUS')
@@ -351,7 +355,6 @@ class ToolsPanelPhotogrTool:
 
             row = layout.row()
             row.label(text="Painting Toolbox", icon='PLUS')
-
 
             if cam_ob is not None:
                 row.label(text="Active Cam: " + cam_ob.name)
