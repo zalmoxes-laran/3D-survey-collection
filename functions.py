@@ -28,8 +28,16 @@ class OBJECT_OT_savepaintcam(bpy.types.Operator):
 
     def execute(self, context):
         #bpy.ops.image.save_dirty()
-        bpy.ops.image.save_all_modified()
-
+        #bpy.ops.image.save_all_modified()
+        # Itera su tutte le immagini caricate in Blender
+        for img in bpy.data.images:
+            # Controlla se l'immagine è stata modificata e ha un percorso di file
+            if img.is_dirty and img.filepath_raw:
+                # Tenta di salvare l'immagine nel suo percorso corrente
+                try:
+                    img.save()
+                except Exception as e:
+                    print(f"Impossibile salvare l'immagine {img.name}: {e}")
         return {'FINISHED'}
 
 class OBJECT_OT_createcyclesmat(bpy.types.Operator):
