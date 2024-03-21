@@ -25,15 +25,18 @@ bl_info = {
     "description": "A collection of tools for 3D Survey activities",
     "warning": "Beta version of 1.5.7 3DSC dev4",
     "wiki_url": "",
-#    "tracker_url": "",
+    "devel_version": "v1.5.7 dev5",  # Aggiunto campo devel_version
     "category": "Tools",
     }
+
+
+def get_3dsc_bl_info():
+    return bl_info
 
 if "bpy" in locals():
     import importlib
     importlib.reload(import_3DSC)
-#    importlib.reload(functions)
-#    importlib.reload(mesh_helpers)
+
 else:
     import math
     import bpy
@@ -46,7 +49,6 @@ else:
             FloatProperty,
             EnumProperty,
             IntProperty,
-            PointerProperty,
             CollectionProperty,
             )
     from bpy.types import (
@@ -71,7 +73,7 @@ else:
             report_data,
             addon_updater_ops,
             qualitycheck,
-            external_modules_install,
+            external_modules_install
             )
     from .exporter_cesium import export_tile_model
 
@@ -80,6 +82,7 @@ from .external_modules_install import check_external_modules
 
 # demo bare-bones preferences
 @addon_updater_ops.make_annotations
+
 
 class DemPreferences(bpy.types.AddonPreferences):
     bl_idname = __package__
@@ -90,44 +93,44 @@ class DemPreferences(bpy.types.AddonPreferences):
         name="Path to .exe File",
         description="Path to the .exe file used by the exporter",
         subtype='FILE_PATH'
-    )
+    ) # type: ignore
 
     auto_check_update : bpy.props.BoolProperty(
         name="Auto-check for Update",
         description="If enabled, auto-check for updates using an interval",
         default=False
-                )
+                ) # type: ignore
     is_external_module : bpy.props.BoolProperty(
         name="Py3dtiles module (to convert cesium tiled files) is present",
         default=False
-                )
+                ) # type: ignore
     updater_intrval_months : bpy.props.IntProperty(
         name='Months',
         description="Number of months between checking for updates",
         default=0,
         min=0
-                )
+                ) # type: ignore
     updater_intrval_days : bpy.props.IntProperty(
         name='Days',
         description="Number of days between checking for updates",
         default=7,
         min=0,
         max=31
-                )
+                ) # type: ignore
     updater_intrval_hours : bpy.props.IntProperty(
         name='Hours',
         description="Number of hours between checking for updates",
         default=0,
         min=0,
         max=23
-                )
+                ) # type: ignore
     updater_intrval_minutes : bpy.props.IntProperty(
         name='Minutes',
         description="Number of minutes between checking for updates",
         default=0,
         min=0,
         max=59
-                )
+                ) # type: ignore
     def draw(self, context):
         layout = self.layout
         # col = layout.column() # works best if a column, or even just self.layout
@@ -174,7 +177,7 @@ class RES_list(PropertyGroup):
     res_num : IntProperty(
             name="Resolution",
             description="Resolution number",
-            default=1)
+            default=1) # type: ignore
 
 class CAMTypeList(PropertyGroup):
     """ List of cameras """
@@ -182,7 +185,7 @@ class CAMTypeList(PropertyGroup):
     name_cam : StringProperty(
             name="Name",
             description="A name for this item",
-            default="Untitled")
+            default="Untitled") # type: ignore
 
 class AnalysisListItem(PropertyGroup):
     """ Group of properties representing an item in the list """
@@ -190,12 +193,12 @@ class AnalysisListItem(PropertyGroup):
     res_tex : IntProperty(
             name = "Res",
             default = 0,
-            description = "Resolution of Image Texture")
+            description = "Resolution of Image Texture") # type: ignore
 
     res_counter : IntProperty(
             name = "Number of instances",
             default = 0,
-            description = "Number of instances for a given resolution")
+            description = "Number of instances for a given resolution") # type: ignore
 
 class StatisticsListItem(PropertyGroup):
     """ Group of properties representing an item in the list """
@@ -203,52 +206,52 @@ class StatisticsListItem(PropertyGroup):
     name : StringProperty(
             name="Name",
             description="Name of the object",
-            default="Untitled")
+            default="Untitled") # type: ignore
 
     context_col : StringProperty(
             name="context_col",
             description="Name of the context",
-            default="Untitled")
+            default="Untitled") # type: ignore
 
     tiles_num : IntProperty(
             name = "Tiles",
             default = 0,
-            description = "Number of tiles")    
+            description = "Number of tiles")     # type: ignore
 
     area_mesh : FloatProperty(
             name = "Area",
-            default = 0,
+            default = 0, # type: ignore
             description = "Area of mesh")
 
     poly_num : IntProperty(
             name = "Polygons",
             default = 0,
-            description = "Number of polygons")
+            description = "Number of polygons") # type: ignore
     
     poly_res : FloatProperty(
             name = "Polyres",
             default = 0,
-            description = "Area of mesh")
+            description = "Area of mesh") # type: ignore
 
     res_tex : IntProperty(
             name = "Res",
             default = 0,
-            description = "Resolution of Image Texture")
+            description = "Resolution of Image Texture") # type: ignore
 
     res_counter : IntProperty(
             name = "Number of instances",
             default = 0,
-            description = "Number of instances for a given resolution")
+            description = "Number of instances for a given resolution") # type: ignore
     
     uv_ratio : FloatProperty(
             name = "UVratio",
             default = 0.6,
-            description = "Ratio coverage for UV")
+            description = "Ratio coverage for UV") # type: ignore
     
     mean_res_tex : FloatProperty(
             name = "meanrestex",
             default = 0.0,
-            description = "Mean texture resolution of this group")
+            description = "Mean texture resolution of this group") # type: ignore
 
 class PANOListItem(PropertyGroup):
     """ Group of properties representing an item in the list """
@@ -256,17 +259,17 @@ class PANOListItem(PropertyGroup):
     name : StringProperty(
             name="Name",
             description="A name for this item",
-            default="Untitled")
+            default="Untitled") # type: ignore
 
     icon : StringProperty(
             name="code for icon",
             description="",
-            default="GROUP_UVS")
+            default="GROUP_UVS") # type: ignore
 
     resol_pano : IntProperty(
             name = "Res",
             default = 1,
-            description = "Resolution of Panoramic image for this bubble")
+            description = "Resolution of Panoramic image for this bubble") # type: ignore
 
 class PANO_UL_List(bpy.types.UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, resol_pano, index):
@@ -281,7 +284,7 @@ class InterfaceVars(PropertyGroup):
             ('HS', 'HS', 'Hue/Saturation', '', 2),
         ],
         default='RGB'
-    )
+    ) # type: ignore
 
 class SuffixVars(PropertyGroup):
     suffixnum: EnumProperty(
@@ -291,7 +294,7 @@ class SuffixVars(PropertyGroup):
             ('.003', '.003', '.003', '', 2),
         ],
         default='.001'
-    )
+    ) # type: ignore
 
 class ccToolViewVar(PropertyGroup):
     cc_view: EnumProperty(
@@ -301,7 +304,7 @@ class ccToolViewVar(PropertyGroup):
             ('cc_image', 'cc_image', 'final texture', '', 2),
         ],
         default='cc_node'
-    )
+    ) # type: ignore
 
 class LODitemListItem(PropertyGroup):
     """ Group of properties representing an item in the list """
@@ -309,33 +312,25 @@ class LODitemListItem(PropertyGroup):
     name : StringProperty(
             name="object",
             description="object name",
-            default="Untitled")
+            default="Untitled") # type: ignore
 
     libreria_lod : StringProperty(
             name="library",
             description="library name",
-            default="Untitled")
+            default="Untitled") # type: ignore
 
 classes = (
-    UI.VIEW3D_PT_Import_ToolBar,
     UI.VIEW3D_PT_Export_ToolBar,
     UI.VIEW3D_PT_QuickUtils_ToolBar,
     UI.VIEW3D_PT_segmentation_pan,
     UI.VIEW3D_PT_LODgenerator,
     UI.VIEW3D_PT_LODmanager,
     UI.VIEW3D_PT_ccTool,
-    UI.VIEW3D_PT_PhotogrTool,
-    UI.Camera_menu,
     UI.Res_menu,
     UI.VIEW3D_PT_TexPatcher,
     # UI.VIEW3D_PT_SetupPanel,
     UI.VIEW3D_PT_mesh_analyze,
-    import_3DSC.ImportMultipleObjs,
-    import_3DSC.OBJECT_OT_IMPORTPOINTS,
-    import_3DSC.ImportCoorPoints,
     export_3DSC.ExportCoordinates,
-    import_3DSC.OBJECT_OT_IMPORTAGIXML,
-    import_3DSC.ImportCamAgiXML,
     export_3DSC.OBJECT_OT_exportbatch,
     export_3DSC.OBJECT_OT_ExportButtonName,
     export_3DSC.OBJECT_OT_ExportObjButton,
@@ -378,13 +373,6 @@ classes = (
     LODgenerator.OBJECT_OT_LOD0,
     LODgenerator.OBJECT_OT_RemoveGroupsLOD,
     LODgenerator.OBJECT_OT_changeLOD,
-    PhotogrTool.OBJECT_OT_applypaintcam,
-    PhotogrTool.OBJECT_OT_BetterCameras,
-    PhotogrTool.OBJECT_OT_NoBetterCameras,
-    PhotogrTool.OBJECT_OT_paintcam,
-    PhotogrTool.OBJECT_OT_CreateCameraImagePlane,
-    PhotogrTool.set_camera_type,
-    PhotogrTool.set_background_cam,
     ccTool.OBJECT_OT_createccsetup,
     ccTool.OBJECT_OT_bakecyclesdiffuse,
     ccTool.OBJECT_OT_removeccsetup,
@@ -429,6 +417,8 @@ def register():
 
     for cls in classes:
         bpy.utils.register_class(cls)
+    
+    import_3DSC.register()
     shift.register()
     external_modules_install.register()
     export_3DSC.register()
@@ -619,9 +609,12 @@ def unregister():
                 bpy.utils.unregister_class(cls)
         except RuntimeError:
                 pass
+        
+    import_3DSC.unregister()
     external_modules_install.unregister()
     export_3DSC.unregister()
     PhotogrTool.unregister()
+    exporter_cesium.export_tile_model.unregister()
 
     
     del bpy.types.Scene.setLODnum

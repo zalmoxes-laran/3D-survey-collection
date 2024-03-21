@@ -2,6 +2,7 @@ import bpy
 import os
 from .functions import *
 import xml.etree.ElementTree as ET
+from bpy.types import Panel
 
 
 class set_background_cam(bpy.types.Operator):
@@ -43,10 +44,10 @@ class set_camera_type(bpy.types.Operator):
         scene = context.scene
         context.scene.camera_type = self.name_cam
         selected_objects = context.selected_objects
-        selected_camera_id = bpy.context.scene.selected_camera
-        #s_width, s_height, x, y = parse_cam_xml(self.name_cam)
+        selected_camera_id = bpy.context.scene.camera_enum
         lens = context.scene.camera_lens
         for ob in selected_objects:
+            #selected_camera_id = ob.name
             if ob.type in ['CAMERA']:
                 set_up_lens(ob, float(scene.camera_details[selected_camera_id].s_width), float(scene.camera_details[selected_camera_id].s_height), lens)
         set_up_scene(int(scene.camera_details[selected_camera_id].x),int(scene.camera_details[selected_camera_id].y),True)
@@ -90,6 +91,7 @@ class OBJECT_OT_CreateCameraImagePlane(bpy.types.Operator):
     bl_idname= "object.createcameraimageplane"
     bl_label="Camera Image Plane"
     bl_options={'REGISTER', 'UNDO'}
+
     def SetupDriverVariables(self, driver, imageplane):
         camAngle = driver.variables.new()
         camAngle.name = 'camAngle'
@@ -115,6 +117,8 @@ class OBJECT_OT_CreateCameraImagePlane(bpy.types.Operator):
         driver.type= 'SCRIPTED'
         self.SetupDriverVariables( driver, imageplane)
         driver.expression ="-depth*tan(camAngle/2)"
+        bpy.context.view_layer.update()
+
 
     # get selected camera (might traverse children of selected object until a camera is found?)
     # for now just pick the active object
@@ -136,7 +140,7 @@ class OBJECT_OT_CreateCameraImagePlane(bpy.types.Operator):
             bpy.ops.object.editmode_toggle()
             bpy.ops.mesh.select_all(action='TOGGLE')
             bpy.ops.transform.resize( value=(0.5,0.5,0.5))
-            bpy.ops.uv.smart_project(angle_limit=66,island_margin=0, user_area_weight=0)
+            bpy.ops.uv.smart_project(angle_limit=66,island_margin=0, area_weight=0)
             bpy.ops.uv.select_all(action='TOGGLE')
             bpy.ops.transform.rotate(value=1.5708, orient_axis='Z')
             
@@ -254,39 +258,7 @@ class OBJECT_OT_parse_cams(bpy.types.Operator):
             camera_item.x = int(cam.find('x').text)
             camera_item.y = int(cam.find('y').text)
 
-
         return {'FINISHED'}
-
-
-""" def parse_cam_xml(name_cam):
-    # if name_cam is not "just_parse", the function will return the parameters for the cam
-    path = bpy.utils.script_paths(subdir="Addons/3D-survey-collection/src/", user_pref=True, check_all=False, use_user=True)
-    path2xml = os.path.join(path[0],"cams.xml")
-    tree = ET.parse(path2xml)
-    root = tree.getroot()
-    scene = bpy.context.scene
-    
-    if name_cam == "just_parse":
-        #scene.camera_list = []
-        scene.camera_list.clear()
-        idx = 0
-        for cam in root.findall('cam'):
-            #rank = country.find('rank').text
-            name = cam.get('name')
-            scene.camera_list.add()
-            scene.camera_list[idx].name_cam = name
-            idx +=1
-            print(name)
-        return
-    else:
-        for cam in root.findall('cam'):
-            name = cam.get('name')
-            if name_cam == name:
-                s_width = cam.find('s_width').text
-                s_height = cam.find('s_height').text
-                x = cam.find('x').text
-                y = cam.find('y').text
-        return s_width, s_height, x, y """
 
 def get_camera_enum_items(self, context):
     items = [(cam.name, cam.name, "") for cam in bpy.context.scene.camera_details]
@@ -300,9 +272,143 @@ def update_camera_details(self, context):
     else:
         print("Nessuna camera selezionata")
 
+class ToolsPanelPhotogrTool:
+    bl_label = "Photogrammetry paint"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_options = {'DEFAULT_CLOSED'}
+
+    def draw(self, context):
+        layout = self.layout
+        scene = context.scene
+        cam_ob = None
+        cam_ob = scene.camera
+
+        row = layout.row()
+        row.label(text="Setup scene:", icon='PACKAGE')
+
+        row = layout.row()
+        row.label(text="Folder with undistorted images:")
+        row = layout.row()
+        row.prop(context.scene, 'BL_undistorted_path', toggle = True, text="")
+        row = layout.row()
+
+        if cam_ob is None:
+            row = layout.row()
+            row.label(text="Please, add a Cam to see tools here")
+
+        else:
+            camera_type = context.scene.camera_type
+            obj = context.object
+            obj_selected = context.view_layer.objects.active
+            cam_cam = scene.camera.data
+            #row = layout.row()
+            #op = row.operator("set_background.cam", icon="FILE_TICK", text='BG Cam')
+            #op.name_cam = "Camera"
+            row = layout.row()
+            row.label(text="Set selected cam(s) as:", icon='CON_CAMERASOLVER')
+            row = layout.row()
+
+            # Suddividi la riga con un fattore di 0.5 per la prima colonna
+            split = row.split(factor=0.5)
+            col1 = split.column()
+            col1.prop(scene, "camera_enum", text="")
+
+            # Nello spazio restante (50%), suddividi ulteriormente per dare alla seconda colonna il 70% di questo spazio,
+            # che corrisponde al 35% dello spazio totale.
+            split2 = split.split(factor=0.7)
+            col2 = split2.column()
+            col2.prop(scene, 'camera_lens', icon='BLENDER', toggle=True, text='Lens')
+
+            # La terza colonna occupa automaticamente il restante spazio
+            col3 = split2.column()
+            col3.operator("parse.cams", icon="FILE_TICK", text='')
+
+            row = layout.row()
+            row.operator("set_camera.type", icon="FILE_TICK", text='Apply')
+
+            # RIMUOVI QUESTA SEZIONE E LE SUE
+            #if camera_type != 'Not set':
+            #row = layout.row()
+            #row.menu(Camera_menu.bl_idname, text=camera_type, icon='COLOR')
+
+            if obj_selected:
+                if obj.type in ['MESH']:
+                    pass
+                elif obj.type in ['CAMERA']:
+                    row = layout.row()
+                    row.label(text="Visual mode:", icon='PLUS')
+                    row = layout.row()
+                    split = row.split()
+                    col = split.column()
+                    col.operator("better.cameras", icon="PLUS", text='Better Cams')
+                    col = split.column()
+                    col.operator("nobetter.cameras", icon="PLUS", text='Disable Better Cams')
+                    row = layout.row()
+                else:
+                    row = layout.row()
+                    row.label(text="Please select a mesh or a cam", icon='PLUS')
+
+            row = layout.row()
+            row.label(text="Painting Toolbox", icon='PLUS')
+
+
+            if cam_ob is not None:
+                row.label(text="Active Cam: " + cam_ob.name)
+                self.layout.operator("object.createcameraimageplane", icon="PLUS", text='Photo to camera')
+                row = layout.row()
+                row = layout.row()
+                row.prop(cam_cam, "lens")
+                row = layout.row()
+                is_cam_ob_plane = check_children_plane(cam_ob)
+               # row.label(text=str(is_cam_ob_plane))
+                if is_cam_ob_plane:
+                    if obj.type in ['MESH']:
+                        row.label(text="Active object: " + obj.name)
+                        self.layout.operator("paint.cam", icon="PLUS", text='Paint active from cam')
+                else:
+                    row = layout.row()
+                    row.label(text="Please, set a photo to camera", icon='TPAINT_HLT')
+
+                self.layout.operator("applypaint.cam", icon="PLUS", text='Apply paint')
+                self.layout.operator("savepaint.cam", icon="PLUS", text='Save modified texs')
+                row = layout.row()
+            else:
+                row.label(text="!!! Import some cams to start !!!")
+
+class VIEW3D_PT_PhotogrTool(Panel, ToolsPanelPhotogrTool):
+    bl_category = "3DSC"
+    bl_idname = "VIEW3D_PT_PhotogrTool"
+    bl_context = "objectmode"
+
+class Camera_menu(bpy.types.Menu):
+    bl_label = "Custom Menu"
+    bl_idname = "OBJECT_MT_Camera_menu"
+
+    def draw(self, context):
+        camera_type_list = context.scene.camera_list
+        idx = 0
+        layout = self.layout
+        while idx < len(camera_type_list):
+            op = layout.operator(
+                    "set_camera.type", text=camera_type_list[idx].name_cam, emboss=False, icon="RIGHTARROW")
+            op.name_cam = camera_type_list[idx].name_cam
+            idx +=1
+
+
 classes = [
     CameraDetails,
-    OBJECT_OT_parse_cams]
+    OBJECT_OT_parse_cams,
+    OBJECT_OT_applypaintcam,
+    OBJECT_OT_BetterCameras,
+    OBJECT_OT_NoBetterCameras,
+    OBJECT_OT_paintcam,
+    OBJECT_OT_CreateCameraImagePlane,
+    set_camera_type,
+    set_background_cam,
+    VIEW3D_PT_PhotogrTool,
+    Camera_menu
+    ]
 
 def register():
     for cls in classes:
@@ -310,8 +416,6 @@ def register():
 
     bpy.types.Scene.camera_details = bpy.props.CollectionProperty(type=CameraDetails)
     bpy.types.Scene.selected_camera = bpy.props.StringProperty(name="Selected Camera", update=update_camera_details)
-
-
 
     # Aggiungi questa property alla registrazione
     bpy.types.Scene.camera_enum = bpy.props.EnumProperty(items=get_camera_enum_items, update=update_camera_details)

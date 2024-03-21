@@ -149,7 +149,7 @@ def set_up_scene(x,y,ao):
     bpy.context.scene.render.resolution_x = x
     bpy.context.scene.render.resolution_y = y
     bpy.context.scene.render.resolution_percentage = 100
-    bpy.context.scene.world.light_settings.use_ambient_occlusion = ao
+    #bpy.context.scene.world.light_settings.use_ambient_occlusion = ao
     bpy.context.scene.tool_settings.image_paint.screen_grab_size[0] = x
     bpy.context.scene.tool_settings.image_paint.screen_grab_size[1] = y
 
