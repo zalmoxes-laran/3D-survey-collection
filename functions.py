@@ -298,14 +298,14 @@ def check_children_plane(cam_ob):
     return check
 
 def correctcameraname(cameraname):
-#        extensions = ['.jpg','.JPG']
-#        for extension in extensions:
-    if cameraname.endswith('.PNG'):
-        return cameraname
-        pass
-    else:
-        cameranamecor = cameraname + ".PNG"
-#                print(cameranamecor)
+    extensions = ['.jpg','.JPG','.PNG','.png']
+    for extension in extensions:
+        if cameraname.endswith(extension):
+            return cameraname
+            pass
+        else:
+            cameranamecor = cameraname + ".jpeg"
+    #                print(cameranamecor)
         return cameranamecor
 
 def decimate_mesh(context,obj,ratio,lod):
@@ -792,41 +792,6 @@ def create_material_from_image(context,image,oggetto,connect):
 
     return mat, texImage, bsdf
 
-
-def mat_from_image(img,ob,alpha):
-    mat = bpy.data.materials.new(name='M_'+ ob.name)
-    mat.use_nodes = True
-    material_output = None
-    for node in mat.node_tree.nodes:
-        if node.type == "OUTPUT_MATERIAL":
-            material_output = node
-            break
-
-    bsdf = mat.node_tree.nodes["Principled BSDF"]
-    texImage = mat.node_tree.nodes.new('ShaderNodeTexImage')
-    texImage.image = img
-    texImage.location = (-460,90)
-    mat.node_tree.links.new(bsdf.inputs['Base Color'], texImage.outputs['Color'])
-    #output_node = mat.node_tree.nodes()
-
-    if alpha == True:
-        alpha_node = mat.node_tree.nodes.new('ShaderNodeBsdfTransparent')
-        alpha_node.location = (-80,-518)
-        mixshader_node = mat.node_tree.nodes.new('ShaderNodeMixShader') 
-        mixshader_node.location = (-75,-370)
-        mat.node_tree.links.new(bsdf.outputs[0], mixshader_node.inputs[1])
-        mat.node_tree.links.new(alpha_node.outputs[0], mixshader_node.inputs[2])
-        mat.node_tree.links.new(mixshader_node.outputs['Shader'], material_output.inputs[0])
-        mat.blend_method = 'BLEND'
-
-    # Assign it to object
-    if ob.data.materials:
-        ob.data.materials[0] = mat
-    else:
-        ob.data.materials.append(mat)
-
-    #mat.node_tree.nodes.active = texImage
-    return mat, texImage
 
 #sezione panorami
 

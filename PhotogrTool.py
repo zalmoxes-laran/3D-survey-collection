@@ -5,6 +5,26 @@ import xml.etree.ElementTree as ET
 from bpy.types import Panel
 
 
+class OGGETTO_OT_pick(bpy.types.Operator):
+    """Select a canvas object"""
+    bl_idname = "canvas.pick"
+    bl_label = "Select a canvas object"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        if context.view_layer.objects.active and context.view_layer.objects.active.type == 'MESH':
+            is_mesh = True
+        else:
+            is_mesh = False 
+        return is_mesh
+
+    # Questa funzione viene chiamata quando l'operatore è eseguito, ovvero quando l'utente seleziona l'oggetto.
+    def execute(self, context):
+        # Imposta l'oggetto attivo come oggetto selezionato per la tua proprietà
+        context.scene.canvas_obj = context.active_object
+        return {'FINISHED'}
+
 class set_background_cam(bpy.types.Operator):
     bl_idname = "set_background.cam"
     bl_label = "Set background camera"
@@ -58,13 +78,22 @@ class OBJECT_OT_BetterCameras(bpy.types.Operator):
     bl_label = "Better Cameras"
     bl_options = {"REGISTER", "UNDO"}
 
+    @classmethod
+    def poll(cls, context):
+            
+        if context.view_layer.objects.active and context.view_layer.objects.active.type == 'CAMERA':
+            is_cam = True
+        else:
+            is_cam = False 
+        return is_cam
+
     def execute(self, context):
         selection = bpy.context.selected_objects
         bpy.ops.object.select_all(action='DESELECT')
         for cam in selection:
             cam.select_set(True)
             cam.data.show_limits = True
-            cam.data.clip_start = 0.5
+            cam.data.clip_start = 0.1
             cam.data.clip_end = 4
             cam.scale[0] = 0.1
             cam.scale[1] = 0.1
@@ -75,6 +104,18 @@ class OBJECT_OT_NoBetterCameras(bpy.types.Operator):
     bl_idname = "nobetter.cameras"
     bl_label = "Disable Better Cameras"
     bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+            
+        if context.view_layer.objects.active and context.view_layer.objects.active.type == 'CAMERA':
+            is_cam = True
+        else:
+            is_cam = False 
+        return is_cam
+            
+            
+            
 
     def execute(self, context):
         selection = bpy.context.selected_objects
@@ -87,7 +128,7 @@ class OBJECT_OT_NoBetterCameras(bpy.types.Operator):
 #______________________________________________________________
 
 class OBJECT_OT_CreateCameraImagePlane(bpy.types.Operator):
-    """Create image plane for camera"""
+    """Associate an undistorted photo to this camera"""
     bl_idname= "object.createcameraimageplane"
     bl_label="Camera Image Plane"
     bl_options={'REGISTER', 'UNDO'}
@@ -111,7 +152,6 @@ class OBJECT_OT_CreateCameraImagePlane(bpy.types.Operator):
         driver = imageplane.driver_add('scale',1).driver
         driver.type = 'SCRIPTED'
         self.SetupDriverVariables( driver, imageplane)
-        #driver.expression ="-depth*math.tan(camAngle/2)*resolution_y*pixel_y/(resolution_x*pixel_x)"
         driver.expression ="-depth*tan(camAngle/2)*bpy.context.scene.render.resolution_y * bpy.context.scene.render.pixel_aspect_y/(bpy.context.scene.render.resolution_x * bpy.context.scene.render.pixel_aspect_x)"
         driver = imageplane.driver_add('scale',0).driver
         driver.type= 'SCRIPTED'
@@ -122,7 +162,46 @@ class OBJECT_OT_CreateCameraImagePlane(bpy.types.Operator):
 
     # get selected camera (might traverse children of selected object until a camera is found?)
     # for now just pick the active object
-        
+
+
+    def mat_from_image(self, img,ob,alpha):
+        mat = bpy.data.materials.new(name='M_'+ ob.name)
+        mat.use_nodes = True
+        material_output = None
+        for node in mat.node_tree.nodes:
+            if node.type == "OUTPUT_MATERIAL":
+                material_output = node
+                break
+
+        bsdf = mat.node_tree.nodes["Principled BSDF"]
+        texImage = mat.node_tree.nodes.new('ShaderNodeTexImage')
+        texImage.image = img
+        texImage.location = (-460,90)
+        mat.node_tree.links.new(bsdf.inputs['Base Color'], texImage.outputs['Color'])
+        mat.node_tree.links.new(bsdf.outputs['BSDF'], material_output.inputs[0])
+        bsdf.inputs['Alpha'].default_value = 0.5
+        mat.blend_method = 'BLEND'
+        #output_node = mat.node_tree.nodes()
+
+        """ if alpha == True:
+            alpha_node = mat.node_tree.nodes.new('ShaderNodeBsdfTransparent')
+            alpha_node.location = (-80,-518)
+            mixshader_node = mat.node_tree.nodes.new('ShaderNodeMixShader') 
+            mixshader_node.location = (-75,-370)
+            mat.node_tree.links.new(bsdf.outputs[0], mixshader_node.inputs[1])
+            mat.node_tree.links.new(alpha_node.outputs[0], mixshader_node.inputs[2])
+            mat.node_tree.links.new(mixshader_node.outputs['Shader'], material_output.inputs[0])
+            mat.blend_method = 'BLEND' 
+        """
+
+        # Assign it to object
+        if ob.data.materials:
+            ob.data.materials[0] = mat
+        else:
+            ob.data.materials.append(mat)
+
+        #mat.node_tree.nodes.active = texImage
+        return mat, texImage
 
     def createImagePlaneForCamera(self, camera):
         imageplane = None
@@ -157,7 +236,7 @@ class OBJECT_OT_CreateCameraImagePlane(bpy.types.Operator):
             activename = bpy.path.clean_name(bpy.context.view_layer.objects.active.name)
             undistortedpath = bpy.context.scene.BL_undistorted_path
             image_cam = bpy.data.images.load(undistortedpath+cameraname)
-            mat_from_image(image_cam,imageplane,True)
+            self.mat_from_image(image_cam,imageplane,True)
 
             #bpy.context.object.data.uv_layers.active.data[0].image = 
             #bpy.ops.view3d.tex_to_material()
@@ -190,23 +269,53 @@ class OBJECT_OT_CreateCameraImagePlane(bpy.types.Operator):
                 camera = bpy.context.scene.camera
                 return self.createImagePlaneForCamera(camera)
 
+
+class TOGGLE_OBJ_VISIBILITY(bpy.types.Operator):
+    """(add a photo to activate this button)"""
+    bl_idname = "object.toggle_obj_visibility"
+    bl_label = "Show/Hide the camera's photo"
+
+    @classmethod
+    def poll(cls, context):
+            scene = context.scene
+            return check_children_plane(scene.camera)
+
+    def execute(self, context):
+        cam_ob = context.scene.camera
+        if cam_ob is not None:
+            for obj in cam_ob.children:
+                if obj.name.startswith("objplane_"):
+                    obj.hide_viewport = not obj.hide_viewport
+        return {'FINISHED'}
+
 class OBJECT_OT_paintcam(bpy.types.Operator):
+    """Add a photo to the current camera to activate this button"""
     bl_idname = "paint.cam"
     bl_label = "Paint selected from current cam"
     bl_options = {"REGISTER", "UNDO"}
 
+    @classmethod
+    def poll(cls, context):
+            scene = context.scene
+            return check_children_plane(scene.camera) and context.preferences.filepaths.image_editor
+
+
     def execute(self, context):
 
         scene = context.scene
-        undistortedpath = bpy.context.scene.BL_undistorted_path
-        cam_ob = bpy.context.scene.camera
+        undistortedpath = scene.BL_undistorted_path
+        cam_ob = scene.camera
 
         if not undistortedpath:
+
             raise Exception("Set the Undistort path before to activate this command")
         else:
             for obj in cam_ob.children:
                 if obj.name.startswith("objplane_"):
                     obj.hide_viewport = True
+            bpy.ops.view3d.view_camera()
+            bpy.ops.object.select_all(action='DESELECT')
+            scene.canvas_obj.select_set(True)
             bpy.ops.paint.texture_paint_toggle()
             #bpy.context.space_data.show_only_render = True
             bpy.types.View3DOverlay.show_overlays = False
@@ -331,50 +440,86 @@ class ToolsPanelPhotogrTool:
             row.operator("object.unify_meshes", icon="PLUS", text='Temporary Merge')
             row.operator("object.separate_meshes", icon="PLUS", text='Respawn meshes')
 
-
-            if obj_selected:
-                if obj.type in ['MESH']:
-                    pass
-
-                elif obj.type in ['CAMERA']:
-                    row = layout.row()
-                    row.label(text="Visual mode:", icon='PLUS')
-                    row = layout.row()
-                    split = row.split()
-                    col = split.column()
-                    col.operator("better.cameras", icon="PLUS", text='Better Cams')
-                    col = split.column()
-                    col.operator("nobetter.cameras", icon="PLUS", text='Disable Better Cams')
-                    row = layout.row()
-                else:
-                    row = layout.row()
-                    row.label(text="Please select a mesh or a cam", icon='PLUS')
-
             row = layout.row()
-            row.label(text="Painting Toolbox", icon='PLUS')
+            row.label(text="Visual mode:", icon='PLUS')
+            row = layout.row()
+            split = row.split()
+            col = split.column()
+            col.operator("better.cameras", icon="PLUS", text='Better Cams')
+            col = split.column()
+            col.operator("nobetter.cameras", icon="PLUS", text='Disable Better Cams')
+            row = layout.row()
 
             if cam_ob is not None:
-                row.label(text="Active Cam: " + cam_ob.name)
-                self.layout.operator("object.createcameraimageplane", icon="PLUS", text='Photo to camera')
                 row = layout.row()
+
+                row.label(text="Active Cam: " + cam_ob.name, icon="CAMERA_DATA")
+                row = layout.row()
+
+                row.operator("object.createcameraimageplane", icon="PLUS", text='Load undistorted photo')
+                row.operator("object.toggle_obj_visibility", icon='HIDE_OFF', text="")
+
                 row = layout.row()
                 row.prop(cam_cam, "lens")
                 row = layout.row()
-                is_cam_ob_plane = check_children_plane(cam_ob)
-               # row.label(text=str(is_cam_ob_plane))
-                if is_cam_ob_plane:
-                    if obj.type in ['MESH']:
-                        row.label(text="Active object: " + obj.name)
-                        self.layout.operator("paint.cam", icon="PLUS", text='Paint active from cam')
+                row.label(text="Clip from-to")
+                row.prop(cam_cam, "clip_start", text="")
+                row.prop(cam_cam, "clip_end", text="")
+                
+
+                row = layout.row()
+
+                camera = context.scene.camera  # Ottiene la camera attiva della scena
+                material = self.trova_objplane_material(camera)
+                
+                if material is not None and hasattr(material, 'node_tree'):
+                    bsdf = material.node_tree.nodes.get('Principled BSDF')
+                    if bsdf is not None:
+                        row.prop(bsdf.inputs['Alpha'], 'default_value', text="Camera transparency")
+                    else:
+                        row.label(text="Principled BSDF found")
                 else:
-                    row = layout.row()
-                    row.label(text="Please, set a photo to camera", icon='TPAINT_HLT')
+                    row.label(text="Camera Texture not present")
+
+
+                layout.label(text="Canvas object:", icon="NODE_TEXTURE")
+                # Prop_search per selezionare un oggetto da una lista
+                layout.prop_search(scene, "canvas_obj", scene, "objects", text="")
+                # Bottone per attivare l'operatore di selezione
+                layout.operator("canvas.pick", text="or selected obj -> Canvas")
+                
+                row = layout.row()
+                is_cam_ob_plane = check_children_plane(cam_ob)
+
+
+                #row.label(text="Active object: " + obj.name)
+
+                # Accesso alle preferenze di Blender
+                prefs = context.preferences
+                filepaths = prefs.filepaths
+                # Aggiunge un widget per modificare il percorso dell'editor di immagini
+                row = layout.row()
+                row.label(text="Set an image editor executable:")
+                layout.prop(filepaths, "image_editor", text="")
+
+                self.layout.operator("paint.cam", icon="PLUS", text='Paint active from cam')
 
                 self.layout.operator("applypaint.cam", icon="PLUS", text='Apply paint')
                 self.layout.operator("savepaint.cam", icon="PLUS", text='Save modified texs')
                 row = layout.row()
             else:
                 row.label(text="!!! Import some cams to start !!!")
+
+    def trova_objplane_material(self, camera):
+        # Cerca tra i figli della camera per un oggetto che inizia con "objplane_"
+        for child in camera.children:
+            if child.name.startswith("objplane_"):
+                # Assicurati che l'oggetto abbia dei materiali
+                if len(child.material_slots) > 0:
+                    # Restituisci il primo materiale dell'oggetto
+                    return child.material_slots[0].material
+        # Restituisci None se nessun oggetto o materiale corrispondente è stato trovato
+        return None
 
 class VIEW3D_PT_PhotogrTool(Panel, ToolsPanelPhotogrTool):
     bl_category = "3DSC"
@@ -407,7 +552,9 @@ classes = [
     set_camera_type,
     set_background_cam,
     VIEW3D_PT_PhotogrTool,
-    Camera_menu
+    Camera_menu,
+    OGGETTO_OT_pick,
+    TOGGLE_OBJ_VISIBILITY
     ]
 
 def register():
@@ -419,6 +566,7 @@ def register():
 
     # Aggiungi questa property alla registrazione
     bpy.types.Scene.camera_enum = bpy.props.EnumProperty(items=get_camera_enum_items, update=update_camera_details)
+    bpy.types.Scene.canvas_obj = bpy.props.PointerProperty(name="Canvas", type=bpy.types.Object)
 
 
 def unregister():
