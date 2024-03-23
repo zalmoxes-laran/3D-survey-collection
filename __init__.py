@@ -19,13 +19,13 @@
 bl_info = {
     "name": "3D Survey Collection",
     "author": "Emanuel Demetrescu",
-    "version": (1,5,7),
+    "version": (1,6,0),
     "blender": (4, 0, 2),
     "location": "3D View > Toolbox",
     "description": "A collection of tools for 3D Survey activities",
-    "warning": "Beta version of 1.5.7 3DSC dev4",
+    #"warning": "Beta version of 1.5.7 3DSC dev4",
     "wiki_url": "",
-    "devel_version": "v1.5.7 dev5",  # Aggiunto campo devel_version
+    "devel_version": "",  # Aggiunto campo devel_version
     "category": "Tools",
     }
 
@@ -421,7 +421,7 @@ def register():
     shift.register()
     external_modules_install.register()
     export_3DSC.register()
-    exporter_cesium.export_tile_model.register()
+    #exporter_cesium.export_tile_model.register()
     PhotogrTool.register()
     multimesh_manager.register()
     
@@ -614,7 +614,7 @@ def unregister():
     external_modules_install.unregister()
     export_3DSC.unregister()
     PhotogrTool.unregister()
-    exporter_cesium.export_tile_model.unregister()
+    #exporter_cesium.export_tile_model.unregister()
     multimesh_manager.unregister()
 
     
