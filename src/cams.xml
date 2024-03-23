@@ -42,4 +42,10 @@
         <x>3008</x>
         <y>1688</y>
     </cam>
+    <cam name="Canon EOS R">
+        <s_width>36.00</s_width>
+        <s_height>24.00</s_height>
+        <x>6274</x>
+        <y>4480</y>
+    </cam>
 </data>

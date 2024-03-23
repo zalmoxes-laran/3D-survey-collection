@@ -1,32 +1,14 @@
 import bpy
-import mathutils
 
 from bpy.types import Panel
-from bpy.types import Operator
-from bpy.types import PropertyGroup
-from bpy.types import Menu, UIList
 
 from .functions import *
 from . import report_data
-from . import addon_updater_ops
-
-import os
-from bpy_extras.io_utils import ImportHelper, axis_conversion
-
-from bpy.props import (BoolProperty,
-                       FloatProperty,
-                       StringProperty,
-                       EnumProperty,
-                       CollectionProperty
-                       )
-
 
 class View3DCheckPanel:
-
     bl_label = "Model Inspector"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-
 
     @classmethod
     def poll(cls, context):
@@ -57,12 +39,7 @@ class VIEW3D_PT_mesh_analyze(Panel, View3DCheckPanel):
 
             for i, (text, data) in enumerate(info):
                 col.label(text=text)
-                # if is_edit and data and data[1]:
-                #     bm_type, _bm_array = data
-                #     col.operator("mesh.print3d_select_report", text=text,
-                #                  icon=self._type_to_icon[bm_type],).index = i
-                # else:
-                #     col.label(text=text)
+
 
     def draw(self, context):
         layout = self.layout
@@ -109,22 +86,6 @@ class VIEW3D_PT_segmentation_pan(Panel, View3DSegmentationPanel):
                      icon="SCULPTMODE_HLT", text='Multi-cutter')
         #row = layout.row()
 
-class ToolsPanelImport:
-    bl_label = "Importers"
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-
-    def draw(self, context):
-        layout = self.layout
-        obj = context.object
-
-        row = layout.row()
-        self.layout.operator("import_points.txt", icon="STICKY_UVS_DISABLE", text='Coordinates')
-        row = layout.row()
-        self.layout.operator("import_scene.multiple_objs", icon="DUPLICATE", text='Multiple objs')
-        row = layout.row()
-        self.layout.operator("import_cam.agixml", icon="DUPLICATE", text='Agisoft xml cams')
-
 class ToolsPanelExport:
     bl_label = "Exporters"
     bl_space_type = 'VIEW_3D'
@@ -168,6 +129,9 @@ class ToolsPanelExport:
 
             row.operator("glb.exportbatch", icon="DUPLICATE", text='glb')
 
+            #row = box.row()
+            #row.operator("object.export_convert_3dtiles", icon="DUPLICATE", text='cesium')
+
             row = box.row()
             row.prop(context.scene, 'author_sign_model', toggle = True, text='Author')
             row = box.row()
@@ -190,7 +154,6 @@ class ToolsPanelExport:
         else:
             row.label(text="Select object(s) to see tools here.")
             row = layout.row() 
-
 
 class ToolsPanelQuickUtils:
     bl_label = "Quick Utils"
@@ -255,6 +218,8 @@ class ToolsPanelQuickUtils:
         row.label(text="Batch legacy material conversion")
         row = box.row()
         row.operator("diffuse.principled", icon="DECORATE_DRIVER", text='Diffuse 2 Principled')
+        row = box.row()
+        row.operator("invert.coordinates", icon="DECORATE_DRIVER", text='Invert x and y')
 
 class ToolsPanelLODmanager:
     bl_label = "LOD manager"
@@ -441,107 +406,6 @@ class ToolsPanel_ccTool:
         else:
             select_a_mesh(layout)
 
-class Camera_menu(bpy.types.Menu):
-    bl_label = "Custom Menu"
-    bl_idname = "OBJECT_MT_Camera_menu"
-
-    def draw(self, context):
-        camera_type_list = context.scene.camera_list
-        idx = 0
-        layout = self.layout
-        while idx < len(camera_type_list):
-            op = layout.operator(
-                    "set_camera.type", text=camera_type_list[idx].name_cam, emboss=False, icon="RIGHTARROW")
-            op.name_cam = camera_type_list[idx].name_cam
-            idx +=1
-
-class ToolsPanelPhotogrTool:
-    bl_label = "Photogrammetry paint"
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_options = {'DEFAULT_CLOSED'}
-
-    def draw(self, context):
-        layout = self.layout
-        scene = context.scene
-        cam_ob = None
-        cam_ob = scene.camera
-
-
-        if cam_ob is None:
-            row = layout.row()
-            row.label(text="Please, add a Cam to see tools here")
-
-        else:
-            camera_type = context.scene.camera_type
-            obj = context.object
-            obj_selected = context.view_layer.objects.active
-            cam_cam = scene.camera.data
-            row = layout.row()
-            op = row.operator("set_background.cam", icon="FILE_TICK", text='BG Cam')
-            op.name_cam = "Camera"
-            row = layout.row()
-            row.label(text="Set up scene", icon='EXPERIMENTAL')
-            #row.prop(scene, 'LODnum', icon='BLENDER', toggle=True)
-            row = layout.row()
-            split = row.split()
-            col = split.column()
-            col.operator("xmlcam.parse", icon="FILE_TICK", text='Refresh')
-            col = split.column()
-            col.prop(scene, 'camera_lens', icon='BLENDER', toggle=True, text='Lens')
-
-            if camera_type != 'Not set':
-                row = layout.row()
-                row.menu(Camera_menu.bl_idname, text=camera_type, icon='COLOR')
-
-            if obj_selected:
-                if obj.type in ['MESH']:
-                    pass
-                elif obj.type in ['CAMERA']:
-                    row = layout.row()
-                    row.label(text="Visual mode:", icon='PLUS')
-                    row = layout.row()
-                    split = row.split()
-                    col = split.column()
-                    col.operator("better.cameras", icon="PLUS", text='Better Cams')
-                    col = split.column()
-                    col.operator("nobetter.cameras", icon="PLUS", text='Disable Better Cams')
-                    row = layout.row()
-                else:
-                    row = layout.row()
-                    row.label(text="Please select a mesh or a cam", icon='PLUS')
-
-            row = layout.row()
-            row.label(text="Painting Toolbox", icon='PLUS')
-            row = layout.row()
-            row.label(text="Folder with undistorted images:")
-            row = layout.row()
-            row.prop(context.scene, 'BL_undistorted_path', toggle = True)
-            row = layout.row()
-
-            if cam_ob is not None:
-                row.label(text="Active Cam: " + cam_ob.name)
-                self.layout.operator("object.createcameraimageplane", icon="PLUS", text='Photo to camera')
-                row = layout.row()
-                row = layout.row()
-                row.prop(cam_cam, "lens")
-                row = layout.row()
-                is_cam_ob_plane = check_children_plane(cam_ob)
-               # row.label(text=str(is_cam_ob_plane))
-                if is_cam_ob_plane:
-                    if obj.type in ['MESH']:
-                        row.label(text="Active object: " + obj.name)
-                        self.layout.operator("paint.cam", icon="PLUS", text='Paint active from cam')
-                else:
-                    row = layout.row()
-                    row.label(text="Please, set a photo to camera", icon='TPAINT_HLT')
-
-                self.layout.operator("applypaint.cam", icon="PLUS", text='Apply paint')
-                self.layout.operator("savepaint.cam", icon="PLUS", text='Save modified texs')
-                row = layout.row()
-            else:
-                row.label(text="!!! Import some cams to start !!!")
-
 class ToolsPanelTexPatcher:
     bl_label = "Texture mixer"
     bl_space_type = 'VIEW_3D'
@@ -583,11 +447,6 @@ class ToolsPanelTexPatcher:
 ###################################### classes ###################################################################
 ##################################################################################################################
 
-class VIEW3D_PT_Import_ToolBar(Panel, ToolsPanelImport):
-    bl_category = "3DSC"
-    bl_idname = "VIEW3D_PT_Import_ToolBar"
-    bl_context = "objectmode"
-
 class VIEW3D_PT_Export_ToolBar(Panel, ToolsPanelExport):
     bl_category = "3DSC"
     bl_idname = "VIEW3D_PT_Export_ToolBar"
@@ -612,11 +471,6 @@ class VIEW3D_PT_LODmanager(Panel, ToolsPanelLODmanager):
 class VIEW3D_PT_ccTool(Panel, ToolsPanel_ccTool):
     bl_category = "3DSC"
     bl_idname = "VIEW3D_PT_ccTool"
-    bl_context = "objectmode"
-
-class VIEW3D_PT_PhotogrTool(Panel, ToolsPanelPhotogrTool):
-    bl_category = "3DSC"
-    bl_idname = "VIEW3D_PT_PhotogrTool"
     bl_context = "objectmode"
 
 class VIEW3D_PT_TexPatcher(Panel, ToolsPanelTexPatcher):

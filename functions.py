@@ -27,9 +27,18 @@ class OBJECT_OT_savepaintcam(bpy.types.Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
+        # previous methods used by 3dsc
         #bpy.ops.image.save_dirty()
-        bpy.ops.image.save_all_modified()
-
+        #bpy.ops.image.save_all_modified()
+        # Itera su tutte le immagini caricate in Blender
+        for img in bpy.data.images:
+            # Controlla se l'immagine è stata modificata e ha un percorso di file
+            if img.is_dirty and img.filepath_raw:
+                # Tenta di salvare l'immagine nel suo percorso corrente
+                try:
+                    img.save()
+                except Exception as e:
+                    print(f"Impossibile salvare l'immagine {img.name}: {e}")
         return {'FINISHED'}
 
 class OBJECT_OT_createcyclesmat(bpy.types.Operator):
@@ -137,36 +146,6 @@ def get_cc_node_in_mat(mat,type):
     node = mat.nodes
     return node
 
-def parse_cam_xml(name_cam):
-    # if name_cam is not "just_parse", the function will return the parameters for the cam
-    path = bpy.utils.script_paths(subdir="Addons/3D-survey-collection/src/", user_pref=True, check_all=False, use_user=True)
-    path2xml = os.path.join(path[0],"cams.xml")
-    tree = ET.parse(path2xml)
-    root = tree.getroot()
-    scene = bpy.context.scene
-    
-    if name_cam == "just_parse":
-        #scene.camera_list = []
-        scene.camera_list.clear()
-        idx = 0
-        for cam in root.findall('cam'):
-            #rank = country.find('rank').text
-            name = cam.get('name')
-            scene.camera_list.add()
-            scene.camera_list[idx].name_cam = name
-            idx +=1
-            print(name)
-        return
-    else:
-        for cam in root.findall('cam'):
-            name = cam.get('name')
-            if name_cam == name:
-                s_width = cam.find('s_width').text
-                s_height = cam.find('s_height').text
-                x = cam.find('x').text
-                y = cam.find('y').text
-        return s_width, s_height, x, y
-
 
 def set_up_lens(obj,sens_width,sens_lenght,lens):
     #obj.select_set(True)
@@ -179,7 +158,7 @@ def set_up_scene(x,y,ao):
     bpy.context.scene.render.resolution_x = x
     bpy.context.scene.render.resolution_y = y
     bpy.context.scene.render.resolution_percentage = 100
-    bpy.context.scene.world.light_settings.use_ambient_occlusion = ao
+    #bpy.context.scene.world.light_settings.use_ambient_occlusion = ao
     bpy.context.scene.tool_settings.image_paint.screen_grab_size[0] = x
     bpy.context.scene.tool_settings.image_paint.screen_grab_size[1] = y
 
@@ -318,17 +297,6 @@ def check_children_plane(cam_ob):
         else:
             check = False
     return check
-
-def correctcameraname(cameraname):
-#        extensions = ['.jpg','.JPG']
-#        for extension in extensions:
-    if cameraname.endswith('.JPG'):
-        return cameraname
-        pass
-    else:
-        cameranamecor = cameraname + ".JPG"
-#                print(cameranamecor)
-        return cameranamecor
 
 def decimate_mesh(context,obj,ratio,lod):
     selected_obs = context.selected_objects
@@ -796,7 +764,7 @@ def create_material_from_image(context,image,oggetto,connect):
     mat.use_nodes = True
     bsdf = mat.node_tree.nodes["Principled BSDF"]
     bsdf.inputs['Roughness'].default_value = 1.0
-    bsdf.inputs['Specular'].default_value = 0.0
+    #bsdf.inputs['Specular'].default_value = 0.0
     texImage = mat.node_tree.nodes.new('ShaderNodeTexImage')
     texImage.image = image
 #    imagepath = image.filepath_raw
@@ -814,41 +782,6 @@ def create_material_from_image(context,image,oggetto,connect):
 
     return mat, texImage, bsdf
 
-
-def mat_from_image(img,ob,alpha):
-    mat = bpy.data.materials.new(name='M_'+ ob.name)
-    mat.use_nodes = True
-    material_output = None
-    for node in mat.node_tree.nodes:
-        if node.type == "OUTPUT_MATERIAL":
-            material_output = node
-            break
-
-    bsdf = mat.node_tree.nodes["Principled BSDF"]
-    texImage = mat.node_tree.nodes.new('ShaderNodeTexImage')
-    texImage.image = img
-    texImage.location = (-460,90)
-    mat.node_tree.links.new(bsdf.inputs['Base Color'], texImage.outputs['Color'])
-    #output_node = mat.node_tree.nodes()
-
-    if alpha == True:
-        alpha_node = mat.node_tree.nodes.new('ShaderNodeBsdfTransparent')
-        alpha_node.location = (-80,-518)
-        mixshader_node = mat.node_tree.nodes.new('ShaderNodeMixShader') 
-        mixshader_node.location = (-75,-370)
-        mat.node_tree.links.new(bsdf.outputs[0], mixshader_node.inputs[1])
-        mat.node_tree.links.new(alpha_node.outputs[0], mixshader_node.inputs[2])
-        mat.node_tree.links.new(mixshader_node.outputs['Shader'], material_output.inputs[0])
-        mat.blend_method = 'BLEND'
-
-    # Assign it to object
-    if ob.data.materials:
-        ob.data.materials[0] = mat
-    else:
-        ob.data.materials.append(mat)
-
-    #mat.node_tree.nodes.active = texImage
-    return mat, texImage
 
 #sezione panorami
 

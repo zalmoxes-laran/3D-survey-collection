@@ -5,6 +5,31 @@ from random import randint, choice
 from .functions import *
 from .qualitycheck import *
 
+class OBJECT_OT_invertcoordinates(bpy.types.Operator):
+    """Invert x and y coordinates of selected objects"""
+    bl_idname = "invert.coordinates"
+    bl_label = "Invert x and y coordinates of selected objects"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+
+        oggetti_selezionati = bpy.context.selected_objects
+
+        # Ciclo attraverso ciascun oggetto selezionato
+        for oggetto in oggetti_selezionati:
+            # Accedi alla posizione dell'oggetto
+            posizione = oggetto.location
+
+            # Inverti le coordinate X e Y
+            posizione.x, posizione.y = posizione.y, posizione.x
+
+            # Aggiorna la posizione dell'oggetto
+            oggetto.location = posizione
+        return {'FINISHED'}
+
+
+
+
 class OBJECT_OT_diffuseprincipled(bpy.types.Operator):
     """Replace old diffuse shader with a principled shader"""
     bl_idname = "diffuse.principled"
