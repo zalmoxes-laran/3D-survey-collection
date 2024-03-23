@@ -4,7 +4,6 @@ from .functions import *
 import xml.etree.ElementTree as ET
 from bpy.types import Panel
 
-
 class OGGETTO_OT_pick(bpy.types.Operator):
     """Select a canvas object"""
     bl_idname = "canvas.pick"
@@ -124,8 +123,6 @@ class OBJECT_OT_NoBetterCameras(bpy.types.Operator):
             cam.select_set(True)
             cam.data.show_limits = False
         return {'FINISHED'}
-
-#______________________________________________________________
 
 class OBJECT_OT_CreateCameraImagePlane(bpy.types.Operator):
     """Associate an undistorted photo to this camera"""
@@ -269,7 +266,6 @@ class OBJECT_OT_CreateCameraImagePlane(bpy.types.Operator):
                 camera = bpy.context.scene.camera
                 return self.createImagePlaneForCamera(camera)
 
-
 class TOGGLE_OBJ_VISIBILITY(bpy.types.Operator):
     """(add a photo to activate this button)"""
     bl_idname = "object.toggle_obj_visibility"
@@ -299,7 +295,6 @@ class OBJECT_OT_paintcam(bpy.types.Operator):
             scene = context.scene
             return check_children_plane(scene.camera) and context.preferences.filepaths.image_editor
 
-
     def execute(self, context):
 
         scene = context.scene
@@ -317,20 +312,28 @@ class OBJECT_OT_paintcam(bpy.types.Operator):
             bpy.ops.object.select_all(action='DESELECT')
             scene.canvas_obj.select_set(True)
             bpy.ops.paint.texture_paint_toggle()
-            #bpy.context.space_data.show_only_render = True
             bpy.types.View3DOverlay.show_overlays = False
             bpy.ops.image.project_edit()
             obj_camera = bpy.context.scene.camera
     
-            undistortedphoto = undistortedpath+correctcameraname(obj_camera.name)
+            undistortedphoto = undistortedpath+self.correctcameraname(obj_camera.name)
             cleanpath = bpy.path.abspath(undistortedphoto)
             bpy.ops.image.external_edit(filepath=cleanpath)
 
             bpy.types.View3DOverlay.show_overlays = True
-            #bpy.context.space_data.show_only_render = False
             bpy.ops.paint.texture_paint_toggle()
 
         return {'FINISHED'}
+
+    def correctcameraname(self, cameraname):
+        extensions = ['.JPG','.PNG','.JPEG','.TIFF']
+        for extension in extensions:
+            if cameraname.upper().endswith(extension):
+                return cameraname
+                pass
+            else:
+                cameranamecor = cameraname + '.' + bpy.context.scene.my_image_format
+            return cameranamecor
 
 class OBJECT_OT_applypaintcam(bpy.types.Operator):
     bl_idname = "applypaint.cam"
@@ -396,10 +399,20 @@ class ToolsPanelPhotogrTool:
         row = layout.row()
         row.label(text="Setup scene:", icon='PACKAGE')
 
+
         row = layout.row()
         row.label(text="Folder with undistorted images:")
         row = layout.row()
-        row.prop(context.scene, 'BL_undistorted_path', toggle = True, text="")
+        split = row.split(factor=0.7)
+        col1 = split.column()
+        col1.prop(context.scene, 'BL_undistorted_path', toggle = True, text="")
+
+        # Menu a tendina per la selezione del formato
+        split2 = split.split(factor=1)
+        col2 = split2.column()
+        col2.prop(scene, 'my_image_format', text="")
+
+
         row = layout.row()
 
         if cam_ob is None:
@@ -540,7 +553,6 @@ class Camera_menu(bpy.types.Menu):
             op.name_cam = camera_type_list[idx].name_cam
             idx +=1
 
-
 classes = [
     CameraDetails,
     OBJECT_OT_parse_cams,
@@ -568,9 +580,22 @@ def register():
     bpy.types.Scene.camera_enum = bpy.props.EnumProperty(items=get_camera_enum_items, update=update_camera_details)
     bpy.types.Scene.canvas_obj = bpy.props.PointerProperty(name="Canvas", type=bpy.types.Object)
 
+    bpy.types.Scene.my_image_format = bpy.props.EnumProperty(
+        items=[
+            ('JPG', "JPG", "JPG Format"),
+            ('JPEG', "JPEG", "JPEG Format"),
+            ('PNG', "PNG", "PNG Format"),
+            ('TIFF', "TIFF", "TIFF Format"),
+            # Aggiungi qui altri formati se necessario
+        ],
+        name="Image Format",
+        description="Select image format"#,
+        #update=update_format
+    )
 
 def unregister():
     for cls in classes:
         bpy.utils.unregister_class(cls)
     del bpy.types.Scene.camera_details
     del bpy.types.Scene.selected_camera
+    del bpy.types.Scene.my_image_format

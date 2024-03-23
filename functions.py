@@ -27,6 +27,7 @@ class OBJECT_OT_savepaintcam(bpy.types.Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
+        # previous methods used by 3dsc
         #bpy.ops.image.save_dirty()
         #bpy.ops.image.save_all_modified()
         # Itera su tutte le immagini caricate in Blender
@@ -296,17 +297,6 @@ def check_children_plane(cam_ob):
         else:
             check = False
     return check
-
-def correctcameraname(cameraname):
-    extensions = ['.jpg','.JPG','.PNG','.png']
-    for extension in extensions:
-        if cameraname.endswith(extension):
-            return cameraname
-            pass
-        else:
-            cameranamecor = cameraname + ".jpeg"
-    #                print(cameranamecor)
-        return cameranamecor
 
 def decimate_mesh(context,obj,ratio,lod):
     selected_obs = context.selected_objects
