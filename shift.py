@@ -4,6 +4,8 @@ import bpy
 from .functions import *
 from bpy.types import Operator
 from bpy_extras.io_utils import ImportHelper
+from bpy_extras.io_utils import ExportHelper
+
 from bpy.props import (StringProperty,
                        )
 
@@ -27,7 +29,7 @@ class ImportCoordinateShift_dsc(Operator, ImportHelper):
         default="*.txt",
         options={'HIDDEN'},
         maxlen=255,  # Max internal buffer length, longer would be clamped.
-    )
+    ) # type: ignore
 
     def execute(self, context):
         return read_shift_data(context, self.filepath)
@@ -86,6 +88,8 @@ class ToolsPanel_dsc_SHIFT:
         row.label(text="Shift values:")
         row.operator("shiftval_from.txtfile_dsc",
                      icon="STICKY_UVS_DISABLE", text='import')
+        row.operator("export_tofile.shift_valcoor_dsc",
+                     icon="EXPORT", text='export')
         #row.operator("export.coordshift_dsc",
         #             icon="STICKY_UVS_DISABLE", text='export')
         row = layout.row()
@@ -107,11 +111,42 @@ class VIEW3D_PT_dsc_Shift_ToolBar(Panel, ToolsPanel_dsc_SHIFT):
     bl_context = "objectmode"
 
 
+class ExportCoordinateShift_dsc(Operator, ExportHelper):
+    """Tool to export shift coordinates to a txt file"""
+    bl_idname = "export_tofile.shift_valcoor_dsc"
+    bl_label = "Export positions"
+
+    # ExportHelper mixin class uses this
+    filename_ext = ".txt"
+
+    filter_glob: StringProperty(
+        default="*.txt",
+        options={'HIDDEN'},
+        maxlen=255,
+    ) # type: ignore
+
+    def execute(self, context):
+        return self.write_shift_data(context, self.filepath)
+
+    def write_shift_data(self, context, filepath):
+        scene = context.scene
+        epsg = scene.get('BL_epsg', 'Not set')
+        x_shift = scene.get('BL_x_shift', 0.0)
+        y_shift = scene.get('BL_y_shift', 0.0)
+        z_shift = scene.get('BL_z_shift', 0.0)
+        
+        with open(filepath, 'w') as f:
+            f.write(f"EPSG::{epsg} {x_shift} {y_shift} {z_shift}\n")
+        
+        return {'FINISHED'}
+
+
 classes = [
     OBJECT_OT_IMPORT_SHIFT,
     OBJECT_OT_IMPORT_BG,
     ImportCoordinateShift_dsc,
-    VIEW3D_PT_dsc_Shift_ToolBar
+    VIEW3D_PT_dsc_Shift_ToolBar,
+    ExportCoordinateShift_dsc
 ]
 
 
