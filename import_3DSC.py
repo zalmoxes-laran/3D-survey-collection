@@ -380,7 +380,7 @@ class ImportCamAgiXML(Operator, ImportHelper):
 
 
         def execute(self, context):
-                return selfread_agixml_data(context, self.filepath, self.shift, self.PSchunks, self.allchunks)
+                return self.read_agixml_data(context, self.filepath, self.shift, self.PSchunks, self.allchunks)
 
 
         def read_agixml_data(self, context, filepath, shift, chunk, allchunks):
