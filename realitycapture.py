@@ -1,10 +1,9 @@
 import bpy
 import xml.etree.ElementTree as ET
 import math
-
-
+import os
 from bpy_extras.io_utils import ImportHelper
-from bpy.props import StringProperty
+from bpy.props import BoolProperty, StringProperty, EnumProperty
 from bpy.types import Operator
 
 
@@ -70,7 +69,7 @@ class ReconstructionRegion:
         tree = ET.ElementTree(root)
         tree.write(file_path if file_path else self.file_path, encoding='utf-8', xml_declaration=True)
         
-class ImportReconstructionRegion(Operator, ImportHelper):
+class ImportReconstructionRegion(bpy.types.Operator, ImportHelper):
     """Importa una ReconstructionRegion e la disegna come geometria"""
     bl_idname = "import.reconstruction_region"
     bl_label = "Import Reconstruction Region"
@@ -84,28 +83,43 @@ class ImportReconstructionRegion(Operator, ImportHelper):
         maxlen=255,  # Max internal buffer length, longer would be clamped.
     ) # type: ignore
 
+    apply_shift: BoolProperty(
+        name="Apply Shift",
+        description="Apply a global shift to the coordinates",
+        default=False,
+    ) # type: ignore
+
     def execute(self, context):
         # Assicurati che il percorso del file non sia vuoto
         if not self.filepath:
             self.report({'ERROR'}, "Nessun file selezionato")
             return {'CANCELLED'}
-
+        # Ottieni il nome del file senza estensione
+        mesh_name = os.path.splitext(os.path.basename(self.filepath))[0]
         region = ReconstructionRegion(self.filepath)
-        self.create_geometry(context, region)
+        self.create_geometry(context, region, mesh_name)
         self.report({'INFO'}, f"File importato: {self.filepath}")
         return {'FINISHED'}
 
-    def create_geometry(self, context, region):
+    def create_geometry(self, context, region, mesh_name):
         # Estrapolazione delle dimensioni dalla region
         dimensions = [float(x) for x in region.widthHeightDepth.split()]
         #location = [float(x) for x in region.centre.split()[1:]]  # Presupponendo che 'centre' sia in un formato adatto
         location = [float(x) for x in region.centre.split()]
 
+        if self.apply_shift:
+                # Applica lo shift ai valori delle coordinate
+                shift_x = context.scene.BL_x_shift
+                shift_y = context.scene.BL_y_shift
+                shift_z = context.scene.BL_z_shift
+                
+                location = [location[0] - shift_x, location[1] - shift_y, location[2] - shift_z]
+    
         # Creazione della mesh
         bpy.ops.mesh.primitive_cube_add(size=2, location=location)
         obj = bpy.context.object
         obj.scale = (dimensions[0] / 2, dimensions[1] / 2, dimensions[2] / 2)  # Blender usa la metà delle dimensioni per i cubi
-        
+        obj.name = mesh_name
         # Applicazione della rotazione
         yaw, pitch, roll = [math.radians(float(x)) for x in region.yawPitchRoll.split()]
         # Blender utilizza l'ordine di rotazione XYZ, quindi convertiamo di conseguenza

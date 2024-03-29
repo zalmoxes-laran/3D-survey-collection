@@ -23,12 +23,11 @@ bl_info = {
     "blender": (4, 0, 2),
     "location": "3D View > Toolbox",
     "description": "A collection of tools for 3D Survey activities",
-    "warning": "Beta version of 1.6.1 3DSC dev1",
+    "warning": "Alpha version of 1.6.1 3DSC dev1",
     "wiki_url": "",
-    "devel_version": "",  # Aggiunto campo devel_version
+    "devel_version": " 3DSC 1.6.1 dev1",  # Aggiunto campo devel_version
     "category": "Tools",
     }
-
 
 def get_3dsc_bl_info():
     return bl_info
@@ -160,8 +159,6 @@ class DemPreferences(bpy.types.AddonPreferences):
                 layout.label(text="Py3dtiles module (to convert 3d tiles) is correctly installed")
         else:
                 layout.label(text="Py3dtiles module is missing: install with the button below")
-                row = layout.row()
-                #row.label(text="")
         row = layout.row()              
         op = row.operator("install_3dsc_missing.modules", icon="STICKY_UVS_DISABLE", text='Install Py3dtiles modules (waiting some minutes is normal)')
         op.is_install = True
@@ -170,8 +167,6 @@ class DemPreferences(bpy.types.AddonPreferences):
         op = row.operator("install_3dsc_missing.modules", icon="STICKY_UVS_DISABLE", text='Uninstall Py3dtiles modules (waiting some minutes is normal)')
         op.is_install = False
         op.list_modules_to_install = "py3dtiles"
-
-
 
 class RES_list(PropertyGroup):
     """ List of resolutions """
@@ -414,11 +409,11 @@ classes = (
 def register():
 
     addon_updater_ops.register(bl_info)
-
+    import_3DSC.register()
     for cls in classes:
         bpy.utils.register_class(cls)
     
-    import_3DSC.register()
+    
     shift.register()
     external_modules_install.register()
     export_3DSC.register()
