@@ -409,6 +409,8 @@ class ToolsPanelImport:
         self.layout.operator("import_scene.multiple_objs", icon="DUPLICATE", text='Multiple objs')
         row = layout.row()
         self.layout.operator("import_cam.agixml", icon="DUPLICATE", text='Agisoft xml cams')
+        row = layout.row()
+        self.layout.operator("import.reconstruction_region", text="Import Reconstruction Region")
 
 class VIEW3D_PT_Import_ToolBar(Panel, ToolsPanelImport):
     bl_category = "3DSC"

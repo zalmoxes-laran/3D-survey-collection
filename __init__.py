@@ -74,7 +74,8 @@ else:
             addon_updater_ops,
             qualitycheck,
             external_modules_install,
-            multimesh_manager
+            multimesh_manager,
+            realitycapture
             )
     
     from .exporter_cesium import export_tile_model
@@ -424,6 +425,7 @@ def register():
     #exporter_cesium.export_tile_model.register()
     PhotogrTool.register()
     multimesh_manager.register()
+    realitycapture.register()
     
     check_external_modules()
     bpy.types.WindowManager.interface_vars = bpy.props.PointerProperty(type=InterfaceVars)
@@ -616,8 +618,8 @@ def unregister():
     PhotogrTool.unregister()
     #exporter_cesium.export_tile_model.unregister()
     multimesh_manager.unregister()
+    realitycapture.unregister()
 
-    
     del bpy.types.Scene.setLODnum
     del bpy.types.WindowManager.interface_vars
     del bpy.types.WindowManager.suffix_num
