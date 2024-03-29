@@ -171,7 +171,7 @@ class ImportMultipleObjs(Operator, ImportHelper):
             ) # type: ignore
 
     # Selected files
-    files= CollectionProperty(type=PropertyGroup)
+    files: CollectionProperty(type=PropertyGroup)
 
     # List of operator properties, the attributes will be assigned
     # to the class instance from the operator settings before calling.
