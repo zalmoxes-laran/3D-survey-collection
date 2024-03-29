@@ -29,27 +29,33 @@ class ReconstructionRegion:
         tree = ET.parse(file_path)
         root = tree.getroot()
         
-        self.globalCoordinateSystem = root.attrib['globalCoordinateSystem']
-        self.globalCoordinateSystemWkt = root.attrib['globalCoordinateSystemWkt']
-        self.globalCoordinateSystemName = root.attrib['globalCoordinateSystemName']
-        self.isGeoreferenced = root.attrib['isGeoreferenced']
-        self.isLatLon = root.attrib['isLatLon']
+        # Attributi direttamente dall'elemento radice
+        self.globalCoordinateSystem = root.attrib.get('globalCoordinateSystem', '')
+        self.globalCoordinateSystemWkt = root.attrib.get('globalCoordinateSystemWkt', '')
+        self.globalCoordinateSystemName = root.attrib.get('globalCoordinateSystemName', '')
+        self.isGeoreferenced = root.attrib.get('isGeoreferenced', '')
+        self.isLatLon = root.attrib.get('isLatLon', '')
         
-        self.yawPitchRoll = root.find('yawPitchRoll').text
-        self.widthHeightDepth = root.find('widthHeightDepth').text
+        # I seguenti valori sono letti come testo degli elementi figli
+        self.yawPitchRoll = root.find('yawPitchRoll').text if root.find('yawPitchRoll') is not None else ''
+        self.widthHeightDepth = root.find('widthHeightDepth').text if root.find('widthHeightDepth') is not None else ''
         
         header = root.find('Header')
-        self.magic = header.attrib['magic']
-        self.version = header.attrib['version']
+        if header is not None:
+            self.magic = header.attrib.get('magic', '')
+            self.version = header.attrib.get('version', '')
         
         centreEuclid = root.find('CentreEuclid')
-        self.centre = centreEuclid.attrib['centre']
+        if centreEuclid is not None:
+            self.centre = centreEuclid.attrib.get('centre', '')
         
         residual = root.find('Residual')
-        self.residual['R'] = residual.attrib['R']
-        self.residual['t'] = residual.attrib['t']
-        self.residual['s'] = residual.attrib['s']
-        self.residual['ownerId'] = residual.attrib['ownerId']
+        if residual is not None:
+            self.residual['R'] = residual.attrib.get('R', '')
+            self.residual['t'] = residual.attrib.get('t', '')
+            self.residual['s'] = residual.attrib.get('s', '')
+            self.residual['ownerId'] = residual.attrib.get('ownerId', '')
+
     
     def write_file(self, file_path=None):
         root = ET.Element("ReconstructionRegion", globalCoordinateSystem=self.globalCoordinateSystem, 
@@ -123,7 +129,9 @@ class ImportReconstructionRegion(bpy.types.Operator, ImportHelper):
         # Applicazione della rotazione
         yaw, pitch, roll = [math.radians(float(x)) for x in region.yawPitchRoll.split()]
         # Blender utilizza l'ordine di rotazione XYZ, quindi convertiamo di conseguenza
-        obj.rotation_euler = (roll, pitch, -yaw)  # La conversione dipende dall'interpretazione esatta dei valori e dall'orientamento del sistema di coordinate
+        #obj.rotation_euler = (roll, pitch, -yaw)
+        obj.rotation_euler = (yaw, pitch, -roll)
+        # La conversione dipende dall'interpretazione esatta dei valori e dall'orientamento del sistema di coordinate
 
         # Aggiornamento della scena per riflettere le modifiche
         context.view_layer.update()
