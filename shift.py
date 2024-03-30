@@ -67,14 +67,12 @@ class OBJECT_OT_IMPORT_BG(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-
         return is_addon_starting_with("BlenderGIS")[0]    
 
     def execute(self, context):
         scene = context.scene
         scene['BL_x_shift'] = bpy.data.window_managers["WinMan"].geoscnProps.crsx
         scene['BL_y_shift'] = bpy.data.window_managers["WinMan"].geoscnProps.crsy
-
         return {'FINISHED'}
 
 class ToolsPanel_dsc_SHIFT:
@@ -92,14 +90,10 @@ class ToolsPanel_dsc_SHIFT:
         row = layout.row()
         row.label(text="Shift values:")
         row.operator("shiftval_from.txtfile_dsc",
-                     icon="STICKY_UVS_DISABLE", text='import')
+                     icon="IMPORT", text='')
         row.operator("export_tofile.shift_valcoor_dsc",
-                     icon="EXPORT", text='export')
-        row = layout.row()
-        row.operator("shift_from.blendergis_dsc",
-                     icon="STICKY_UVS_DISABLE", text='GIS->3DSC')
-        row.operator("shift_from.blendergis_dsc",
-                     icon="STICKY_UVS_DISABLE", text='3DSC->GIS')
+                     icon="EXPORT", text='')
+
         row = layout.row()
         row.prop(context.scene, 'BL_x_shift', toggle=True)
         row = layout.row()
@@ -109,6 +103,14 @@ class ToolsPanel_dsc_SHIFT:
         row = layout.row()
         row.prop(context.scene, 'BL_epsg', toggle=True)
         row = layout.row()
+
+        row.label(text="Blender GIS connection:")
+        row = layout.row()
+
+        row.operator("shift_from.blendergis_dsc",
+                     icon="URL", text='GIS->3DSC')
+        row.operator("shift_from.blendergis_dsc",
+                     icon="URL", text='3DSC->GIS')
 
         #addon_updater_ops.update_notice_box_ui(self, context)
 
@@ -122,7 +124,7 @@ class VIEW3D_PT_dsc_Shift_ToolBar(Panel, ToolsPanel_dsc_SHIFT):
 class ExportCoordinateShift_dsc(Operator, ExportHelper):
     """Tool to export shift coordinates to a txt file"""
     bl_idname = "export_tofile.shift_valcoor_dsc"
-    bl_label = "Export positions"
+    bl_label = "Export shift values"
 
     # ExportHelper mixin class uses this
     filename_ext = ".txt"
