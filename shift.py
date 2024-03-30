@@ -60,15 +60,20 @@ class OBJECT_OT_IMPORT_SHIFT(bpy.types.Operator):
 
 
 class OBJECT_OT_IMPORT_BG(bpy.types.Operator):
-    """Import points as empty objects from a txt file"""
+    """Install and/or enable Blender GIS to activate this button"""
     bl_idname = "shift_from.blendergis_dsc"
     bl_label = "Copy from BlenderGis"
     bl_options = {"REGISTER", "UNDO"}
 
+    @classmethod
+    def poll(cls, context):
+
+        return is_addon_starting_with("BlenderGIS")[0]    
+
     def execute(self, context):
         scene = context.scene
-        scene['BL_x_shift'] = scene['crs x']
-        scene['BL_y_shift'] = scene['crs y']
+        scene['BL_x_shift'] = bpy.data.window_managers["WinMan"].geoscnProps.crsx
+        scene['BL_y_shift'] = bpy.data.window_managers["WinMan"].geoscnProps.crsy
 
         return {'FINISHED'}
 
@@ -90,8 +95,11 @@ class ToolsPanel_dsc_SHIFT:
                      icon="STICKY_UVS_DISABLE", text='import')
         row.operator("export_tofile.shift_valcoor_dsc",
                      icon="EXPORT", text='export')
-        #row.operator("export.coordshift_dsc",
-        #             icon="STICKY_UVS_DISABLE", text='export')
+        row = layout.row()
+        row.operator("shift_from.blendergis_dsc",
+                     icon="STICKY_UVS_DISABLE", text='GIS->3DSC')
+        row.operator("shift_from.blendergis_dsc",
+                     icon="STICKY_UVS_DISABLE", text='3DSC->GIS')
         row = layout.row()
         row.prop(context.scene, 'BL_x_shift', toggle=True)
         row = layout.row()

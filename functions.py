@@ -1299,4 +1299,17 @@ def diffuse2principled():
                     nodetree.links.new(newnode.outputs[0], outputnode.inputs[0])
     return
 
-#def 
+def is_addon_starting_with(prefix):
+    """Verifica se esiste un addon il cui nome inizia con una stringa specificata.
+    
+    Args:
+        prefix (str): La stringa con cui deve iniziare il nome dell'addon.
+        
+    Returns:
+        bool: True se esiste almeno un addon che inizia con la stringa specificata, altrimenti False.
+        str: Il nome tecnico dell'addon trovato che soddisfa la condizione, se esiste, altrimenti una stringa vuota.
+    """
+    for addon_name in bpy.context.preferences.addons.keys():
+        if addon_name.startswith(prefix):
+            return True, addon_name
+    return False, ''
