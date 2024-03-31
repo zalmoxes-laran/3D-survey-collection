@@ -20,7 +20,6 @@ from bpy.props import (BoolProperty,
                        IntProperty
                        )
 
-
 class OBJECT_OT_savepaintcam(bpy.types.Operator):
     bl_idname = "savepaint.cam"
     bl_label = "Save paint"
@@ -1313,3 +1312,20 @@ def is_addon_starting_with(prefix):
         if addon_name.startswith(prefix):
             return True, addon_name
     return False, ''
+
+
+classes = [
+    OBJECT_OT_createcyclesmat,
+    OBJECT_OT_savepaintcam
+    ]
+
+def register():
+    for cls in classes:
+        bpy.utils.register_class(cls)
+    bpy.types.WindowManager.confirm_window_result_3dsc = bpy.props.BoolProperty(default=False)
+
+
+def unregister():
+    for cls in classes:
+        bpy.utils.unregister_class(cls)
+    del bpy.types.WindowManager.confirm_window_result_3dsc

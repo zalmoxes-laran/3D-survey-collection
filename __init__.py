@@ -337,8 +337,6 @@ classes = (
     #export_3DSC.OBJECT_OT_osgtexportbatch,
     export_3DSC.OBJECT_OT_gltfexportbatch,
     export_3DSC.OBJECT_OT_glbexportbatch,
-    functions.OBJECT_OT_createcyclesmat,
-    functions.OBJECT_OT_savepaintcam,
     segmentation.OBJECT_OT_projectsegmentation,
     segmentation.OBJECT_OT_projectsegmentationinversed,
     segmentation.OBJECT_OT_setcutter,
@@ -412,8 +410,7 @@ def register():
     import_3DSC.register()
     for cls in classes:
         bpy.utils.register_class(cls)
-    
-    
+    functions.register()
     shift.register()
     external_modules_install.register()
     export_3DSC.register()
@@ -614,6 +611,8 @@ def unregister():
     #exporter_cesium.export_tile_model.unregister()
     multimesh_manager.unregister()
     realitycapture.unregister()
+    functions.unregister()
+
 
     del bpy.types.Scene.setLODnum
     del bpy.types.WindowManager.interface_vars
