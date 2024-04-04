@@ -56,7 +56,11 @@ class ReconstructionRegion:
             self.residual['s'] = residual.attrib.get('s', '')
             self.residual['ownerId'] = residual.attrib.get('ownerId', '')
 
-    
+        centreEuclid = root.find('CentreEuclid/centre')
+        if centreEuclid is not None:
+            self.centre = centreEuclid.text  # Ottenere il testo dell'elemento, non un attributo
+
+
     def write_file(self, file_path=None):
         root = ET.Element("ReconstructionRegion", globalCoordinateSystem=self.globalCoordinateSystem, 
                           globalCoordinateSystemWkt=self.globalCoordinateSystemWkt,
@@ -98,20 +102,28 @@ class ImportReconstructionRegion(bpy.types.Operator, ImportHelper):
     def execute(self, context):
         # Assicurati che il percorso del file non sia vuoto
         if not self.filepath:
-            self.report({'ERROR'}, "Nessun file selezionato")
+            self.report({'ERROR'}, "No file selected")
             return {'CANCELLED'}
         # Ottieni il nome del file senza estensione
         mesh_name = os.path.splitext(os.path.basename(self.filepath))[0]
         region = ReconstructionRegion(self.filepath)
         self.create_geometry(context, region, mesh_name)
-        self.report({'INFO'}, f"File importato: {self.filepath}")
+        self.report({'INFO'}, f"Imported file: {self.filepath}")
         return {'FINISHED'}
 
     def create_geometry(self, context, region, mesh_name):
         # Estrapolazione delle dimensioni dalla region
         dimensions = [float(x) for x in region.widthHeightDepth.split()]
         #location = [float(x) for x in region.centre.split()[1:]]  # Presupponendo che 'centre' sia in un formato adatto
-        location = [float(x) for x in region.centre.split()]
+        #location = [float(x) for x in region.centre.split()]
+        
+        if region.centre:
+            location = [float(x) for x in region.centre.split()]
+        else:
+            location = [0,0,0]  # Valore di fallback nel caso non ci sia un centro definito
+            self.report({'INFO'}, f"Error: can't load the location of the rcbox. I assume 0,0,0")
+
+
 
         if self.apply_shift:
                 # Applica lo shift ai valori delle coordinate
