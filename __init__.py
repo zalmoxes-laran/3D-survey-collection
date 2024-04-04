@@ -74,7 +74,8 @@ else:
             qualitycheck,
             external_modules_install,
             multimesh_manager,
-            realitycapture
+            realitycapture,
+            cesium_preprocessing
             )
     
     from .exporter_cesium import export_tile_model
@@ -94,7 +95,7 @@ class DemPreferences(bpy.types.AddonPreferences):
         name="Path to .exe File",
         description="Path to the .exe file used by the exporter",
         subtype='FILE_PATH'
-    ) # type: ignore
+    ) # type: ignore # type: ignore
 
     auto_check_update : bpy.props.BoolProperty(
         name="Auto-check for Update",
@@ -104,7 +105,7 @@ class DemPreferences(bpy.types.AddonPreferences):
     is_external_module : bpy.props.BoolProperty(
         name="Py3dtiles module (to convert cesium tiled files) is present",
         default=False
-                ) # type: ignore
+                ) # type: ignore # type: ignore
     updater_intrval_months : bpy.props.IntProperty(
         name='Months',
         description="Number of months between checking for updates",
@@ -419,6 +420,7 @@ def register():
     multimesh_manager.register()
     realitycapture.register()
     
+    cesium_preprocessing.register()
     check_external_modules()
     bpy.types.WindowManager.interface_vars = bpy.props.PointerProperty(type=InterfaceVars)
     bpy.types.WindowManager.ccToolViewVar = bpy.props.PointerProperty(type=ccToolViewVar)
@@ -612,6 +614,7 @@ def unregister():
     multimesh_manager.unregister()
     realitycapture.unregister()
     functions.unregister()
+    cesium_preprocessing.unregister()
 
 
     del bpy.types.Scene.setLODnum
