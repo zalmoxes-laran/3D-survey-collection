@@ -6,7 +6,7 @@ from .functions import *
 from .qualitycheck import *
 
 
-def rename_lods_reality_capture()
+def rename_lods_reality_capture():
     # Ottieni tutti gli oggetti selezionati nella scena
     selected_objects = bpy.context.selected_objects
 
