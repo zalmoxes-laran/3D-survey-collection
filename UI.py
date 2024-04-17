@@ -220,6 +220,9 @@ class ToolsPanelQuickUtils:
         row.operator("diffuse.principled", icon="DECORATE_DRIVER", text='Diffuse 2 Principled')
         row = box.row()
         row.operator("invert.coordinates", icon="DECORATE_DRIVER", text='Invert x and y')
+        row = box.row()
+        row.operator("correct.rcnames", icon="DECORATE_DRIVER", text='Correct rc names')
+
 
 class ToolsPanelLODmanager:
     bl_label = "LOD manager"

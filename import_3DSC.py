@@ -171,7 +171,7 @@ class ImportMultipleObjs(Operator, ImportHelper):
             ) # type: ignore
 
     # Selected files
-    files: CollectionProperty(type=PropertyGroup)
+    files: CollectionProperty(type=PropertyGroup) # type: ignore
 
     # List of operator properties, the attributes will be assigned
     # to the class instance from the operator settings before calling.
@@ -329,6 +329,11 @@ class ImportMultipleObjs(Operator, ImportHelper):
                         # Codice per versioni precedenti
                         #print("Stai eseguendo una versione di Blender precedente alla 3.6.")
                         pass
+
+                # Imposta la visualizzazione degli oggetti importati a BOUNDS
+                imported_objects = [obj for obj in context.selected_objects if obj.type == 'MESH']
+                for obj in imported_objects:
+                        obj.display_type = 'BOUNDS'
 
         return {'FINISHED'}
 

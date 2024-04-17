@@ -6,25 +6,38 @@ from .functions import *
 from .qualitycheck import *
 
 
-def rename_lods_reality_capture():
-    # Ottieni tutti gli oggetti selezionati nella scena
-    selected_objects = bpy.context.selected_objects
 
-    for obj in selected_objects:
-        # Split del nome dell'oggetto per identificare la parte 'LOD'
-        parts = obj.name.split("__")
-        
-        if len(parts) == 2 and "LOD" in parts[1]:
-            # Isola la parte 'LODx' e il numero finale
-            lod_part = parts[1].split("_")[0]
-            number_part = parts[1].split("_")[1]
+
+
+class OBJECT_OT_correct_rc_lod_names(bpy.types.Operator):
+    """Correct names of imported LOD objs"""
+    bl_idname = "correct.rcnames"
+    bl_label = "__LODx_number to __number_LODx"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        self.rename_lods_reality_capture()
+        return {'FINISHED'}
+    
+    def rename_lods_reality_capture(self):
+        # Ottieni tutti gli oggetti selezionati nella scena
+        selected_objects = bpy.context.selected_objects
+
+        for obj in selected_objects:
+            # Split del nome dell'oggetto per identificare la parte 'LOD'
+            parts = obj.name.split("__")
             
-            # Ricostruisci il nome nel formato desiderato
-            new_name = f"{parts[0]}_{number_part}_{lod_part}"
-            
-            # Assegna il nuovo nome all'oggetto
-            obj.name = new_name
-            print(f"Rinominato '{parts[0]}__{parts[1]}' in '{new_name}'")
+            if len(parts) == 2 and "LOD" in parts[1]:
+                # Isola la parte 'LODx' e il numero finale
+                lod_part = parts[1].split("_")[0]
+                number_part = parts[1].split("_")[1]
+                
+                # Ricostruisci il nome nel formato desiderato
+                new_name = f"{parts[0]}_{number_part}_{lod_part}"
+                
+                # Assegna il nuovo nome all'oggetto
+                obj.name = new_name
+                print(f"Rinominato '{parts[0]}__{parts[1]}' in '{new_name}'")
 
 
 class OBJECT_OT_invertcoordinates(bpy.types.Operator):
@@ -48,7 +61,6 @@ class OBJECT_OT_invertcoordinates(bpy.types.Operator):
             # Aggiorna la posizione dell'oggetto
             oggetto.location = posizione
         return {'FINISHED'}
-
 
 
 
@@ -537,7 +549,7 @@ class OBJECT_OT_remove_suffixnumber(bpy.types.Operator):
     bl_label = "Remove the suffix from object's name"
     bl_options = {"REGISTER", "UNDO"}
 
-    suffix : StringProperty()
+    suffix : StringProperty() # type: ignore
 
     def execute(self, context):
         for ob in bpy.context.selected_objects:
@@ -550,7 +562,7 @@ class OBJECT_OT_setmaterial_blend(bpy.types.Operator):
     bl_label = "Set material blend for materials"
     bl_options = {"REGISTER", "UNDO"}
 
-    blendmode: StringProperty()
+    blendmode: StringProperty() # type: ignore
 
     def execute(self, context):
         for ob in bpy.context.selected_objects:
