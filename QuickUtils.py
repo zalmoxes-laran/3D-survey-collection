@@ -4,6 +4,7 @@ import bmesh
 from random import randint, choice
 from .functions import *
 from .qualitycheck import *
+import re
 
 
 class OBJECT_OT_correct_rc_lod_names(bpy.types.Operator):
@@ -19,14 +20,14 @@ class OBJECT_OT_correct_rc_lod_names(bpy.types.Operator):
     def rename_lods_reality_capture(self):
         # Ottieni tutti gli oggetti selezionati nella scena
         selected_objects = bpy.context.selected_objects
-        print("voglio rinominare !")
-
+        
+        # Ciclo su ogni oggetto selezionato
         for obj in selected_objects:
-            # Dividi il nome dell'oggetto in parti usando l'underscore come separatore
-            parts = obj.name.split("_")
+            # Usa una regex per dividere il nome in base a singoli o doppi underscore
+            parts = re.split('_+', obj.name)  # Questo divide il nome sia per singoli che per multipli underscore
 
-            # Verifica che ci siano almeno due parti e che una di esse inizi con 'LOD'
-            if len(parts) > 2 and parts[1].startswith('LOD'):
+            # Verifica che ci siano almeno tre parti e che una di esse contenga 'LOD'
+            if len(parts) > 2 and 'LOD' in parts[1]:
                 # Estrai il numero di LOD (es. 'LOD0') e il numero finale
                 lod_part = parts[1]  # 'LOD0', 'LOD1', ecc.
                 number_part = parts[2]  # '0000000', ecc.
@@ -36,7 +37,7 @@ class OBJECT_OT_correct_rc_lod_names(bpy.types.Operator):
 
                 # Assegna il nuovo nome all'oggetto
                 obj.name = new_name
-                print(f"Rinominato '{obj.name}' in '{new_name}'")
+                print(f"Rinominato in '{new_name}'")
 
 
 class OBJECT_OT_invertcoordinates(bpy.types.Operator):
