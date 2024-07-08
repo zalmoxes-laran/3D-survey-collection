@@ -45,6 +45,8 @@ class OBJECT_OT_install_3dsc_missing_modules(bpy.types.Operator):
             list_modules = EMdb_xlsx_modules()
         elif self.list_modules_to_install == "py3dtiles":
              list_modules = py3dtiles_modules()
+        elif self.list_modules_to_install == "kml":
+             list_modules = kml_modules()
         if self.is_install:
             install_modules(list_modules)
         else:
@@ -112,6 +114,15 @@ def py3dtiles_modules():
         "plyfile",
         "laspy>=2.0,<3.0",
         "py3dtiles=7.0.0",
+        "simplekml"
+    )
+
+    return list_of_modules 
+
+
+def kml_modules():
+    list_of_modules = (
+        "simplekml"
     )
 
     return list_of_modules 
