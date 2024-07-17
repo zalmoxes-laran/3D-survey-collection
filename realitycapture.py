@@ -319,6 +319,60 @@ class ImportReconstructionRegion(bpy.types.Operator, ImportHelper):
         # Aggiornamento della scena per riflettere le modifiche
         context.view_layer.update()
 
+class OBJECT_OT_ExportLOD(bpy.types.Operator):
+    bl_idname = "object.export_lod"
+    bl_label = "Export LOD to Exchange Folder"
+    
+    def execute(self, context):
+        settings = context.scene.rc_settings
+        
+        # Trova le informazioni del modello
+        info_command = [
+            settings.rc_executable_path,
+            "-load", settings.project_path,
+            "-info", "model"
+        ]
+        try:
+            result = subprocess.run(info_command, check=True, capture_output=True, text=True)
+        except subprocess.CalledProcessError as e:
+            self.report({'ERROR'}, f"Failed to get model info: {e.stderr}")
+            return {'CANCELLED'}
+        
+        # Analizza l'output per trovare il nome del modello
+        model_name = None
+        for line in result.stdout.splitlines():
+            if "Model name:" in line:
+                model_name = line.split(":")[1].strip()
+                break
+        
+        if not model_name:
+            self.report({'ERROR'}, "Model name could not be determined")
+            return {'CANCELLED'}
+
+        # Esporta il modello LOD
+        export_command = [
+            settings.rc_executable_path,
+            "-load", settings.project_path,
+            "-selectModel", model_name,
+            "-exportLod", os.path.join(settings.exchange_folder, "model.obj")
+        ]
+        try:
+            result = subprocess.run(export_command, check=True, capture_output=True, text=True)
+            self.report({'INFO'}, f"LOD Export completed: {result.stdout}")
+        except subprocess.CalledProcessError as e:
+            self.report({'ERROR'}, f"Failed to execute: {e.stderr}")
+            return {'CANCELLED'}
+        
+        return {'FINISHED'}
+
+
+
+
+
+
+
+
+
 class ToolsPanel_dsc_RC:
     bl_label = "Reality Capture Integration"
     bl_idname = "SCENE_PT_rc_panel"
@@ -346,10 +400,13 @@ class ToolsPanel_dsc_RC:
         layout.prop(settings, "texel_size")
         layout.prop(settings, "texture_resolution")
         
-        layout.operator("object.export_rc", text="Export to RC")
-        layout.operator("object.import_obj", text="Import OBJ")
-        layout.operator("object.export_cleaned_obj", text="Export Cleaned OBJ")
+        layout.operator("object.export_lod", text="Export LOD RC->CS")
+        layout.operator("object.export_rc", text="Export RC->CS")
+
+        layout.operator("object.import_obj", text="Import OBJ CS->BL")
+        layout.operator("object.export_cleaned_obj", text="Export Cleaned OBJ BL->CS")
         layout.operator("object.texture_rc", text="Texture in RC")
+        
 
 
         row = layout.row()
@@ -380,7 +437,8 @@ classes = [
     OBJECT_OT_ExportRC,
     OBJECT_OT_ImportOBJ,
     OBJECT_OT_ExportCleanedOBJ,
-    OBJECT_OT_TextureRC
+    OBJECT_OT_TextureRC,
+    OBJECT_OT_ExportLOD
 ]
 
 
