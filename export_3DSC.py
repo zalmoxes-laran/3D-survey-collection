@@ -208,7 +208,7 @@ class ExportCoordinates(Operator, ExportHelper):
             default="*.txt",
             options={'HIDDEN'},
             maxlen=255,  # Max internal buffer length, longer would be clamped.
-            )
+            ) # type: ignore
 
     # List of operator properties, the attributes will be assigned
     # to the class instance from the operator settings before calling.
@@ -217,25 +217,25 @@ class ExportCoordinates(Operator, ExportHelper):
             name="Add names of objects",
             description="This tool includes name",
             default=True,
-            )
+            ) # type: ignore
 
     rot: BoolProperty(
             name="Add rotation and scale",
             description="This tool includes name, position, rotation and scale",
             default=False,
-            )
+            ) # type: ignore
 
     cam: BoolProperty(
             name="Export only cams",
             description="This tool includes name, position, rotation and focal lenght",
             default=False,
-            )
+            ) # type: ignore
 
     shift: BoolProperty(
             name="World shift coordinates",
             description="Shift coordinates using the General Shift Value (GSV)",
             default=False,
-            )
+            ) # type: ignore
 
     def execute(self, context):
         return write_some_data(context, self.filepath, self.shift, self.rot, self.cam, self.nam)
@@ -514,7 +514,7 @@ class OBJECT_OT_exportbatch(bpy.types.Operator):
     bl_label = "Objects export batch"
     bl_options = {"REGISTER", "UNDO"}
 
-    export_format : StringProperty()
+    export_format : StringProperty() # type: ignore
 
     def execute(self, context):
         #print(self.export_format)

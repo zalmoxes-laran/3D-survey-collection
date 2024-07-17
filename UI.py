@@ -185,8 +185,8 @@ class ToolsPanelQuickUtils:
         row = layout.row()
 
         #DA RIATTIVARE
-        #self.layout.operator("circum.center", icon="PROP_OFF", text='CircumCenter')
-        #row = layout.row()
+        self.layout.operator("circum.center", icon="PROP_OFF", text='CircumCenter')
+        row = layout.row()
 
         # self.layout.operator("tiff2png.relink", icon="META_DATA", text='Relink images from tiff to png')
         # row = layout.row()
@@ -220,9 +220,6 @@ class ToolsPanelQuickUtils:
         row.operator("diffuse.principled", icon="DECORATE_DRIVER", text='Diffuse 2 Principled')
         row = box.row()
         row.operator("invert.coordinates", icon="DECORATE_DRIVER", text='Invert x and y')
-        row = box.row()
-        row.operator("correct.rcnames", icon="DECORATE_DRIVER", text='Correct rc names')
-
 
 class ToolsPanelLODmanager:
     bl_label = "LOD manager"

@@ -4,7 +4,178 @@ import math
 import os
 from bpy_extras.io_utils import ImportHelper
 from bpy.props import BoolProperty, StringProperty, EnumProperty
-from bpy.types import Operator
+from bpy.types import Operator, Panel
+import re
+
+import logging
+log = logging.getLogger(__name__)
+
+import bpy
+import os
+import platform
+import subprocess
+
+class RCSettings(bpy.types.PropertyGroup):
+    rc_executable_path: bpy.props.StringProperty(
+        name="RC Executable Path",
+        description="Path to Reality Capture executable",
+        default="C:\\Program Files\\Capturing Reality\\RealityCapture\\RealityCapture.exe" if platform.system() == "Windows" else "",
+        subtype = 'FILE_PATH'    
+    ) # type: ignore
+
+
+    project_path: bpy.props.StringProperty(
+        name="Project Path",
+        description="Path to the Reality Capture project file",
+        default="",
+        subtype = 'FILE_PATH'
+    ) # type: ignore
+
+
+    exchange_folder: bpy.props.StringProperty(
+        name="Exchange Folder",
+        description="Path to the folder for exchanging tiles",
+        default="",
+        subtype = 'DIR_PATH'
+
+    ) # type: ignore
+
+
+    max_resolution: bpy.props.IntProperty(
+        name="Max Resolution",
+        description="Maximum resolution for export",
+        default=4096,
+        min=1024,
+        max=16384
+    ) # type: ignore
+    detail_levels: bpy.props.IntProperty(
+        name="Detail Levels",
+        description="Number of detail levels to export",
+        default=5,
+        min=1,
+        max=10
+    ) # type: ignore
+    texel_size: bpy.props.FloatProperty(
+        name="Texel Size",
+        description="Desired texel size in Reality Capture",
+        default=0.01,
+        min=0.001,
+        max=1.0
+    ) # type: ignore
+    texture_resolution: bpy.props.IntProperty(
+        name="Texture Resolution",
+        description="Maximum texture resolution",
+        default=2048,
+        min=256,
+        max=16384
+    ) # type: ignore
+
+class OBJECT_OT_ExportRC(bpy.types.Operator):
+    bl_idname = "object.export_rc"
+    bl_label = "Export to RC"
+    
+    def execute(self, context):
+        settings = context.scene.rc_settings
+        command = [
+            settings.rc_executable_path,
+            "-project", settings.project_path,
+            "-set", "maxResolution", str(settings.max_resolution),
+            "-set", "detailLevels", str(settings.detail_levels),
+            "-set", "texelSize", str(settings.texel_size),
+            "-set", "textureResolution", str(settings.texture_resolution),
+            "-export", settings.exchange_folder
+        ]
+        try:
+            subprocess.run(command, check=True)
+        except subprocess.CalledProcessError as e:
+            self.report({'ERROR'}, f"Failed to execute: {e}")
+            return {'CANCELLED'}
+        
+        self.report({'INFO'}, "Export completed")
+        return {'FINISHED'}
+
+class OBJECT_OT_ImportOBJ(bpy.types.Operator):
+    bl_idname = "object.import_obj"
+    bl_label = "Import OBJ"
+    
+    def execute(self, context):
+        settings = context.scene.rc_settings
+        obj_files = [f for f in os.listdir(settings.exchange_folder) if f.endswith('.obj')]
+        
+        for obj_file in obj_files:
+            bpy.ops.import_scene.obj(filepath=os.path.join(settings.exchange_folder, obj_file))
+        
+        self.report({'INFO'}, "Import completed")
+        return {'FINISHED'}
+
+class OBJECT_OT_ExportCleanedOBJ(bpy.types.Operator):
+    bl_idname = "object.export_cleaned_obj"
+    bl_label = "Export Cleaned OBJ"
+    
+    def execute(self, context):
+        settings = context.scene.rc_settings
+        export_path = os.path.join(settings.exchange_folder, "cleaned.obj")
+        
+        bpy.ops.export_scene.obj(filepath=export_path)
+        
+        self.report({'INFO'}, f"Cleaned OBJ exported to {export_path}")
+        return {'FINISHED'}
+
+class OBJECT_OT_TextureRC(bpy.types.Operator):
+    bl_idname = "object.texture_rc"
+    bl_label = "Texture in RC"
+    
+    def execute(self, context):
+        settings = context.scene.rc_settings
+        command = [
+            settings.rc_executable_path,
+            "-project", settings.project_path,
+            "-set", "texelSize", str(settings.texel_size),
+            "-set", "textureResolution", str(settings.texture_resolution),
+            "-texture", "all"
+        ]
+        try:
+            subprocess.run(command, check=True)
+        except subprocess.CalledProcessError as e:
+            self.report({'ERROR'}, f"Failed to execute: {e}")
+            return {'CANCELLED'}
+        
+        self.report({'INFO'}, "Texturization completed")
+        return {'FINISHED'}
+
+
+
+class OBJECT_OT_correct_rc_lod_names(bpy.types.Operator):
+    """Correct names of imported LOD objs"""
+    bl_idname = "correct.rcnames"
+    bl_label = "__LODx_number to __number_LODx"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        self.rename_lods_reality_capture()
+        return {'FINISHED'}
+    
+    def rename_lods_reality_capture(self):
+        # Ottieni tutti gli oggetti selezionati nella scena
+        selected_objects = bpy.context.selected_objects
+        
+        # Ciclo su ogni oggetto selezionato
+        for obj in selected_objects:
+            # Usa una regex per dividere il nome in base a singoli o doppi underscore
+            parts = re.split('_+', obj.name)  # Questo divide il nome sia per singoli che per multipli underscore
+
+            # Verifica che ci siano almeno tre parti e che una di esse contenga 'LOD'
+            if len(parts) > 2 and 'LOD' in parts[1]:
+                # Estrai il numero di LOD (es. 'LOD0') e il numero finale
+                lod_part = parts[1]  # 'LOD0', 'LOD1', ecc.
+                number_part = parts[2]  # '0000000', ecc.
+
+                # Ricostruisci il nome nel formato desiderato
+                new_name = f"{parts[0]}_{number_part}_{lod_part}"
+
+                # Assegna il nuovo nome all'oggetto
+                obj.name = new_name
+                print(f"Rinominato in '{new_name}'")
 
 
 class ReconstructionRegion:
@@ -148,17 +319,91 @@ class ImportReconstructionRegion(bpy.types.Operator, ImportHelper):
         # Aggiornamento della scena per riflettere le modifiche
         context.view_layer.update()
 
+class ToolsPanel_dsc_RC:
+    bl_label = "Reality Capture Integration"
+    bl_idname = "SCENE_PT_rc_panel"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = 'RC Tools'
+
+    @classmethod
+    def poll(cls, context):
+        return platform.system() == "Windows"
+
+    def draw(self, context):
+        #addon_updater_ops.check_for_update_background()
+        layout = self.layout
+        scene = context.scene
+        obj = context.object
+
+        settings = context.scene.rc_settings
+        
+        layout.prop(settings, "rc_executable_path")
+        layout.prop(settings, "project_path")
+        layout.prop(settings, "exchange_folder")
+        layout.prop(settings, "max_resolution")
+        layout.prop(settings, "detail_levels")
+        layout.prop(settings, "texel_size")
+        layout.prop(settings, "texture_resolution")
+        
+        layout.operator("object.export_rc", text="Export to RC")
+        layout.operator("object.import_obj", text="Import OBJ")
+        layout.operator("object.export_cleaned_obj", text="Export Cleaned OBJ")
+        layout.operator("object.texture_rc", text="Texture in RC")
+
+
+        row = layout.row()
+        self.layout.operator("import.reconstruction_region", text="Import Reconstruction Region")
+        row = layout.row()
+        row.operator("correct.rcnames", icon="DECORATE_DRIVER", text='Correct rc names')
+
+
+
+
+class VIEW3D_PT_dsc_Rc_ToolBar(Panel, ToolsPanel_dsc_RC):
+    bl_category = "3DSC"
+    bl_idname = "VIEW3D_PT_dsc_Rc_ToolBar"
+    bl_context = "objectmode"
+
+
 
 def menu_func(self, context):
     self.layout.operator(ImportReconstructionRegion.bl_idname)
 
+
+
+classes = [
+    VIEW3D_PT_dsc_Rc_ToolBar,
+    OBJECT_OT_correct_rc_lod_names,
+    ImportReconstructionRegion,
+    RCSettings,
+    OBJECT_OT_ExportRC,
+    OBJECT_OT_ImportOBJ,
+    OBJECT_OT_ExportCleanedOBJ,
+    OBJECT_OT_TextureRC
+]
+
+
 def register():
-    bpy.utils.register_class(ImportReconstructionRegion)
+    for cls in classes:
+        try:
+            bpy.utils.register_class(cls)
+        except ValueError as e:
+            log.warning(
+                '{} is already registered, now unregister and retry... '.format(cls))
+            bpy.utils.unregister_class(cls)
+            bpy.utils.register_class(cls)
+
     bpy.types.TOPBAR_MT_file_import.append(menu_func)
+    bpy.types.Scene.rc_settings = bpy.props.PointerProperty(type=RCSettings)
+
 
 def unregister():
-    bpy.utils.unregister_class(ImportReconstructionRegion)
+    for cls in classes:
+        bpy.utils.unregister_class(cls)
+
     bpy.types.TOPBAR_MT_file_import.remove(menu_func)
+    del bpy.types.Scene.rc_settings
 
 if __name__ == "__main__":
     register()

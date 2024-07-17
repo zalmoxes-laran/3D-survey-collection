@@ -1,5 +1,5 @@
 #'''
-# CC-BY-NC 2018 EMANUEL DEMETRESCU
+# CC-BY-NC 2024 EMANUEL DEMETRESCU
 # emanuel.demetrescu@gmail.com
 
 #    This program is free software: you can redistribute it and/or modify
@@ -23,9 +23,9 @@ bl_info = {
     "blender": (4, 1, 0),
     "location": "3D View > Toolbox",
     "description": "A collection of tools for 3D Survey activities",
-    "warning": "Alpha version of 1.6.1 3DSC dev1",
+    "warning": "Alpha version of 1.6.1 3DSC dev3",
     "wiki_url": "",
-    "devel_version": " 3DSC 1.6.1 dev2",  # Aggiunto campo devel_version
+    "devel_version": " 3DSC 1.6.1 dev3",  # Aggiunto campo devel_version
     "category": "Tools",
     }
 
@@ -363,7 +363,6 @@ classes = (
     QuickUtils.OBJECT_OT_setroughness,
     QuickUtils.OBJECT_OT_setmetalness,
     QuickUtils.OBJECT_OT_invertcoordinates,
-    QuickUtils.OBJECT_OT_correct_rc_lod_names,
     LODgenerator.OBJECT_OT_CreateGroupsLOD,
     LODgenerator.OBJECT_OT_ExportGroupsLOD,
     LODgenerator.OBJECT_OT_LOD,
