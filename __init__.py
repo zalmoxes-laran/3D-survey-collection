@@ -20,7 +20,7 @@ bl_info = {
     "name": "3D Survey Collection",
     "author": "Emanuel Demetrescu",
     "version": (1,6,1),
-    "blender": (4, 1, 0),
+    "blender": (4, 2, 0),
     "location": "3D View > Toolbox",
     "description": "A collection of tools for 3D Survey activities",
     "warning": "Alpha version of 1.6.1 3DSC dev3",
