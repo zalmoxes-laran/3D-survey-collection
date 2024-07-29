@@ -23,9 +23,9 @@ bl_info = {
     "blender": (4, 2, 0),
     "location": "3D View > Toolbox",
     "description": "A collection of tools for 3D Survey activities",
-    "warning": "Alpha version of 1.6.1 3DSC dev3",
+    "warning": "Alpha version of 1.6.1 3DSC dev4",
     "wiki_url": "",
-    "devel_version": " 3DSC 1.6.1 dev3",  # Aggiunto campo devel_version
+    "devel_version": " 3DSC 1.6.1 dev4",  # Aggiunto campo devel_version
     "category": "Tools",
     }
 
@@ -321,8 +321,6 @@ classes = (
     UI.VIEW3D_PT_Export_ToolBar,
     UI.VIEW3D_PT_QuickUtils_ToolBar,
     UI.VIEW3D_PT_segmentation_pan,
-    UI.VIEW3D_PT_LODgenerator,
-    UI.VIEW3D_PT_LODmanager,
     UI.VIEW3D_PT_ccTool,
     UI.Res_menu,
     UI.VIEW3D_PT_TexPatcher,
@@ -363,12 +361,6 @@ classes = (
     QuickUtils.OBJECT_OT_setroughness,
     QuickUtils.OBJECT_OT_setmetalness,
     QuickUtils.OBJECT_OT_invertcoordinates,
-    LODgenerator.OBJECT_OT_CreateGroupsLOD,
-    LODgenerator.OBJECT_OT_ExportGroupsLOD,
-    LODgenerator.OBJECT_OT_LOD,
-    LODgenerator.OBJECT_OT_LOD0,
-    LODgenerator.OBJECT_OT_RemoveGroupsLOD,
-    LODgenerator.OBJECT_OT_changeLOD,
     ccTool.OBJECT_OT_createccsetup,
     ccTool.OBJECT_OT_bakecyclesdiffuse,
     ccTool.OBJECT_OT_removeccsetup,
@@ -421,56 +413,16 @@ def register():
     realitycapture.register()
     
     cesium_preprocessing.register()
+
+    LODgenerator.register()
+
     check_external_modules()
     bpy.types.WindowManager.interface_vars = bpy.props.PointerProperty(type=InterfaceVars)
     bpy.types.WindowManager.ccToolViewVar = bpy.props.PointerProperty(type=ccToolViewVar)
     bpy.types.WindowManager.suffix_num = bpy.props.PointerProperty(type=SuffixVars)  
 
     #def initSceneProperties(scn):
-    bpy.types.Scene.LODnum = IntProperty(
-        name = "LODs",
-        default = 1,
-        min = 1,
-        max = 3,
-        description = "Enter desired number of LOD (Level of Detail)"
-        )
 
-    bpy.types.Scene.setLODnum = IntProperty(
-        name = "LOD",
-        default = 0,
-        min = 0,
-        max = 3,
-        description = "Enter desired number of LOD (Level of Detail)"
-        )
-
-    bpy.types.Scene.LOD1_tex_res = IntProperty(
-        name = "Resolution Texture of the LOD1",
-        default = 2048,
-        description = "Enter the resolution for the texture of the LOD1")
-
-    bpy.types.Scene.LOD2_tex_res = IntProperty(
-        name = "Resolution Texture of the LOD2",
-        default = 512,
-        description = "Enter the resolution for the texture of the LOD2"
-        )
-
-    bpy.types.Scene.LOD3_tex_res = IntProperty(
-        name = "Resolution Texture of the LOD3",
-        default = 128,
-        description = "Enter the resolution for the texture of the LOD3"
-        )
-
-    bpy.types.Scene.LOD_pad_on = BoolProperty(
-        name = "Padding ratio of the LOD",
-        default = True,
-        description = "Enter the paddin ratio for the LOD"
-        )
-
-    bpy.types.Scene.LOD_use_scene_settings = BoolProperty(
-        name = "Using scene settings for bake LOD",
-        default = False,
-        description = "Enter the paddin ratio for the LOD"
-        )
 
     bpy.types.Scene.SHIFT_OBJ_on = BoolProperty(
         name = "Shifting obj export",
@@ -615,21 +567,13 @@ def unregister():
     realitycapture.unregister()
     functions.unregister()
     cesium_preprocessing.unregister()
+    LODgenerator.unregister()
 
 
-    del bpy.types.Scene.setLODnum
     del bpy.types.WindowManager.interface_vars
     del bpy.types.WindowManager.suffix_num
     del bpy.types.WindowManager.ccToolViewVar
-    del bpy.types.Scene.LODnum
-    del bpy.types.Scene.LOD1_tex_res
-    del bpy.types.Scene.LOD2_tex_res
-    del bpy.types.Scene.LOD3_tex_res
-    del bpy.types.Scene.LOD1_dec_ratio
-    del bpy.types.Scene.LOD2_dec_ratio
-    del bpy.types.Scene.LOD3_dec_ratio
-    del bpy.types.Scene.LOD_pad_on
-    del bpy.types.Scene.LOD_use_scene_settings
+
     del bpy.types.Scene.BL_undistorted_path
 
     del bpy.types.Scene.RES_pano

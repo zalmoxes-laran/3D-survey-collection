@@ -3,6 +3,9 @@ import os
 import time
 from .functions import *
 from mathutils import Vector
+from bpy.types import Panel
+import subprocess
+
 
 def selectLOD(listobjects, lodnum, basename):
     name2search = basename + '_LOD' + str(lodnum)
@@ -430,8 +433,6 @@ class OBJECT_OT_changeLOD(bpy.types.Operator):
             
             library_path = bpy.data.libraries[libreria].filepath
 
-            
-
             with bpy.data.libraries.load(library_path, link=True) as (data_from, data_to):
                 #data_to.objects = [target_name]#data.objects[target_name] #[name for name in data_from.objects if name.endswith("_LOD0")]
                 data_to.objects = [name for name in data_from.objects if name.endswith(LOD_target)]
@@ -466,3 +467,287 @@ class OBJECT_OT_changeLOD(bpy.types.Operator):
                         print('The object "'+object_clean_name+'" has no '+ LOD_target+" in library")
 
         return {'FINISHED'}
+
+
+class OBJECT_OT_changemeshLOD(bpy.types.Operator):
+    """Change LOD for selected objects with linked meshes and update object names"""
+    bl_idname = "object.change_lod"
+    bl_label = "Change LOD"
+    bl_options = {"REGISTER", "UNDO"}
+
+    LODS = ["LOD0", "LOD1", "LOD2", "LOD3", "LOD4", "LOD5"]
+
+    def execute(self, context):
+        scene = context.scene
+        LOD_target = f"LOD{scene.setLODnum}"
+
+        selection = context.selected_objects
+        libraries = {obj.data.library.name for obj in selection if obj.type == 'MESH' and obj.data.library}
+
+        for lib_name in libraries:
+            self.process_library(lib_name, LOD_target, selection)
+
+        return {'FINISHED'}
+
+    def process_library(self, lib_name, LOD_target, selection):
+        library = bpy.data.libraries[lib_name]
+        with bpy.data.libraries.load(library.filepath, link=True) as (data_from, data_to):
+            data_to.meshes = [name for name in data_from.meshes if name.endswith(LOD_target)]
+
+        for obj in selection:
+            if obj.type == 'MESH' and obj.data.library and obj.data.library.name == lib_name:
+                current_mesh_name = obj.data.name
+                current_LOD = current_mesh_name[-4:]
+                if current_LOD in self.LODS and current_LOD != LOD_target:
+                    target_mesh_name = current_mesh_name.replace(current_LOD, LOD_target)
+                    self.replace_mesh_and_rename_object(obj, target_mesh_name)
+
+    def replace_mesh_and_rename_object(self, obj, target_mesh_name):
+        if target_mesh_name in bpy.data.meshes:
+            obj.data = bpy.data.meshes[target_mesh_name]
+            # Rinomina l'oggetto per corrispondere al nome della nuova mesh
+            obj.name = target_mesh_name
+            self.report({'INFO'}, f"Object and mesh updated to {target_mesh_name}")
+        else:
+            self.report({'WARNING'}, f"Mesh {target_mesh_name} not found in library")
+
+    @classmethod
+    def poll(cls, context):
+        return context.selected_objects and any(obj.type == 'MESH' and obj.data.library for obj in context.selected_objects)
+
+
+
+class OBJECT_OT_open_linked_file(bpy.types.Operator):
+    """Open the .blend file containing the linked mesh or object of the active object in a new Blender instance"""
+    bl_idname = "object.open_linked_file"
+    bl_label = "Open Linked File in New Instance"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        return obj and (obj.library or (obj.data and obj.data.library))
+
+    def execute(self, context):
+        obj = context.active_object
+        
+        if obj.library:
+            linked_file = obj.library.filepath
+        elif obj.data and obj.data.library:
+            linked_file = obj.data.library.filepath
+        else:
+            self.report({'ERROR'}, "No linked file found for the active object.")
+            return {'CANCELLED'}
+
+        # Ensure the file path is absolute
+        linked_file = bpy.path.abspath(linked_file)
+
+        if not os.path.exists(linked_file):
+            self.report({'ERROR'}, f"Linked file not found: {linked_file}")
+            return {'CANCELLED'}
+
+        # Get the path to the Blender executable
+        blender_exe = bpy.app.binary_path
+
+        # Open the linked file in a new Blender instance
+        try:
+            subprocess.Popen([blender_exe, linked_file])
+            self.report({'INFO'}, f"Opened linked file in new Blender instance: {linked_file}")
+        except Exception as e:
+            self.report({'ERROR'}, f"Failed to open new Blender instance: {str(e)}")
+            return {'CANCELLED'}
+
+        return {'FINISHED'}
+
+
+class ToolsPanelLODmanager:
+    bl_label = "LOD manager"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_options = {'DEFAULT_CLOSED'}
+
+    def draw(self, context):
+        layout = self.layout
+        obj = context.object
+        scene = context.scene
+
+        row = layout.row()
+        row.label(text="Change LOD of selected linked objects:")
+        row = layout.row()
+
+        split = layout.split()
+        # First column
+        col = split.column()
+        col.prop(scene, 'setLODnum', icon='BLENDER', toggle=True)
+        # Second column, aligned
+        col = split.column(align=True)
+        col.operator("change.lod", text='set LOD')
+        #self.layout.operator("change.lod", icon="MESH_UVSPHERE", text='set LOD')
+
+        col = split.column(align=True)
+        col.operator("object.change_lod", text='set mesh LOD')
+
+        row = layout.row()
+        row.operator("object.open_linked_file", text='Open linked source')
+  
+
+class ToolsPanelLODgenerator:
+    bl_label = "LOD generator"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_options = {'DEFAULT_CLOSED'}
+
+    def draw(self, context):
+        layout = self.layout
+        obj = context.object
+        scene = context.scene
+
+        if obj:#.type==['MESH']:
+            self.layout.operator("lod0.creation", icon="MESH_UVSPHERE", text='LOD 0 (set as)')
+            row = layout.row()
+
+            split = layout.split()
+            # First column
+            col = split.column()
+            col.prop(scene, 'LODnum', icon='BLENDER', toggle=True)
+            # Second column, aligned
+            col = split.column(align=True)
+            col.prop(scene, 'LOD_pad_on', text="Pad")
+            col = split.column(align=True)
+            col.prop(scene, 'LOD_use_scene_settings', text="Scene light")
+            col = split.column(align=True)
+            
+            #col.operator("lod.creation", icon="MOD_MULTIRES", text='')
+            col.operator("lod.creation", text='generate')
+            if scene.LODnum >= 1:
+                split = layout.split()
+                # First column
+                col = split.column()
+                col.label(text="Geometry")
+                #col.label(text="ratio")
+                col.prop(scene, 'LOD1_dec_ratio', icon='BLENDER', toggle=True, text="")
+                # Second column, aligned
+                col = split.column()
+                col.label(text="Texture")
+                #col.label(text="resolution")
+                col.prop(scene, 'LOD1_tex_res', icon='BLENDER', toggle=True, text="")
+                if scene.LODnum >= 2:
+                    split = layout.split()
+                    # First column
+                    col = split.column()
+                    col.prop(scene, 'LOD2_dec_ratio', icon='BLENDER', toggle=True, text="")
+                    col = split.column()
+                    # Second column, aligned
+                    col.prop(scene, 'LOD2_tex_res', icon='BLENDER', toggle=True, text="")
+
+                    if scene.LODnum >= 3:
+                        split = layout.split()
+                        # First column
+                        col = split.column()
+                        col.prop(scene, 'LOD3_dec_ratio', icon='BLENDER', toggle=True, text="")
+                        col = split.column()
+                        # Second column, aligned
+                        col.prop(scene, 'LOD3_tex_res', icon='BLENDER', toggle=True, text="")
+
+            row = layout.row()
+            row.label(text="LOD clusters")
+
+            split = layout.split()
+            # First column
+            col = split.column()
+            col.operator("create.grouplod", icon="PRESET", text='')
+            # Second column, aligned
+            col = split.column(align=True)
+            col.operator("remove.grouplod", icon="CANCEL", text='')
+
+            row = layout.row()
+            row.label(text="LOD cluster(s) export:")
+            row = layout.row()
+            row.prop(context.scene, 'model_export_dir', toggle = True, text='folder')
+            self.layout.operator("exportfbx.grouplod", icon="MESH_GRID", text='FBX')
+
+class VIEW3D_PT_LODgenerator(Panel, ToolsPanelLODgenerator):
+    bl_category = "3DSC"
+    bl_idname = "VIEW3D_PT_LODgenerator"
+    bl_context = "objectmode"
+
+class VIEW3D_PT_LODmanager(Panel, ToolsPanelLODmanager):
+    bl_category = "3DSC"
+    bl_idname = "VIEW3D_PT_LODmanager"
+    bl_context = "objectmode"
+
+
+classes = [
+    OBJECT_OT_changemeshLOD,
+    OBJECT_OT_changeLOD,
+    OBJECT_OT_CreateGroupsLOD,
+    OBJECT_OT_RemoveGroupsLOD,
+    OBJECT_OT_ExportGroupsLOD,
+    OBJECT_OT_LOD,
+    OBJECT_OT_LOD0,
+    VIEW3D_PT_LODgenerator,
+    VIEW3D_PT_LODmanager,
+    OBJECT_OT_open_linked_file
+]
+
+def register():
+    for cls in classes:
+        bpy.utils.register_class(cls)
+
+    bpy.types.Scene.setLODnum = bpy.props.IntProperty(name="LOD Level", default=0, min=0, max=5)
+
+    bpy.types.Scene.LODnum = IntProperty(
+        name = "LODs",
+        default = 1,
+        min = 1,
+        max = 5,
+        description = "Enter desired number of LOD (Level of Detail)"
+        )
+
+    bpy.types.Scene.LOD1_tex_res = IntProperty(
+        name = "Resolution Texture of the LOD1",
+        default = 2048,
+        description = "Enter the resolution for the texture of the LOD1")
+
+    bpy.types.Scene.LOD2_tex_res = IntProperty(
+        name = "Resolution Texture of the LOD2",
+        default = 512,
+        description = "Enter the resolution for the texture of the LOD2"
+        )
+
+    bpy.types.Scene.LOD3_tex_res = IntProperty(
+        name = "Resolution Texture of the LOD3",
+        default = 128,
+        description = "Enter the resolution for the texture of the LOD3"
+        )
+
+    bpy.types.Scene.LOD_pad_on = BoolProperty(
+        name = "Padding ratio of the LOD",
+        default = True,
+        description = "Enter the paddin ratio for the LOD"
+        )
+
+    bpy.types.Scene.LOD_use_scene_settings = BoolProperty(
+        name = "Using scene settings for bake LOD",
+        default = False,
+        description = "Enter the paddin ratio for the LOD"
+        )
+
+
+def unregister():
+    for cls in classes:
+        bpy.utils.unregister_class(cls)
+    del bpy.types.Scene.setLODnum
+    del bpy.types.Scene.LODnum
+    del bpy.types.Scene.LOD1_tex_res
+    del bpy.types.Scene.LOD2_tex_res
+    del bpy.types.Scene.LOD3_tex_res
+    del bpy.types.Scene.LOD1_dec_ratio
+    del bpy.types.Scene.LOD2_dec_ratio
+    del bpy.types.Scene.LOD3_dec_ratio
+    del bpy.types.Scene.LOD_pad_on
+    del bpy.types.Scene.LOD_use_scene_settings
+
+
+if __name__ == "__main__":
+    register()
