@@ -233,7 +233,11 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 context.scene.render.engine = to_be_restored_render_engine
 
                 mat.node_tree.links.new(bsdf.inputs['Base Color'], texImage.outputs['Color'])
-                obj_LODnew.data.name = 'SM_' + obj_LODnew.name
+                
+                if obj_LODnew.name.startswith('OB_'):
+                    obj_LODnew.name= rimuovi_prefisso_ob(obj_LODnew.name)
+
+                obj_LODnew.data.name = 'ME_' + obj_LODnew.name
 
                 # select only the just created LOD obj
 
@@ -259,6 +263,11 @@ class OBJECT_OT_LOD(bpy.types.Operator):
         print('<<<<<<< Process done >>>>>>')
         print('>>>'+str(ob_tot)+' objects processed in '+str(end_time)+' seconds')
         return {'FINISHED'}
+
+def rimuovi_prefisso_ob(stringa):
+    if stringa.startswith("OB_"):
+        return stringa[3:]  # Rimuovi i primi 3 caratteri (OB_)
+    return stringa
 
 #_______________________________________________________________________________________________
 
