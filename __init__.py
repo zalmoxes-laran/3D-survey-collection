@@ -23,9 +23,9 @@ bl_info = {
     "blender": (4, 2, 0),
     "location": "3D View > Toolbox",
     "description": "A collection of tools for 3D Survey activities",
-    "warning": "Alpha version of 1.6.1 3DSC dev4",
+    #"warning": "Alpha version of 1.6.1 3DSC dev4",
     "wiki_url": "",
-    "devel_version": " 3DSC 1.6.1 dev4",  # Aggiunto campo devel_version
+    "devel_version": " 3DSC 1.6.1",  # Aggiunto campo devel_version
     "category": "Tools",
     }
 
@@ -410,9 +410,9 @@ def register():
     #exporter_cesium.export_tile_model.register()
     PhotogrTool.register()
     multimesh_manager.register()
-    realitycapture.register()
+    #realitycapture.register()
     
-    cesium_preprocessing.register()
+    #cesium_preprocessing.register()
 
     LODgenerator.register()
 
@@ -564,9 +564,9 @@ def unregister():
     PhotogrTool.unregister()
     #exporter_cesium.export_tile_model.unregister()
     multimesh_manager.unregister()
-    realitycapture.unregister()
+    #realitycapture.unregister()
     functions.unregister()
-    cesium_preprocessing.unregister()
+    #cesium_preprocessing.unregister()
     LODgenerator.unregister()
 
 
