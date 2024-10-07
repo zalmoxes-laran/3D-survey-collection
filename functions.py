@@ -20,7 +20,6 @@ from bpy.props import (BoolProperty,
                        IntProperty
                        )
 
-
 class OBJECT_OT_savepaintcam(bpy.types.Operator):
     bl_idname = "savepaint.cam"
     bl_label = "Save paint"
@@ -83,22 +82,6 @@ def rename_ge(ob):
                 #         m_tex.texture.name = "T_"+str(tslot_index)+"_"+ob.name
                 #         m_tex.texture.image.name = "img_"+str(mslot_index)+"_"+ob.name
 
-def circumcenter(ax,ay,bx,by,cx,cy):
-    # ax = float(input('What is x of point 1?'))
-    # ay = float(input('What is y of point 1?'))
-    # bx = float(input('What is x of point 2?'))
-    # by = float(input('What is y of point 2?'))
-    # cx = float(input('What is x of point 3?'))
-    # cy = float(input('What is y of point 3?'))
-    d = 2 * ((ax * (by - cy)) + (bx * (cy - ay)) + (cx * (ay - by)))
-    ux = ((ax * ax + ay * ay) * (by - cy) + (bx * bx + by * by) * (cy - ay) + (cx * cx + cy * cy) * (ay - by)) / d
-    uy = ((ax * ax + ay * ay) * (cx - bx) + (bx * bx + by * by) * (ax - cx) + (cx * cx + cy * cy) * (bx - ax)) / d
-    return (ux, uy)
-
-def calculateDistance(x1,y1,x2,y2):
-     dist = math.sqrt((x2 - x1)**2 + (y2 - y1)**2)
-     return dist
-
 def grad(rad):
     grad = rad*57.2957795
     return grad
@@ -126,15 +109,32 @@ def get_cc_node_pano(obj, current_pano):
 #if 'Material Output' in [node.name for node in bpy.data.materials['your_material_name'].node_tree.nodes]:
 #    print('Yes!')
 
-def get_cc_node_in_obj_mat(nodegroupname,type):
-    if type == 'RGB':
-        type_name = 'RGB Curves'
-    if type == 'BC':
-        type_name = 'Bright/Contrast'
-    if type == 'HS':
-        type_name = 'Hue Saturation Value'
-    node = bpy.data.node_groups[nodegroupname].nodes[type_name]
-    return node
+def get_cc_node_in_obj_mat(nodegroupname, node_type_short):
+    # Mappa per convertire il tipo abbreviato al nome del tipo di nodo Blender
+    type_label_map = {
+        'RGB': 'RGBcurve',
+        'BC': 'bricon',
+        'HS': 'sathue',
+    }
+    
+    # Ottieni il label corrispondente
+    node_label = type_label_map.get(node_type_short)
+    if node_label is None:
+        return None  # Tipo non valido
+
+    # Ottieni il gruppo di nodi
+    node_group = bpy.data.node_groups.get(nodegroupname)
+    if node_group is None:
+        return None  # Gruppo di nodi non trovato
+
+    # Cerca il nodo con l'etichetta specificata
+    for node in node_group.nodes:
+        if node.label == node_label:
+            return node
+
+    # Nodo non trovato
+    return None
+
 
 def get_cc_node_in_mat(mat,type):
     if type == 'RGB':
@@ -559,47 +559,63 @@ def dict2list(dict):
 #    print (list)
     return list
 
+
+
 def create_correction_nodegroup(name):
-    # create a group
-#    active_object_name = bpy.context.scene.objects.active.name
-    cc_nodegroup = bpy.data.node_groups.new(name, 'ShaderNodeTree')
-    #cc_nodegroup.name = "cc_node"
-#    cc_nodegroup.label = label
+    # Crea un nuovo gruppo di nodi
+    cc_nodegroup = bpy.data.node_groups.new(name=name, type='ShaderNodeTree')
 
-    # create group inputs
-    group_inputs = cc_nodegroup.nodes.new('NodeGroupInput')
-    group_inputs.location = (-750,0)
-    cc_nodegroup.inputs.new('NodeSocketColor','tex')
+    nodes = cc_nodegroup.nodes
+    links = cc_nodegroup.links
 
-    # create group outputs
-    group_outputs = cc_nodegroup.nodes.new('NodeGroupOutput')
-    group_outputs.location = (300,0)
-    cc_nodegroup.outputs.new('NodeSocketColor','cortex')
+    # Crea gli input e gli output del gruppo utilizzando l'interfaccia
+    cc_nodegroup.interface.new_socket(
+        name='tex',
+        description='',
+        in_out='INPUT',
+        socket_type='NodeSocketColor',
+        parent=None
+    )
+    cc_nodegroup.interface.new_socket(
+        name='cortex',
+        description='',
+        in_out='OUTPUT',
+        socket_type='NodeSocketColor',
+        parent=None
+    )
 
-    # create three math nodes in a group
-    bricon = cc_nodegroup.nodes.new('ShaderNodeBrightContrast')
+    # Crea i nodi di input e output del gruppo
+    group_inputs = nodes.new('NodeGroupInput')
+    group_inputs.location = (-750, 0)
+
+    group_outputs = nodes.new('NodeGroupOutput')
+    group_outputs.location = (300, 0)
+
+    # Crea i nodi all'interno del gruppo
+    rgbcurve = nodes.new('ShaderNodeRGBCurve')
+    rgbcurve.location = (-500, -100)
+    rgbcurve.label = 'RGBcurve'
+
+    bricon = nodes.new('ShaderNodeBrightContrast')
     bricon.location = (-220, -100)
     bricon.label = 'bricon'
 
-    sathue = cc_nodegroup.nodes.new('ShaderNodeHueSaturation')
+    sathue = nodes.new('ShaderNodeHueSaturation')
     sathue.location = (0, -100)
     sathue.label = 'sathue'
 
-    RGBcurve = cc_nodegroup.nodes.new('ShaderNodeRGBCurve')
-    RGBcurve.location = (-500, -100)
-    RGBcurve.label = 'RGBcurve'
+    # Collega i nodi tra loro
+    links.new(rgbcurve.outputs['Color'], bricon.inputs['Color'])
+    links.new(bricon.outputs['Color'], sathue.inputs['Color'])
 
-    # link nodes together
-    cc_nodegroup.links.new(sathue.inputs[4], bricon.outputs[0])
-    cc_nodegroup.links.new(bricon.inputs[0], RGBcurve.outputs[0])
-
-    # link inputs
-    cc_nodegroup.links.new(group_inputs.outputs['tex'], RGBcurve.inputs[1])
-
-    #link output
-    cc_nodegroup.links.new(sathue.outputs[0], group_outputs.inputs['cortex'])
+    # Collega gli input e gli output del gruppo
+    links.new(group_inputs.outputs['tex'], rgbcurve.inputs['Color'])
+    links.new(sathue.outputs['Color'], group_outputs.inputs['cortex'])
 
     return cc_nodegroup
+
+
+
 
 
 
@@ -1299,4 +1315,34 @@ def diffuse2principled():
                     nodetree.links.new(newnode.outputs[0], outputnode.inputs[0])
     return
 
-#def 
+def is_addon_starting_with(prefix):
+    """Verifica se esiste un addon il cui nome inizia con una stringa specificata.
+    
+    Args:
+        prefix (str): La stringa con cui deve iniziare il nome dell'addon.
+        
+    Returns:
+        bool: True se esiste almeno un addon che inizia con la stringa specificata, altrimenti False.
+        str: Il nome tecnico dell'addon trovato che soddisfa la condizione, se esiste, altrimenti una stringa vuota.
+    """
+    for addon_name in bpy.context.preferences.addons.keys():
+        if addon_name.startswith(prefix):
+            return True, addon_name
+    return False, ''
+
+
+classes = [
+    OBJECT_OT_createcyclesmat,
+    OBJECT_OT_savepaintcam
+    ]
+
+def register():
+    for cls in classes:
+        bpy.utils.register_class(cls)
+    bpy.types.WindowManager.confirm_window_result_3dsc = bpy.props.BoolProperty(default=False)
+
+
+def unregister():
+    for cls in classes:
+        bpy.utils.unregister_class(cls)
+    del bpy.types.WindowManager.confirm_window_result_3dsc

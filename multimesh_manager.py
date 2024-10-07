@@ -1,8 +1,6 @@
 
 import bpy
 
-import bpy
-
 class OBJECT_OT_unify_meshes(bpy.types.Operator):
     bl_idname = "object.unify_meshes"
     bl_label = "Unify Selected Meshes"

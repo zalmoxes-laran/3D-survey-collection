@@ -23,7 +23,7 @@ class OGGETTO_OT_pick(bpy.types.Operator):
         # Imposta l'oggetto attivo come oggetto selezionato per la tua proprietà
         context.scene.canvas_obj = context.active_object
         return {'FINISHED'}
-
+'''
 class set_background_cam(bpy.types.Operator):
     bl_idname = "set_background.cam"
     bl_label = "Set background camera"
@@ -44,6 +44,7 @@ class set_background_cam(bpy.types.Operator):
         back_img.display_depth = 'FRONT'
 
         return {'FINISHED'} 
+'''
 
 class CameraDetails(bpy.types.PropertyGroup):
     name: bpy.props.StringProperty(name="Name") # type: ignore
@@ -562,7 +563,7 @@ classes = [
     OBJECT_OT_paintcam,
     OBJECT_OT_CreateCameraImagePlane,
     set_camera_type,
-    set_background_cam,
+    #set_background_cam,
     VIEW3D_PT_PhotogrTool,
     Camera_menu,
     OGGETTO_OT_pick,

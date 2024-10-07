@@ -1,5 +1,5 @@
 #'''
-# CC-BY-NC 2018 EMANUEL DEMETRESCU
+# CC-BY-NC 2024 EMANUEL DEMETRESCU
 # emanuel.demetrescu@gmail.com
 
 #    This program is free software: you can redistribute it and/or modify
@@ -19,16 +19,15 @@
 bl_info = {
     "name": "3D Survey Collection",
     "author": "Emanuel Demetrescu",
-    "version": (1,6,0),
-    "blender": (4, 0, 2),
+    "version": (1,6,1),
+    "blender": (4, 2, 0),
     "location": "3D View > Toolbox",
     "description": "A collection of tools for 3D Survey activities",
-    #"warning": "Beta version of 1.5.7 3DSC dev4",
+    #"warning": "Alpha version of 1.6.1 3DSC dev4",
     "wiki_url": "",
-    "devel_version": "",  # Aggiunto campo devel_version
+    "devel_version": " 3DSC 1.6.1",  # Aggiunto campo devel_version
     "category": "Tools",
     }
-
 
 def get_3dsc_bl_info():
     return bl_info
@@ -74,7 +73,9 @@ else:
             addon_updater_ops,
             qualitycheck,
             external_modules_install,
-            multimesh_manager
+            multimesh_manager,
+            realitycapture,
+            cesium_preprocessing
             )
     
     from .exporter_cesium import export_tile_model
@@ -94,7 +95,7 @@ class DemPreferences(bpy.types.AddonPreferences):
         name="Path to .exe File",
         description="Path to the .exe file used by the exporter",
         subtype='FILE_PATH'
-    ) # type: ignore
+    ) # type: ignore # type: ignore
 
     auto_check_update : bpy.props.BoolProperty(
         name="Auto-check for Update",
@@ -104,7 +105,7 @@ class DemPreferences(bpy.types.AddonPreferences):
     is_external_module : bpy.props.BoolProperty(
         name="Py3dtiles module (to convert cesium tiled files) is present",
         default=False
-                ) # type: ignore
+                ) # type: ignore # type: ignore
     updater_intrval_months : bpy.props.IntProperty(
         name='Months',
         description="Number of months between checking for updates",
@@ -159,8 +160,6 @@ class DemPreferences(bpy.types.AddonPreferences):
                 layout.label(text="Py3dtiles module (to convert 3d tiles) is correctly installed")
         else:
                 layout.label(text="Py3dtiles module is missing: install with the button below")
-                row = layout.row()
-                #row.label(text="")
         row = layout.row()              
         op = row.operator("install_3dsc_missing.modules", icon="STICKY_UVS_DISABLE", text='Install Py3dtiles modules (waiting some minutes is normal)')
         op.is_install = True
@@ -169,8 +168,6 @@ class DemPreferences(bpy.types.AddonPreferences):
         op = row.operator("install_3dsc_missing.modules", icon="STICKY_UVS_DISABLE", text='Uninstall Py3dtiles modules (waiting some minutes is normal)')
         op.is_install = False
         op.list_modules_to_install = "py3dtiles"
-
-
 
 class RES_list(PropertyGroup):
     """ List of resolutions """
@@ -324,8 +321,6 @@ classes = (
     UI.VIEW3D_PT_Export_ToolBar,
     UI.VIEW3D_PT_QuickUtils_ToolBar,
     UI.VIEW3D_PT_segmentation_pan,
-    UI.VIEW3D_PT_LODgenerator,
-    UI.VIEW3D_PT_LODmanager,
     UI.VIEW3D_PT_ccTool,
     UI.Res_menu,
     UI.VIEW3D_PT_TexPatcher,
@@ -341,8 +336,6 @@ classes = (
     #export_3DSC.OBJECT_OT_osgtexportbatch,
     export_3DSC.OBJECT_OT_gltfexportbatch,
     export_3DSC.OBJECT_OT_glbexportbatch,
-    functions.OBJECT_OT_createcyclesmat,
-    functions.OBJECT_OT_savepaintcam,
     segmentation.OBJECT_OT_projectsegmentation,
     segmentation.OBJECT_OT_projectsegmentationinversed,
     segmentation.OBJECT_OT_setcutter,
@@ -368,12 +361,6 @@ classes = (
     QuickUtils.OBJECT_OT_setroughness,
     QuickUtils.OBJECT_OT_setmetalness,
     QuickUtils.OBJECT_OT_invertcoordinates,
-    LODgenerator.OBJECT_OT_CreateGroupsLOD,
-    LODgenerator.OBJECT_OT_ExportGroupsLOD,
-    LODgenerator.OBJECT_OT_LOD,
-    LODgenerator.OBJECT_OT_LOD0,
-    LODgenerator.OBJECT_OT_RemoveGroupsLOD,
-    LODgenerator.OBJECT_OT_changeLOD,
     ccTool.OBJECT_OT_createccsetup,
     ccTool.OBJECT_OT_bakecyclesdiffuse,
     ccTool.OBJECT_OT_removeccsetup,
@@ -413,68 +400,29 @@ classes = (
 def register():
 
     addon_updater_ops.register(bl_info)
-
+    import_3DSC.register()
     for cls in classes:
         bpy.utils.register_class(cls)
-    
-    import_3DSC.register()
+    functions.register()
     shift.register()
     external_modules_install.register()
     export_3DSC.register()
     #exporter_cesium.export_tile_model.register()
     PhotogrTool.register()
     multimesh_manager.register()
+    #realitycapture.register()
     
+    #cesium_preprocessing.register()
+
+    LODgenerator.register()
+
     check_external_modules()
     bpy.types.WindowManager.interface_vars = bpy.props.PointerProperty(type=InterfaceVars)
     bpy.types.WindowManager.ccToolViewVar = bpy.props.PointerProperty(type=ccToolViewVar)
     bpy.types.WindowManager.suffix_num = bpy.props.PointerProperty(type=SuffixVars)  
 
     #def initSceneProperties(scn):
-    bpy.types.Scene.LODnum = IntProperty(
-        name = "LODs",
-        default = 1,
-        min = 1,
-        max = 3,
-        description = "Enter desired number of LOD (Level of Detail)"
-        )
 
-    bpy.types.Scene.setLODnum = IntProperty(
-        name = "LOD",
-        default = 0,
-        min = 0,
-        max = 3,
-        description = "Enter desired number of LOD (Level of Detail)"
-        )
-
-    bpy.types.Scene.LOD1_tex_res = IntProperty(
-        name = "Resolution Texture of the LOD1",
-        default = 2048,
-        description = "Enter the resolution for the texture of the LOD1")
-
-    bpy.types.Scene.LOD2_tex_res = IntProperty(
-        name = "Resolution Texture of the LOD2",
-        default = 512,
-        description = "Enter the resolution for the texture of the LOD2"
-        )
-
-    bpy.types.Scene.LOD3_tex_res = IntProperty(
-        name = "Resolution Texture of the LOD3",
-        default = 128,
-        description = "Enter the resolution for the texture of the LOD3"
-        )
-
-    bpy.types.Scene.LOD_pad_on = BoolProperty(
-        name = "Padding ratio of the LOD",
-        default = True,
-        description = "Enter the paddin ratio for the LOD"
-        )
-
-    bpy.types.Scene.LOD_use_scene_settings = BoolProperty(
-        name = "Using scene settings for bake LOD",
-        default = False,
-        description = "Enter the paddin ratio for the LOD"
-        )
 
     bpy.types.Scene.SHIFT_OBJ_on = BoolProperty(
         name = "Shifting obj export",
@@ -616,21 +564,16 @@ def unregister():
     PhotogrTool.unregister()
     #exporter_cesium.export_tile_model.unregister()
     multimesh_manager.unregister()
+    #realitycapture.unregister()
+    functions.unregister()
+    #cesium_preprocessing.unregister()
+    LODgenerator.unregister()
 
-    
-    del bpy.types.Scene.setLODnum
+
     del bpy.types.WindowManager.interface_vars
     del bpy.types.WindowManager.suffix_num
     del bpy.types.WindowManager.ccToolViewVar
-    del bpy.types.Scene.LODnum
-    del bpy.types.Scene.LOD1_tex_res
-    del bpy.types.Scene.LOD2_tex_res
-    del bpy.types.Scene.LOD3_tex_res
-    del bpy.types.Scene.LOD1_dec_ratio
-    del bpy.types.Scene.LOD2_dec_ratio
-    del bpy.types.Scene.LOD3_dec_ratio
-    del bpy.types.Scene.LOD_pad_on
-    del bpy.types.Scene.LOD_use_scene_settings
+
     del bpy.types.Scene.BL_undistorted_path
 
     del bpy.types.Scene.RES_pano

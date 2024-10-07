@@ -185,8 +185,8 @@ class ToolsPanelQuickUtils:
         row = layout.row()
 
         #DA RIATTIVARE
-        #self.layout.operator("circum.center", icon="PROP_OFF", text='CircumCenter')
-        #row = layout.row()
+        self.layout.operator("circum.center", icon="PROP_OFF", text='CircumCenter')
+        row = layout.row()
 
         # self.layout.operator("tiff2png.relink", icon="META_DATA", text='Relink images from tiff to png')
         # row = layout.row()
@@ -220,105 +220,6 @@ class ToolsPanelQuickUtils:
         row.operator("diffuse.principled", icon="DECORATE_DRIVER", text='Diffuse 2 Principled')
         row = box.row()
         row.operator("invert.coordinates", icon="DECORATE_DRIVER", text='Invert x and y')
-
-class ToolsPanelLODmanager:
-    bl_label = "LOD manager"
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_options = {'DEFAULT_CLOSED'}
-
-    def draw(self, context):
-        layout = self.layout
-        obj = context.object
-        scene = context.scene
-
-        row = layout.row()
-        row.label(text="Change LOD of selected linked objects:")
-        row = layout.row()
-
-        split = layout.split()
-        # First column
-        col = split.column()
-        col.prop(scene, 'setLODnum', icon='BLENDER', toggle=True)
-        # Second column, aligned
-        col = split.column(align=True)
-        col.operator("change.lod", text='set LOD')
-        #self.layout.operator("change.lod", icon="MESH_UVSPHERE", text='set LOD')
-
-class ToolsPanelLODgenerator:
-    bl_label = "LOD generator"
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_options = {'DEFAULT_CLOSED'}
-
-    def draw(self, context):
-        layout = self.layout
-        obj = context.object
-        scene = context.scene
-
-        if obj:#.type==['MESH']:
-            self.layout.operator("lod0.creation", icon="MESH_UVSPHERE", text='LOD 0 (set as)')
-            row = layout.row()
-
-            split = layout.split()
-            # First column
-            col = split.column()
-            col.prop(scene, 'LODnum', icon='BLENDER', toggle=True)
-            # Second column, aligned
-            col = split.column(align=True)
-            col.prop(scene, 'LOD_pad_on', text="Pad")
-            col = split.column(align=True)
-            col.prop(scene, 'LOD_use_scene_settings', text="Scene light")
-            col = split.column(align=True)
-            
-            #col.operator("lod.creation", icon="MOD_MULTIRES", text='')
-            col.operator("lod.creation", text='generate')
-            if scene.LODnum >= 1:
-                split = layout.split()
-                # First column
-                col = split.column()
-                col.label(text="Geometry")
-                #col.label(text="ratio")
-                col.prop(scene, 'LOD1_dec_ratio', icon='BLENDER', toggle=True, text="")
-                # Second column, aligned
-                col = split.column()
-                col.label(text="Texture")
-                #col.label(text="resolution")
-                col.prop(scene, 'LOD1_tex_res', icon='BLENDER', toggle=True, text="")
-                if scene.LODnum >= 2:
-                    split = layout.split()
-                    # First column
-                    col = split.column()
-                    col.prop(scene, 'LOD2_dec_ratio', icon='BLENDER', toggle=True, text="")
-                    col = split.column()
-                    # Second column, aligned
-                    col.prop(scene, 'LOD2_tex_res', icon='BLENDER', toggle=True, text="")
-
-                    if scene.LODnum >= 3:
-                        split = layout.split()
-                        # First column
-                        col = split.column()
-                        col.prop(scene, 'LOD3_dec_ratio', icon='BLENDER', toggle=True, text="")
-                        col = split.column()
-                        # Second column, aligned
-                        col.prop(scene, 'LOD3_tex_res', icon='BLENDER', toggle=True, text="")
-
-            row = layout.row()
-            row.label(text="LOD clusters")
-
-            split = layout.split()
-            # First column
-            col = split.column()
-            col.operator("create.grouplod", icon="PRESET", text='')
-            # Second column, aligned
-            col = split.column(align=True)
-            col.operator("remove.grouplod", icon="CANCEL", text='')
-
-            row = layout.row()
-            row.label(text="LOD cluster(s) export:")
-            row = layout.row()
-            row.prop(context.scene, 'model_export_dir', toggle = True, text='folder')
-            self.layout.operator("exportfbx.grouplod", icon="MESH_GRID", text='FBX')
 
 class ToolsPanel_ccTool:
     bl_label = "Color Correction"
@@ -457,16 +358,6 @@ class VIEW3D_PT_QuickUtils_ToolBar(Panel, ToolsPanelQuickUtils):
     bl_category = "3DSC"
     bl_idname = "VIEW3D_PT_QuickUtils_ToolBar"
     #bl_context = "objectmode"
-
-class VIEW3D_PT_LODgenerator(Panel, ToolsPanelLODgenerator):
-    bl_category = "3DSC"
-    bl_idname = "VIEW3D_PT_LODgenerator"
-    bl_context = "objectmode"
-
-class VIEW3D_PT_LODmanager(Panel, ToolsPanelLODmanager):
-    bl_category = "3DSC"
-    bl_idname = "VIEW3D_PT_LODmanager"
-    bl_context = "objectmode"
 
 class VIEW3D_PT_ccTool(Panel, ToolsPanel_ccTool):
     bl_category = "3DSC"
