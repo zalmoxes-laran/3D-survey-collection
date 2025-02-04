@@ -75,12 +75,13 @@ else:
             external_modules_install,
             multimesh_manager,
             realitycapture,
-            cesium_preprocessing
+            cesium_preprocessing,
             )
     
     from .exporter_cesium import export_tile_model
 
 from .external_modules_install import check_external_modules
+from .utils import mesh_cleaner
 
 # demo bare-bones preferences
 @addon_updater_ops.make_annotations
@@ -416,6 +417,8 @@ def register():
 
     LODgenerator.register()
 
+    mesh_cleaner.register()
+
     check_external_modules()
     bpy.types.WindowManager.interface_vars = bpy.props.PointerProperty(type=InterfaceVars)
     bpy.types.WindowManager.ccToolViewVar = bpy.props.PointerProperty(type=ccToolViewVar)
@@ -568,6 +571,7 @@ def unregister():
     functions.unregister()
     #cesium_preprocessing.unregister()
     LODgenerator.unregister()
+    mesh_cleaner.unregister()
 
 
     del bpy.types.WindowManager.interface_vars

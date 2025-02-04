@@ -5,6 +5,8 @@ from random import randint, choice
 from .functions import *
 from .qualitycheck import *
 
+from .utils import mesh_cleaner
+
 class OBJECT_OT_invertcoordinates(bpy.types.Operator):
     """Invert x and y coordinates of selected objects"""
     bl_idname = "invert.coordinates"
@@ -71,8 +73,6 @@ class OBJECT_OT_setmetalness(bpy.types.Operator):
                     #  if the node is a Diffuse node....
                     if node.type=="BSDF_PRINCIPLED":
                         node.inputs['Metallic'].default_value = 0.0
-                        
-                        
         return {'FINISHED'}
 
 class OBJECT_OT_setroughness(bpy.types.Operator):

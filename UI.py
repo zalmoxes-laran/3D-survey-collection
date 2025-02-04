@@ -188,6 +188,9 @@ class ToolsPanelQuickUtils:
         self.layout.operator("circum.center", icon="PROP_OFF", text='CircumCenter')
         row = layout.row()
 
+        self.layout.operator("mesh.merge_by_distance_custom", icon="PROP_OFF", text='Vertex Merge by Distance')
+        row = layout.row()
+
         # self.layout.operator("tiff2png.relink", icon="META_DATA", text='Relink images from tiff to png')
         # row = layout.row()
         self.layout.operator("rename.ge", icon="FILE_TEXT", text='Rename 4 GameEngines')
