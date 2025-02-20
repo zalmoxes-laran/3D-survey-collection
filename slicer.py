@@ -26,7 +26,7 @@ import os
 import bmesh
 import numpy
 from bpy.props import FloatProperty, BoolProperty, EnumProperty, IntProperty, StringProperty, FloatVectorProperty
-
+from mathutils import Vector
 
 def clear_slice_preview():
     """Rimuove tutte le linee di preview esistenti"""
@@ -34,11 +34,24 @@ def clear_slice_preview():
         if gpencil.name.startswith("SlicePreview"):
             bpy.data.grease_pencils.remove(gpencil)
 
+def get_bounds_from_bbox(obj, axis):
+    """Get min/max bounds for the specified axis using object's bounding box"""
+    bbox = obj.bound_box
+    if axis == 'X':
+        axis_coords = [v[0] for v in bbox]
+    elif axis == 'Y':
+        axis_coords = [v[1] for v in bbox]
+    else:  # Z axis
+        axis_coords = [v[2] for v in bbox]
+    
+    # Trasforma le coordinate del bounding box in coordinate globali
+    min_val = min(axis_coords)
+    max_val = max(axis_coords)
+    return min_val, max_val
+
 def create_slice_preview(context, obj, thickness):
     """Crea linee di preview per le slices"""
     clear_slice_preview()
-    
-    axis = context.scene.slicer_settings.slice_axis
     
     # Crea nuovo Grease Pencil object
     gp = bpy.data.grease_pencils.new("SlicePreview")
@@ -49,27 +62,38 @@ def create_slice_preview(context, obj, thickness):
     gpl = gp.layers.new("SliceLines", set_active=True)
     frame = gpl.frames.new(0)
     
-    # Calcola dimensioni e limiti in base all'asse scelto
-    dims = obj.dimensions
-    verts = [v.co for v in obj.data.vertices]
+    axis = context.scene.slicer_settings.slice_axis
     
+    # Calcola il bounding box in coordinate globali
+    world_matrix = obj.matrix_world
+    bbox_corners = [world_matrix @ Vector(corner) for corner in obj.bound_box]
+    
+    # Calcola i limiti in base all'asse
     if axis == 'X':
-        min_val = min([v[0] for v in verts])
-        max_val = max([v[0] for v in verts])
-        rect_size = (dims.y, dims.z)
+        min_val = min(corner.x for corner in bbox_corners)
+        max_val = max(corner.x for corner in bbox_corners)
+        width = max(corner.y for corner in bbox_corners) - min(corner.y for corner in bbox_corners)
+        height = max(corner.z for corner in bbox_corners) - min(corner.z for corner in bbox_corners)
+        center_y = (max(corner.y for corner in bbox_corners) + min(corner.y for corner in bbox_corners)) / 2
+        center_z = (max(corner.z for corner in bbox_corners) + min(corner.z for corner in bbox_corners)) / 2
     elif axis == 'Y':
-        min_val = min([v[1] for v in verts])
-        max_val = max([v[1] for v in verts])
-        rect_size = (dims.x, dims.z)
+        min_val = min(corner.y for corner in bbox_corners)
+        max_val = max(corner.y for corner in bbox_corners)
+        width = max(corner.x for corner in bbox_corners) - min(corner.x for corner in bbox_corners)
+        height = max(corner.z for corner in bbox_corners) - min(corner.z for corner in bbox_corners)
+        center_x = (max(corner.x for corner in bbox_corners) + min(corner.x for corner in bbox_corners)) / 2
+        center_z = (max(corner.z for corner in bbox_corners) + min(corner.z for corner in bbox_corners)) / 2
     else:  # Z axis
-        min_val = min([v[2] for v in verts])
-        max_val = max([v[2] for v in verts])
-        rect_size = (dims.x, dims.y)
+        min_val = min(corner.z for corner in bbox_corners)
+        max_val = max(corner.z for corner in bbox_corners)
+        width = max(corner.x for corner in bbox_corners) - min(corner.x for corner in bbox_corners)
+        height = max(corner.y for corner in bbox_corners) - min(corner.y for corner in bbox_corners)
+        center_x = (max(corner.x for corner in bbox_corners) + min(corner.x for corner in bbox_corners)) / 2
+        center_y = (max(corner.y for corner in bbox_corners) + min(corner.y for corner in bbox_corners)) / 2
     
-    # Current slice position
-    pos = min_val + thickness/2
-    
-    while pos < max_val:
+    # Crea i piani di slice
+    current_pos = min_val
+    while current_pos <= max_val:
         stroke = frame.strokes.new()
         stroke.display_mode = '3DSPACE'
         stroke.line_width = 2
@@ -77,27 +101,27 @@ def create_slice_preview(context, obj, thickness):
         # Crea coordinate del rettangolo in base all'asse
         if axis == 'X':
             coords = [
-                (pos, -rect_size[0]/2, -rect_size[1]/2),
-                (pos, rect_size[0]/2, -rect_size[1]/2),
-                (pos, rect_size[0]/2, rect_size[1]/2),
-                (pos, -rect_size[0]/2, rect_size[1]/2),
-                (pos, -rect_size[0]/2, -rect_size[1]/2)
+                (current_pos, center_y - width/2, center_z - height/2),
+                (current_pos, center_y + width/2, center_z - height/2),
+                (current_pos, center_y + width/2, center_z + height/2),
+                (current_pos, center_y - width/2, center_z + height/2),
+                (current_pos, center_y - width/2, center_z - height/2)
             ]
         elif axis == 'Y':
             coords = [
-                (-rect_size[0]/2, pos, -rect_size[1]/2),
-                (rect_size[0]/2, pos, -rect_size[1]/2),
-                (rect_size[0]/2, pos, rect_size[1]/2),
-                (-rect_size[0]/2, pos, rect_size[1]/2),
-                (-rect_size[0]/2, pos, -rect_size[1]/2)
+                (center_x - width/2, current_pos, center_z - height/2),
+                (center_x + width/2, current_pos, center_z - height/2),
+                (center_x + width/2, current_pos, center_z + height/2),
+                (center_x - width/2, current_pos, center_z + height/2),
+                (center_x - width/2, current_pos, center_z - height/2)
             ]
         else:  # Z axis
             coords = [
-                (-rect_size[0]/2, -rect_size[1]/2, pos),
-                (rect_size[0]/2, -rect_size[1]/2, pos),
-                (rect_size[0]/2, rect_size[1]/2, pos),
-                (-rect_size[0]/2, rect_size[1]/2, pos),
-                (-rect_size[0]/2, -rect_size[1]/2, pos)
+                (center_x - width/2, center_y - height/2, current_pos),
+                (center_x + width/2, center_y - height/2, current_pos),
+                (center_x + width/2, center_y + height/2, current_pos),
+                (center_x - width/2, center_y + height/2, current_pos),
+                (center_x - width/2, center_y - height/2, current_pos)
             ]
         
         # Aggiungi i punti usando le coordinate
@@ -105,13 +129,10 @@ def create_slice_preview(context, obj, thickness):
         for i, coord in enumerate(coords):
             stroke.points[i].co = coord
         
-        pos += thickness
+        current_pos += thickness
 
     # Imposta il colore del layer
     gpl.color = (1, 0, 0)  # Rosso
-    
-    # Posiziona il grease pencil sull'oggetto
-    gpobj.matrix_world = obj.matrix_world.copy()
 
 def toggle_slice_preview(self, context):
     """Toggle la visibilità della preview"""
@@ -137,14 +158,24 @@ def slicer(settings):
     omw = aob.matrix_world
     bm.transform(omw)
     aob.evaluated_get(dp).to_mesh_clear()
-    aob.select_set(False)
+    
+    # Ottieni i limiti corretti in base all'asse selezionato
+    bbox = aob.bound_box
+    if settings.slice_axis == 'X':
+        axis_coords = [v[0] for v in bbox]
+    elif settings.slice_axis == 'Y':
+        axis_coords = [v[1] for v in bbox]
+    else:  # Z axis
+        axis_coords = [v[2] for v in bbox]
+    
+    min_val = min(axis_coords)
+    max_val = max(axis_coords)
+    
     mwidth = settings.laser_slicer_material_width
     mheight = settings.laser_slicer_material_height
     lt = settings.laser_slicer_material_thick/f_scale
     sepfile = settings.laser_slicer_separate_files
-    minz = min([v.co[2] for v in bm.verts])
-    maxz = max([v.co[2] for v in bm.verts])
-    lh = minz + lt * 0.5
+    lh = min_val + lt * 0.5
     accuracy = settings.laser_slicer_accuracy
     ct = settings.laser_slicer_cut_thickness/f_scale
     svgpos = settings.laser_slicer_svg_position
@@ -154,7 +185,7 @@ def slicer(settings):
     ofile = settings.laser_slicer_ofile
     mm2pi = dpi/25.4
     scale = f_scale*mm2pi
-    ydiff, rysize  = 0, 0
+    ydiff, rysize = 0, 0
     lcol = settings.laser_slicer_cut_colour
     lthick = settings.laser_slicer_cut_line
 
@@ -167,19 +198,18 @@ def slicer(settings):
         for o in bpy.context.scene.objects:
             if o.get('Slices'):
                 bpy.context.view_layer.objects.active = o
-
                 for vert in o.data.vertices:
                     vert.select = True
-
-                bpy.ops.object.mode_set(mode = 'EDIT')
-                bpy.ops.mesh.delete(type = 'VERT')
-                bpy.ops.object.mode_set(mode = 'OBJECT')
+                bpy.ops.object.mode_set(mode='EDIT')
+                bpy.ops.mesh.delete(type='VERT')
+                bpy.ops.object.mode_set(mode='OBJECT')
                 me = o.data
                 cob = o
                 cobexists = 1
                 break
 
-    vlen, elen, vlenlist, elenlist = 0, 0, [0], [0]
+    vlen, elen = 0, 0
+    vlenlist, elenlist = [0], [0]
     vpos = numpy.empty(0)
     vindex = numpy.empty(0).astype(numpy.int8)
     vtlist = []
@@ -188,7 +218,7 @@ def slicer(settings):
     elist = []
     erem = []
 
-    while lh < maxz:
+    while lh < max_val:
         cbm = bm.copy()
         
         # Scegli il piano di taglio in base all'asse
@@ -215,15 +245,26 @@ def slicer(settings):
         newverts = [v for v in newgeo if isinstance(v, bmesh.types.BMVert)]
         if not newverts:
             cbm.free()
+            lh += lt
             continue
 
         newedges = [e for e in newgeo if isinstance(e, bmesh.types.BMEdge)]
         voffset = min([v.index for v in newverts])
         lvpos = [v.co for v in newverts]
         vpos = numpy.append(vpos, numpy.array(lvpos).flatten())
-        vtlist.append([(v.co - cob.location)[0:2] for v in newverts])
-        etlist.append([[(v.co - cob.location)[0:2] for v in e.verts] for e in newedges])
-        vindex = numpy.append(vindex, numpy.array([[v.index  - voffset + vlen for v in e.verts] for e in newedges]).flatten())
+        
+        # Adatta le coordinate in base all'asse di taglio
+        if settings.slice_axis == 'X':
+            vtlist.append([(v.co - cob.location)[1:3] for v in newverts])
+            etlist.append([[(v.co - cob.location)[1:3] for v in e.verts] for e in newedges])
+        elif settings.slice_axis == 'Y':
+            vtlist.append([(v.co - cob.location)[::2] for v in newverts])  # Prende indici 0 e 2 (X e Z)
+            etlist.append([[(v.co - cob.location)[::2] for v in e.verts] for e in newedges])
+        else:  # Z axis (comportamento originale)
+            vtlist.append([(v.co - cob.location)[0:2] for v in newverts])
+            etlist.append([[(v.co - cob.location)[0:2] for v in e.verts] for e in newedges])
+
+        vindex = numpy.append(vindex, numpy.array([[v.index - voffset + vlen for v in e.verts] for e in newedges]).flatten())
         vlen += len(newverts)
         elen += len(newedges)
         vlenlist.append(len(newverts) + vlenlist[-1])
@@ -232,11 +273,11 @@ def slicer(settings):
         cbm.free()
 
     bm.free()
-    vs = []
+    
+    # Create final mesh
     me.vertices.add(vlen)
     me.vertices.foreach_set('co', vpos)
     me.edges.add(elen)
-    me.edges.foreach_get('verts', vs)
     me.edges.foreach_set('vertices', vindex)
 
     if accuracy:
@@ -256,8 +297,6 @@ def slicer(settings):
             for er in erem:
                 sliceedges.remove(er)
 
-            vlen = len(me.vertices)
-
             if edgesingleverts:
                 e = [ed for ed in sliceedges if ed.vertices[0] in edgesingleverts or ed.vertices[1] in edgesingleverts][0]
                 if e.vertices[0] in edgesingleverts:
@@ -274,30 +313,25 @@ def slicer(settings):
 
             while len(elist) < len(sliceedges):
                 va = 0
-                for e in [ed for ed  in sliceedges if ed not in elist]:
-                     if e.vertices[0] not in vlist and e.vertices[1] == vlist[-1]:
-                         va = 1
-                         vlist.append(e.vertices[0])
-                         elist.append(e)
-
-                         if len(elist) == len(sliceedges):
+                for e in [ed for ed in sliceedges if ed not in elist]:
+                    if e.vertices[0] not in vlist and e.vertices[1] == vlist[-1]:
+                        va = 1
+                        vlist.append(e.vertices[0])
+                        elist.append(e)
+                        if len(elist) == len(sliceedges):
                             vlist.append(-2)
-
-                     if e.vertices[1] not in vlist and e.vertices[0] == vlist[-1]:
-                         va = 1
-                         vlist.append(e.vertices[1])
-                         elist.append(e)
-
-                         if len(elist) == len(sliceedges):
+                    if e.vertices[1] not in vlist and e.vertices[0] == vlist[-1]:
+                        va = 1
+                        vlist.append(e.vertices[1])
+                        elist.append(e)
+                        if len(elist) == len(sliceedges):
                             vlist.append(-2)
-
-                     elif e.vertices[1] in vlist and e.vertices[0] in vlist and e not in elist:
-                         elist.append(e)
-                         va = 2
+                    elif e.vertices[1] in vlist and e.vertices[0] in vlist and e not in elist:
+                        elist.append(e)
+                        va = 2
 
                 if va in (0, 2):
                     vlist.append((-1, -2)[va == 0])
-
                     if len(elist) < len(sliceedges):
                         try:
                             e1 = [ed for ed in sliceedges if ed not in elist and (ed.vertices[0] in edgesingleverts or ed.vertices[1] in edgesingleverts)][0]
@@ -307,14 +341,13 @@ def slicer(settings):
                             else:
                                 vlist.append(e1.vertices[1])
                                 vlist.append(e1.vertices[0])
-
-                        except Exception as e:
+                        except:
                             e1 = [ed for ed in sliceedges if ed not in elist][0]
                             vlist.append(e1.vertices[0])
                             vlist.append(e1.vertices[1])
                         elist.append(e1)
 
-            vtlist.append([(me.vertices[v].co, v)[v < 0]  for v in vlist])
+            vtlist.append([(me.vertices[v].co, v)[v < 0] for v in vlist])
             etlist.append([elist])
 
     if not sepfile:
@@ -322,14 +355,15 @@ def slicer(settings):
             filename = os.path.join(bpy.path.abspath(ofile), aob.name+'.svg')
         else:
             filename = os.path.join(os.path.dirname(bpy.data.filepath), aob.name+'.svg') if not ofile else bpy.path.abspath(ofile)
+
     else:
         if os.path.isdir(bpy.path.abspath(ofile)):
-            filenames = [os.path.join(bpy.path.abspath(ofile), aob.name+'{}.svg'.format(i)) for i in range(len(vlenlist))]
+            filenames = [os.path.join(bpy.path.abspath(ofile), aob.name+'{}.svg'.format(i)) for i in range(len(vlenlist) - 1)]
         else:
             if not ofile:
-                filenames = [os.path.join(os.path.dirname(bpy.path.abspath(bpy.data.filepath)), aob.name+'{}.svg'.format(i)) for i in range(len(vlenlist))]
+                filenames = [os.path.join(os.path.dirname(bpy.data.filepath), aob.name+'{}.svg'.format(i)) for i in range(len(vlenlist) - 1)]
             else:
-                filenames = [os.path.join(os.path.dirname(bpy.path.abspath(ofile)), bpy.path.display_name_from_filepath(ofile) + '{}.svg'.format(i)) for i in range(len(vlenlist))]
+                filenames = [os.path.join(os.path.dirname(bpy.path.abspath(ofile)), bpy.path.display_name_from_filepath(ofile)+'{}.svg'.format(i)) for i in range(len(vlenlist) - 1)]
 
     for vci, vclist in enumerate(vtlist):
         if sepfile or vci == 0:
@@ -345,34 +379,27 @@ def slicer(settings):
         if (sepfile and svgpos == '0') or (sepfile and vci == 0 and svgpos == '1'):
             xdiff = -xmin + ct
             ydiff = -ymin + ct
-
         elif (sepfile and svgpos == '1') or not sepfile:
             if f_scale * (xmaxlast + cxsize) <= mwidth:
                 xdiff = xmaxlast - xmin + ct
                 ydiff = yrowpos - ymin + ct
-
                 if rysize < cysize:
                     rysize = cysize
-
                 xmaxlast += cxsize
-
             elif f_scale * cxsize > mwidth:
                 xdiff = -xmin + ct
                 ydiff = yrowpos - ymin + ct
                 yrowpos += cysize
                 if rysize < cysize:
                     rysize = cysize
-
                 xmaxlast = cxsize
                 rysize = cysize
-
             else:
                 yrowpos += rysize
                 xdiff = -xmin + ct
                 ydiff = yrowpos - ymin + ct
                 xmaxlast = cxsize
                 rysize = cysize
-
         elif sepfile and svgpos == '2':
             xdiff = mwidth/(2 * f_scale) - (0.5 * cxsize) - xmin
             ydiff = mheight/(2 * f_scale) - (0.5 * cysize) - ymin
@@ -400,20 +427,17 @@ def slicer(settings):
 
         if sepfile:
             svgtext += '</svg>\n'
-
             with open(filenames[vci], 'w') as svgfile:
                 svgfile.write('<?xml version="1.0"?>\n<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">\n\
                 <svg xmlns="http://www.w3.org/2000/svg" version="1.1"\n    width="{0}"\n    height="{1}"\n    viewbox="0 0 {0} {1}">\n\
-                <desc>Laser SVG Slices from Object: Sphere_net. Exported from Bl<desc>Laser SVG Slices from Object: Sphere_net. Exported from Blender3D with the Laser Slicer Script</desc>\n\n'.format(mwidth*mm2pi, mheight*mm2pi))
-
+                <desc>Laser SVG Slices from Object: {2}. Exported from Blender3D with the Laser Slicer Script</desc>\n\n'.format(mwidth*mm2pi, mheight*mm2pi, aob.name))
                 svgfile.write(svgtext)
 
     if not sepfile:
         with open(filename, 'w') as svgfile:
             svgfile.write('<?xml version="1.0"?>\n<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">\n\
                 <svg xmlns="http://www.w3.org/2000/svg" version="1.1"\n    width="{0}"\n    height="{1}"\n    viewbox="0 0 {0} {1}">\n\
-                <desc>Laser SVG Slices from Object: Sphere_net. Exported from Blender3D with the Laser Slicer Script</desc>\n\n'.format(mwidth*mm2pi, mheight*mm2pi))
-
+                <desc>Laser SVG Slices from Object: {2}. Exported from Blender3D with the Laser Slicer Script</desc>\n\n'.format(mwidth*mm2pi, mheight*mm2pi, aob.name))
             svgfile.write(svgtext)
             svgfile.write("</svg>\n")
 
@@ -421,8 +445,8 @@ def slicer(settings):
         bpy.context.scene.collection.objects.link(cob)
 
     bpy.context.view_layer.objects.active = cob
-    bpy.ops.object.mode_set(mode = 'EDIT')
-    bpy.ops.object.mode_set(mode = 'OBJECT')
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.object.mode_set(mode='OBJECT')
     aob.select_set(True)
     bpy.context.view_layer.objects.active = aob
 
@@ -492,7 +516,7 @@ class OBJECT_OT_Laser_Slicer(bpy.types.Operator):
 class Slicer_Settings(bpy.types.PropertyGroup):
     laser_slicer_material_thick: FloatProperty(
          name="", description="Thickness of the cutting material in mm",
-             min=0.1, max=50, default=2) # type: ignore
+             min=0.1, max=200, default=2) # type: ignore
     laser_slicer_material_width: FloatProperty(
          name="", description="Width of the cutting material in mm",
              min=1, max=5000, default=450) # type: ignore
