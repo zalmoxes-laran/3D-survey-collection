@@ -83,6 +83,8 @@ else:
 from .external_modules_install import check_external_modules
 from .utils import mesh_cleaner
 
+from . import slicer
+
 # demo bare-bones preferences
 @addon_updater_ops.make_annotations
 
@@ -419,6 +421,8 @@ def register():
 
     mesh_cleaner.register()
 
+    slicer.register()
+
     check_external_modules()
     bpy.types.WindowManager.interface_vars = bpy.props.PointerProperty(type=InterfaceVars)
     bpy.types.WindowManager.ccToolViewVar = bpy.props.PointerProperty(type=ccToolViewVar)
@@ -572,6 +576,7 @@ def unregister():
     #cesium_preprocessing.unregister()
     LODgenerator.unregister()
     mesh_cleaner.unregister()
+    slicer.unregister()
 
 
     del bpy.types.WindowManager.interface_vars
