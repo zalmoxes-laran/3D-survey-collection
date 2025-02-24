@@ -6,6 +6,23 @@ from mathutils import Vector
 from bpy.types import Panel
 import subprocess
 
+# Funzione ricorsiva per impostare come attiva la layer_collection che contiene l'oggetto
+def set_active_collection_by_object(obj, layer_coll=None):
+    view_layer = bpy.context.view_layer
+    if layer_coll is None:
+        for lc in view_layer.layer_collection.children:
+            found = set_active_collection_by_object(obj, lc)
+            if found:
+                return found
+    else:
+        if obj.name in layer_coll.collection.objects:
+            view_layer.active_layer_collection = layer_coll
+            return layer_coll
+        for child in layer_coll.children:
+            found = set_active_collection_by_object(obj, child)
+            if found:
+                return found
+    return None
 
 def selectLOD(listobjects, lodnum, basename):
     name2search = basename + '_LOD' + str(lodnum)
@@ -32,7 +49,7 @@ class OBJECT_OT_LOD0(bpy.types.Operator):
 
     def execute(self, context):
         selected_objs = bpy.context.selected_objects
-        for obj in bpy.context.selected_objects:
+        for obj in selected_objs:
             bpy.ops.object.select_all(action='DESELECT')
             obj.select_set(True)
             bpy.context.view_layer.objects.active = obj
@@ -41,7 +58,7 @@ class OBJECT_OT_LOD0(bpy.types.Operator):
             if not baseobj.endswith('LOD0'):
                 obj.name = baseobj + '_LOD0'
             if len(obj.data.uv_layers) > 1:
-                if obj.data.uv_layers[0].name =='MultiTex' and obj.data.uv_layers[1].name =='Atlas':
+                if obj.data.uv_layers[0].name == 'MultiTex' and obj.data.uv_layers[1].name == 'Atlas':
                     pass
             else:
                 create_double_UV(obj)
@@ -50,7 +67,7 @@ class OBJECT_OT_LOD0(bpy.types.Operator):
 
 #_____________________________________________________________________________
 
-def ratio_for_current_lod(lod,context):
+def ratio_for_current_lod(lod, context):
     if lod == 1:
         ratio = context.scene.LOD1_dec_ratio
     if lod == 2:
@@ -59,7 +76,7 @@ def ratio_for_current_lod(lod,context):
         ratio = context.scene.LOD3_dec_ratio
     return ratio
 
-def tex_res_for_current_lod(lod,context):
+def tex_res_for_current_lod(lod, context):
     if lod == 1:
         tex_res = context.scene.LOD1_tex_res
     if lod == 2:
@@ -82,48 +99,44 @@ class OBJECT_OT_LOD(bpy.types.Operator):
         LODnum = context.scene.LODnum
         i_lodbake_counter = 1
 
-        #context.view_layer.active_layer_collection = bpy.data.collections.get('LOD0')
-
         basedir = os.path.dirname(bpy.data.filepath)
         if not basedir:
             raise Exception("Save the blend file")
-        # si prende il numero di LOD impostato e i parametri base per LOD ovvero tex_res e decimation_ratio
-        # iniziamo con un contatore i_lodbake_counter che parte da 0
-
         print("Number of LOD(s) to be created is: " + str(LODnum))
         last_margin_val = context.scene.render.bake.margin
-        # si producono ciclicamente i livelli di dettaglio ad esaurire i LOD richiesti dall'utente nell'UI (normalmente da 1 a 3 LOD)
+        
         while i_lodbake_counter <= LODnum:
             currentLOD = 'LOD' + str(i_lodbake_counter)
             subfolder = currentLOD
 
             if not os.path.exists(os.path.join(basedir, subfolder)):
                 os.mkdir(os.path.join(basedir, subfolder))
-                print('There is no '+ subfolder +' folder. Creating one...')
+                print('There is no ' + subfolder + ' folder. Creating one...')
             else:
-                print('Found previously created '+ subfolder +' folder. I will use it')
+                print('Found previously created ' + subfolder + ' folder. I will use it')
 
             ob_counter = 1
-
-            print('<<<<<<<<<<<<<< CREATION OF '+ currentLOD +' >>>>>>>>>>>>>>')
-            print('>>>>>> '+str(ob_tot)+' objects will be processed')
+            print('<<<<<<<<<<<<<< CREATION OF ' + currentLOD + ' >>>>>>>>>>>>>>')
+            print('>>>>>> ' + str(ob_tot) + ' objects will be processed')
 
             for obj_LOD0 in selected_objects:
-
                 start_time_ob = time.time()
-
-                print('>>> '+ currentLOD + ' >>>')
-                print('>>>>>> processing the object ""'+ obj_LOD0.name+'"" ('+str(ob_counter)+'/'+str(ob_tot)+')')
+                print('>>> ' + currentLOD + ' >>>')
+                print('>>>>>> processing the object "' + obj_LOD0.name + '" (' + str(ob_counter) + '/' + str(ob_tot) + ')')
                 bpy.ops.object.select_all(action='DESELECT')
                 obj_LOD0.select_set(True)
                 context.view_layer.objects.active = obj_LOD0
+
+                # Imposta come attiva la collezione in cui si trova l'oggetto
+                set_active_collection_by_object(obj_LOD0)
+                
                 obj_LOD0_name = obj_LOD0.name
                 if '_LOD0' in obj_LOD0_name:
                     obj_base_name = obj_LOD0_name.replace("_LOD0", "")
                 else:
                     obj_base_name = obj_LOD0_name
 
-                print('Creating new LOD'+ str(i_lodbake_counter) +' object..')
+                print('Creating new LOD' + str(i_lodbake_counter) + ' object..')
                 bpy.ops.object.duplicate(linked=False, mode='TRANSLATION')
                 obj_LODnew = context.view_layer.objects.active
 
@@ -137,9 +150,7 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 else:
                     currentLODCol = bpy.data.collections.get(currentLOD)
 
-                # link the object to collection
                 currentLODCol.objects.link(obj_LODnew)
-                # unlink from previous collection
                 LOD0Col.objects.unlink(obj_LODnew)
 
                 bpy.ops.object.select_all(action='DESELECT')
@@ -148,10 +159,10 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 obj_LODnew.name = obj_base_name + "_" + currentLOD
                 obj_LODnew_name = obj_LODnew.name
 
-                for i in range(0,len(bpy.data.objects[obj_LODnew_name].material_slots)):
+                for i in range(0, len(bpy.data.objects[obj_LODnew_name].material_slots)):
                     bpy.ops.object.material_slot_remove()
 
-                if obj_LODnew.data.uv_layers[1] and obj_LODnew.data.uv_layers[1].name =='Atlas':
+                if len(obj_LODnew.data.uv_layers) > 1 and obj_LODnew.data.uv_layers[1].name == 'Atlas':
                     print('Found Atlas UV mapping layer. I will use it.')
                     uv_layers = obj_LODnew.data.uv_layers
                     uv_layers.remove(uv_layers[0])
@@ -161,23 +172,49 @@ class OBJECT_OT_LOD(bpy.types.Operator):
 
                 obj_LOD0.data.uv_layers["MultiTex"].active_render = True
 
-                # mesh decimation
-                decimate_mesh(context,obj_LODnew,ratio_for_current_lod(i_lodbake_counter,context),currentLOD)
+                # Se l'opzione è attiva, ricalcola l'UV mapping dell'Atlas usando l'algoritmo scelto
+                if context.scene.atlas_uv_recalc:
+                    print("Recalculating Atlas UV mapping using algorithm: " + context.scene.atlas_uv_algorithm)
+                    if "Atlas" in obj_LODnew.data.uv_layers:
+                        obj_LODnew.data.uv_layers.active = obj_LODnew.data.uv_layers["Atlas"]
+                    else:
+                        new_atlas = obj_LODnew.data.uv_layers.new(name="Atlas")
+                        obj_LODnew.data.uv_layers.active = new_atlas
+                    bpy.ops.object.mode_set(mode='EDIT')
+                    bpy.ops.mesh.select_all(action='SELECT')
+                    algo = context.scene.atlas_uv_algorithm
+                    if algo == 'SMART':
+                        bpy.ops.uv.smart_project(scale_to_bounds=True)
+                    elif algo == 'ANGLE':
+                        bpy.ops.uv.unwrap(method='ANGLE_BASED', use_limit_boundaries=True)
+                    elif algo == 'CONFORMAL':
+                        bpy.ops.uv.unwrap(method='CONFORMAL', use_limit_boundaries=True)
+                    elif algo == 'MINIMUM':
+                        try:
+                            bpy.ops.uv.minimize_stretch()
+                        except Exception as e:
+                            print("Minimum Stretch operator not available, using conformal instead")
+                            bpy.ops.uv.unwrap(method='CONFORMAL', use_limit_boundaries=True)
+                    else:
+                        bpy.ops.uv.smart_project(scale_to_bounds=True)
+                    bpy.ops.object.mode_set(mode='OBJECT')
 
-                # now the mesh is decimated
-                #------------------------------------------------------------------
+                # Mesh decimation
+                decimate_mesh(context, obj_LODnew, ratio_for_current_lod(i_lodbake_counter, context), currentLOD)
 
                 print('Creating new texture atlas for ' + currentLOD + '....')
-                tex_res = tex_res_for_current_lod(i_lodbake_counter,context)
-                tex_LODnew_name = "T_"+ obj_LODnew_name
-                tempimage = bpy.data.images.new(name=tex_LODnew_name, width=tex_res, height=tex_res, alpha=False)
-                tempimage.filepath_raw = "//"+subfolder+'/'+tex_LODnew_name+".jpg"
-                filepathimage = "//"+subfolder+'/'+tex_LODnew_name+".jpg"
-                tempimage.file_format = 'JPEG'
+                tex_res = tex_res_for_current_lod(i_lodbake_counter, context)
+                tex_LODnew_name = "T_" + obj_LODnew_name
+                if context.scene.texture_format == 'PNG':
+                    tempimage = bpy.data.images.new(name=tex_LODnew_name, width=tex_res, height=tex_res, alpha=context.scene.use_alpha)
+                    tempimage.filepath_raw = "//" + subfolder + '/' + tex_LODnew_name + ".png"
+                    tempimage.file_format = 'PNG'
+                else:
+                    tempimage = bpy.data.images.new(name=tex_LODnew_name, width=tex_res, height=tex_res, alpha=False)
+                    tempimage.filepath_raw = "//" + subfolder + '/' + tex_LODnew_name + ".jpg"
+                    tempimage.file_format = 'JPEG'
 
-                # annotate current cycles render settings to maintain things clean
-                #--------------------------------------------------------------
-
+                # Annotate current cycles render settings
                 to_be_restored_render_engine = context.scene.render.engine
                 context.scene.render.engine = 'CYCLES'
                 context.scene.cycles.bake_type = 'DIFFUSE'
@@ -194,38 +231,29 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 context.scene.render.bake.cage_extrusion = 0.1
 
                 if context.scene.LOD_pad_on:
-                    custommargin = "context.scene.render.bake.margin = context.scene.LOD"+str(i_lodbake_counter)+"_tex_res"
+                    custommargin = "context.scene.render.bake.margin = context.scene.LOD" + str(i_lodbake_counter) + "_tex_res"
                     exec(custommargin)
                 
                 if not context.scene.LOD_use_scene_settings:
                     to_restore_samples = context.scene.cycles.samples
                     context.scene.cycles.samples = 1
-
                     to_restore_bounces = context.scene.cycles.diffuse_bounces
                     context.scene.cycles.diffuse_bounces = 1
 
-                # creating a new material
-                #--------------------------------------------------------------
-                print('Creating custom material for '+ currentLOD +'...')
+                print('Creating custom material for ' + currentLOD + '...')
                 bpy.ops.object.select_all(action='DESELECT')
                 obj_LODnew.select_set(True)
                 context.view_layer.objects.active = obj_LODnew
-                mat, texImage, bsdf = create_material_from_image(context,tempimage,obj_LODnew,False)
+                mat, texImage, bsdf = create_material_from_image(context, tempimage, obj_LODnew, False)
 
-                # baking textures
-                #--------------------------------------------------------------
-                print('Passing color data from LOD0 to '+ currentLOD + '...')
-
+                print('Passing color data from LOD0 to ' + currentLOD + '...')
                 bpy.ops.object.select_all(action='DESELECT')
                 obj_LODnew.select_set(True)
                 obj_LOD0.select_set(True)
-                obj_LOD0_LODnew_selected = context.selected_objects
                 context.view_layer.objects.active = obj_LODnew
                 bpy.ops.object.bake(type='DIFFUSE')
                 tempimage.save()
 
-                # annotate current cycles render settings to maintain things clean
-                #-----------------------------------------------------------------
                 if not context.scene.LOD_use_scene_settings:
                     context.scene.cycles.diffuse_bounces = to_restore_bounces
                     context.scene.cycles.samples = to_restore_samples
@@ -235,38 +263,31 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 mat.node_tree.links.new(bsdf.inputs['Base Color'], texImage.outputs['Color'])
                 
                 if obj_LODnew.name.startswith('OB_'):
-                    obj_LODnew.name= rimuovi_prefisso_ob(obj_LODnew.name)
+                    obj_LODnew.name = rimuovi_prefisso_ob(obj_LODnew.name)
 
                 obj_LODnew.data.name = 'ME_' + obj_LODnew.name
-
-                # select only the just created LOD obj
 
                 bpy.ops.object.select_all(action='DESELECT')
                 obj_LODnew.select_set(True)
                 context.view_layer.objects.active = obj_LODnew
 
-                # Saving on obj/mtl file for currentLOD
-                #-----------------------------------------------------------------
-                print('Saving on obj/mtl file for '+ currentLOD +'...')
+                print('Saving on obj/mtl file for ' + currentLOD + '...')
                 activename = bpy.path.clean_name(obj_LODnew.name)
                 fn = os.path.join(basedir, subfolder, activename)
                 bpy.ops.wm.obj_export(filepath=fn + ".obj", check_existing=True, filter_blender=False, filter_backup=False, filter_image=False, filter_movie=False, filter_python=False, filter_font=False, filter_sound=False, filter_text=False, filter_archive=False, filter_btx=False, filter_collada=False, filter_alembic=False, filter_usd=False, filter_obj=False, filter_volume=False, filter_folder=True, filter_blenlib=False, filemode=8, display_type='DEFAULT', sort_method='DEFAULT', export_animation=False, start_frame=-2147483648, end_frame=2147483647, forward_axis='Y', up_axis='Z', global_scale=1.0, apply_modifiers=True, export_eval_mode='DAG_EVAL_VIEWPORT', export_selected_objects=True, export_uv=True, export_normals=True,  export_materials=True, export_pbr_extensions=False, path_mode='RELATIVE', export_triangulated_mesh=False, export_curves_as_nurbs=False, export_object_groups=False, export_material_groups=False, export_vertex_groups=False, export_smooth_groups=False, smooth_group_bitflags=False, filter_glob='*.obj;*.mtl')
-                #bpy.ops.export_scene.obj(filepath=fn + ".obj", use_selection=True, axis_forward='Y', axis_up='Z', path_mode='RELATIVE')
-
-                print('>>> "'+obj_LODnew.name+'" ('+str(ob_counter)+'/'+ str(ob_tot) +') object baked in '+str(time.time() - start_time_ob)+' seconds')
+                print('>>> "' + obj_LODnew.name + '" (' + str(ob_counter) + '/' + str(ob_tot) + ') object baked in ' + str(time.time() - start_time_ob) + ' seconds')
                 ob_counter += 1
 
             i_lodbake_counter += 1
         end_time = time.time() - start_time
         context.scene.render.bake.margin = last_margin_val
-
         print('<<<<<<< Process done >>>>>>')
-        print('>>>'+str(ob_tot)+' objects processed in '+str(end_time)+' seconds')
+        print('>>>' + str(ob_tot) + ' objects processed in ' + str(end_time) + ' seconds')
         return {'FINISHED'}
 
 def rimuovi_prefisso_ob(stringa):
     if stringa.startswith("OB_"):
-        return stringa[3:]  # Rimuovi i primi 3 caratteri (OB_)
+        return stringa[3:]
     return stringa
 
 #_______________________________________________________________________________________________
@@ -279,15 +300,12 @@ class OBJECT_OT_ExportGroupsLOD(bpy.types.Operator):
 
     def execute(self, context):
         start_time = time.time()
-
         if bpy.context.scene.model_export_dir:
             basedir = bpy.path.abspath(os.path.dirname(bpy.context.scene.model_export_dir))
             subfolder = ''
         else:
             basedir = bpy.path.abspath(os.path.dirname(bpy.data.filepath))
             subfolder = 'FBX'
-
-        #basedir = os.path.dirname(bpy.data.filepath)
         if not basedir:
             raise Exception("Blend file is not saved")
         ob_counter = 1
@@ -296,7 +314,7 @@ class OBJECT_OT_ExportGroupsLOD(bpy.types.Operator):
         for obj in listobjects:
             if obj.type == 'EMPTY':
                 if obj.get('fbx_type') is not None:
-                    print('Found LOD cluster to export: "'+obj.name+'", object')
+                    print('Found LOD cluster to export: "' + obj.name + '", object')
                     bpy.ops.object.select_all(action='DESELECT')
                     obj.select_set(True)
                     bpy.context.view_layer.objects.active = obj
@@ -308,17 +326,14 @@ class OBJECT_OT_ExportGroupsLOD(bpy.types.Operator):
                 else:
                     print('The "' + obj.name + '" empty object has not the correct settings to export an FBX - LOD enabled file. I will skip it.')
                     obj.select_set(False)
-                    print('>>> Object number '+str(ob_counter)+' processed in '+str(time.time() - start_time)+' seconds')
+                    print('>>> Object number ' + str(ob_counter) + ' processed in ' + str(time.time() - start_time) + ' seconds')
                     ob_counter += 1
-
         end_time = time.time() - start_time
         print('<<<<<<< Process done >>>>>>')
-        print('>>>'+str(ob_counter)+' objects processed in '+str(end_time)+' seconds')
-
+        print('>>>' + str(ob_counter) + ' objects processed in ' + str(end_time) + ' seconds')
         return {'FINISHED'}
 
 #_______________________________________________________________
-
 
 class OBJECT_OT_RemoveGroupsLOD(bpy.types.Operator):
     """Removes LOD cluster(s)"""
@@ -344,7 +359,6 @@ class OBJECT_OT_RemoveGroupsLOD(bpy.types.Operator):
 
 #_______________________________________________________________
 
-
 class OBJECT_OT_CreateGroupsLOD(bpy.types.Operator):
     """Creates LOD cluster(s): empty objects with nested LODs"""
     bl_idname = "create.grouplod"
@@ -358,16 +372,14 @@ class OBJECT_OT_CreateGroupsLOD(bpy.types.Operator):
             obj.select_set(True)
             bpy.context.view_layer.objects.active = obj
             baseobjwithlod = obj.name
-
             if '_LOD0' in baseobjwithlod:
                 baseobj = baseobjwithlod.replace("_LOD0", "")
                 print('Found LOD0 object:' + baseobjwithlod)
                 local_bbox_center = 0.125 * sum((Vector(b) for b in obj.bound_box), Vector())
                 global_bbox_center = obj.matrix_world @ local_bbox_center
                 emptyofname = 'GLOD_' + baseobj
-                obempty = bpy.data.objects.new( emptyofname, None )
+                obempty = bpy.data.objects.new(emptyofname, None)
                 bpy.context.collection.objects.link(obempty)
-
                 obempty.empty_display_size = 2
                 obempty.empty_display_type = 'PLAIN_AXES'
                 obempty.location = global_bbox_center
@@ -375,7 +387,6 @@ class OBJECT_OT_CreateGroupsLOD(bpy.types.Operator):
                 obempty.select_set(True)
                 bpy.context.view_layer.objects.active = obempty
                 obempty['fbx_type'] = 'LodGroup'
-
                 num = 0
                 child = selectLOD(listobjects, num, baseobj)
                 print(child)
@@ -384,12 +395,6 @@ class OBJECT_OT_CreateGroupsLOD(bpy.types.Operator):
                 while child is not None:
                     child.parent = obempty
                     child.matrix_parent_inverse = obempty.matrix_world.inverted()
-                    #oldway to do this:
-                    #bpy.ops.object.select_all(action='DESELECT')
-                    #child.select_set(True)
-                    #obempty.select_set(True)
-                    #bpy.context.view_layer.objects.active = obempty
-                    #bpy.ops.object.parent_set(type='OBJECT', keep_transform=False)
                     num += 1
                     print(str(num))
                     child = selectLOD(listobjects, num, baseobj)
@@ -402,61 +407,34 @@ class OBJECT_OT_changeLOD(bpy.types.Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
-
         context = bpy.context
         scene = context.scene
-        #collection = context.collection
-
         lod_list_clear(context) 
-
-        LOD_target = "LOD"+str(context.scene.setLODnum)
-
+        LOD_target = "LOD" + str(context.scene.setLODnum)
         selection = bpy.context.selected_objects
-
-        #bpy.ops.object.select_all(action='DESELECT')
-
         LODS = ["LOD0", "LOD1", "LOD2", "LOD3", "LOD4", "LOD5"]
-
         librerie = []
-
         lod_list_item_counter = 0
-
         for objs_to_check in selection:
             current_obj_LOD = objs_to_check.name[-4:]
-            #object_clean_name = objs_to_check.name[:-4]
             if current_obj_LOD == LOD_target or current_obj_LOD not in LODS:
                 pass
             else:
                 if objs_to_check.library is not None:
                     if objs_to_check.library.name not in librerie:
                         librerie.append(objs_to_check.library.name)
-                    #print("L'oggetto "+objs_to_check.name + " appartiene alla libreria " + objs_to_check.library.name)
-                    #objs_to_check.select_set(True)
                     scene.lod_list_item.add()
                     scene.lod_list_item[lod_list_item_counter].name = objs_to_check.name
                     scene.lod_list_item[lod_list_item_counter].libreria_lod = objs_to_check.library.name
-                    lod_list_item_counter +=1
-                    #print("oggetto aggiunto: "+scene.lod_list_item[lod_list_item_counter].name)
-
+                    lod_list_item_counter += 1
         for libreria in librerie:
-            
             library_path = bpy.data.libraries[libreria].filepath
-
             with bpy.data.libraries.load(library_path, link=True) as (data_from, data_to):
-                #data_to.objects = [target_name]#data.objects[target_name] #[name for name in data_from.objects if name.endswith("_LOD0")]
                 data_to.objects = [name for name in data_from.objects if name.endswith(LOD_target)]
-            
             for object_in_lod_list in scene.lod_list_item:
-                #print(object_in_lod_list.name)
-                #print("nella lista: "+object_in_lod_list.libreria_lod)
-                #print("nella libreria: "+libreria)
                 if object_in_lod_list.libreria_lod == libreria:
-                    #print("ho trovato oggetto che ha la medesima libreria")
                     current_LOD = object_in_lod_list.name[-4:]
-                   
-                    #object_clean_name = object_in_library[:-4]
                     target_name = object_in_lod_list.name.replace(current_LOD, LOD_target)
-                    
                     found = False
                     for object_in_library in data_to.objects:
                         if object_in_library.name == target_name:
@@ -465,18 +443,14 @@ class OBJECT_OT_changeLOD(bpy.types.Operator):
                             for collection in bpy.data.collections:
                                 for obj in collection.all_objects:
                                     if obj.name == object_in_lod_list.name:
-                                        
                                         collection_list_for_current_ob.append(collection.name)
-                                        
                             for relevant_collection in collection_list_for_current_ob:
                                 bpy.data.collections[relevant_collection].objects.link(bpy.data.objects[target_name])
                                 bpy.data.collections[relevant_collection].objects.unlink(bpy.data.objects[object_in_lod_list.name])
                     if not found:
                         object_clean_name = target_name[:-5]
-                        print('The object "'+object_clean_name+'" has no '+ LOD_target+" in library")
-
+                        print('The object "' + object_clean_name + '" has no ' + LOD_target + " in library")
         return {'FINISHED'}
-
 
 class OBJECT_OT_changemeshLOD(bpy.types.Operator):
     """Change LOD for selected objects with linked meshes and update object names"""
@@ -489,20 +463,16 @@ class OBJECT_OT_changemeshLOD(bpy.types.Operator):
     def execute(self, context):
         scene = context.scene
         LOD_target = f"LOD{scene.setLODnum}"
-
         selection = context.selected_objects
         libraries = {obj.data.library.name for obj in selection if obj.type == 'MESH' and obj.data.library}
-
         for lib_name in libraries:
             self.process_library(lib_name, LOD_target, selection)
-
         return {'FINISHED'}
 
     def process_library(self, lib_name, LOD_target, selection):
         library = bpy.data.libraries[lib_name]
         with bpy.data.libraries.load(library.filepath, link=True) as (data_from, data_to):
             data_to.meshes = [name for name in data_from.meshes if name.endswith(LOD_target)]
-
         for obj in selection:
             if obj.type == 'MESH' and obj.data.library and obj.data.library.name == lib_name:
                 current_mesh_name = obj.data.name
@@ -514,7 +484,6 @@ class OBJECT_OT_changemeshLOD(bpy.types.Operator):
     def replace_mesh_and_rename_object(self, obj, target_mesh_name):
         if target_mesh_name in bpy.data.meshes:
             obj.data = bpy.data.meshes[target_mesh_name]
-            # Rinomina l'oggetto per corrispondere al nome della nuova mesh
             obj.name = target_mesh_name
             self.report({'INFO'}, f"Object and mesh updated to {target_mesh_name}")
         else:
@@ -523,8 +492,6 @@ class OBJECT_OT_changemeshLOD(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         return context.selected_objects and any(obj.type == 'MESH' and obj.data.library for obj in context.selected_objects)
-
-
 
 class OBJECT_OT_open_linked_file(bpy.types.Operator):
     """Open the .blend file containing the linked mesh or object of the active object in a new Blender instance"""
@@ -539,7 +506,6 @@ class OBJECT_OT_open_linked_file(bpy.types.Operator):
 
     def execute(self, context):
         obj = context.active_object
-        
         if obj.library:
             linked_file = obj.library.filepath
         elif obj.data and obj.data.library:
@@ -547,27 +513,18 @@ class OBJECT_OT_open_linked_file(bpy.types.Operator):
         else:
             self.report({'ERROR'}, "No linked file found for the active object.")
             return {'CANCELLED'}
-
-        # Ensure the file path is absolute
         linked_file = bpy.path.abspath(linked_file)
-
         if not os.path.exists(linked_file):
             self.report({'ERROR'}, f"Linked file not found: {linked_file}")
             return {'CANCELLED'}
-
-        # Get the path to the Blender executable
         blender_exe = bpy.app.binary_path
-
-        # Open the linked file in a new Blender instance
         try:
             subprocess.Popen([blender_exe, linked_file])
             self.report({'INFO'}, f"Opened linked file in new Blender instance: {linked_file}")
         except Exception as e:
             self.report({'ERROR'}, f"Failed to open new Blender instance: {str(e)}")
             return {'CANCELLED'}
-
         return {'FINISHED'}
-
 
 class ToolsPanelLODmanager:
     bl_label = "LOD manager"
@@ -577,28 +534,20 @@ class ToolsPanelLODmanager:
 
     def draw(self, context):
         layout = self.layout
-        obj = context.object
         scene = context.scene
 
         row = layout.row()
         row.label(text="Change LOD of selected linked objects:")
         row = layout.row()
-
         split = layout.split()
-        # First column
         col = split.column()
         col.prop(scene, 'setLODnum', icon='BLENDER', toggle=True)
-        # Second column, aligned
         col = split.column(align=True)
         col.operator("change.lod", text='set LOD')
-        #self.layout.operator("change.lod", icon="MESH_UVSPHERE", text='set LOD')
-
         col = split.column(align=True)
         col.operator("object.change_lod", text='set mesh LOD')
-
         row = layout.row()
         row.operator("object.open_linked_file", text='Open linked source')
-  
 
 class ToolsPanelLODgenerator:
     bl_label = "LOD generator"
@@ -608,71 +557,77 @@ class ToolsPanelLODgenerator:
 
     def draw(self, context):
         layout = self.layout
-        obj = context.object
         scene = context.scene
 
-        if obj:#.type==['MESH']:
+
+
+        if context.object:
             self.layout.operator("lod0.creation", icon="MESH_UVSPHERE", text='LOD 0 (set as)')
             row = layout.row()
-
             split = layout.split()
-            # First column
+            col = split.column(align=True)
+            col.prop(scene, 'LOD_pad_on', text="UV Pad")
+            col = split.column(align=True)
+            col.prop(scene, 'LOD_use_scene_settings', text="Use scene lights")
+            #split = layout.split()
+            col = split.column()
+            col.prop(scene, "atlas_uv_recalc", text="Recalculate Atlas")
+
+            if scene.atlas_uv_recalc:
+                split = layout.split()
+                col = split.column(align=True)
+                col.prop(scene, "atlas_uv_algorithm", text="Alghoritm")
+            row = layout.row()
+            split = layout.split()
+            col = split.column()
+            col.label(text="Texture Format:")
+            col = split.column()
+            col.prop(scene, "texture_format", text="")
+            if scene.texture_format == 'PNG':
+                col.prop(scene, "use_alpha", text="Use Alpha Channel")
+            #layout.separator()
+            split = layout.split()
             col = split.column()
             col.prop(scene, 'LODnum', icon='BLENDER', toggle=True)
-            # Second column, aligned
-            col = split.column(align=True)
-            col.prop(scene, 'LOD_pad_on', text="Pad")
-            col = split.column(align=True)
-            col.prop(scene, 'LOD_use_scene_settings', text="Scene light")
-            col = split.column(align=True)
-            
-            #col.operator("lod.creation", icon="MOD_MULTIRES", text='')
-            col.operator("lod.creation", text='generate')
+
             if scene.LODnum >= 1:
-                split = layout.split()
-                # First column
+                col.label(text="LOD 1")
                 col = split.column()
                 col.label(text="Geometry")
-                #col.label(text="ratio")
                 col.prop(scene, 'LOD1_dec_ratio', icon='BLENDER', toggle=True, text="")
-                # Second column, aligned
                 col = split.column()
                 col.label(text="Texture")
-                #col.label(text="resolution")
                 col.prop(scene, 'LOD1_tex_res', icon='BLENDER', toggle=True, text="")
                 if scene.LODnum >= 2:
                     split = layout.split()
-                    # First column
+                    col = split.column()
+                    col.label(text="LOD 2")
                     col = split.column()
                     col.prop(scene, 'LOD2_dec_ratio', icon='BLENDER', toggle=True, text="")
                     col = split.column()
-                    # Second column, aligned
                     col.prop(scene, 'LOD2_tex_res', icon='BLENDER', toggle=True, text="")
-
                     if scene.LODnum >= 3:
                         split = layout.split()
-                        # First column
+                        col = split.column()
+                        col.label(text="LOD 3")
                         col = split.column()
                         col.prop(scene, 'LOD3_dec_ratio', icon='BLENDER', toggle=True, text="")
                         col = split.column()
-                        # Second column, aligned
                         col.prop(scene, 'LOD3_tex_res', icon='BLENDER', toggle=True, text="")
-
+            
+            row = layout.row()            
+            row.operator("lod.creation", text='-->    generate LODs    <--')
             row = layout.row()
             row.label(text="LOD clusters")
-
             split = layout.split()
-            # First column
             col = split.column()
             col.operator("create.grouplod", icon="PRESET", text='')
-            # Second column, aligned
             col = split.column(align=True)
             col.operator("remove.grouplod", icon="CANCEL", text='')
-
             row = layout.row()
             row.label(text="LOD cluster(s) export:")
             row = layout.row()
-            row.prop(context.scene, 'model_export_dir', toggle = True, text='folder')
+            row.prop(context.scene, 'model_export_dir', toggle=True, text='folder')
             self.layout.operator("exportfbx.grouplod", icon="MESH_GRID", text='FBX')
 
 class VIEW3D_PT_LODgenerator(Panel, ToolsPanelLODgenerator):
@@ -684,7 +639,6 @@ class VIEW3D_PT_LODmanager(Panel, ToolsPanelLODmanager):
     bl_category = "3DSC"
     bl_idname = "VIEW3D_PT_LODmanager"
     bl_context = "objectmode"
-
 
 classes = [
     OBJECT_OT_changemeshLOD,
@@ -704,44 +658,65 @@ def register():
         bpy.utils.register_class(cls)
 
     bpy.types.Scene.setLODnum = bpy.props.IntProperty(name="LOD Level", default=0, min=0, max=5)
-
-    bpy.types.Scene.LODnum = IntProperty(
-        name = "LODs",
-        default = 1,
-        min = 1,
-        max = 5,
-        description = "Enter desired number of LOD (Level of Detail)"
-        )
-
-    bpy.types.Scene.LOD1_tex_res = IntProperty(
-        name = "Resolution Texture of the LOD1",
-        default = 2048,
-        description = "Enter the resolution for the texture of the LOD1")
-
-    bpy.types.Scene.LOD2_tex_res = IntProperty(
-        name = "Resolution Texture of the LOD2",
-        default = 512,
-        description = "Enter the resolution for the texture of the LOD2"
-        )
-
-    bpy.types.Scene.LOD3_tex_res = IntProperty(
-        name = "Resolution Texture of the LOD3",
-        default = 128,
-        description = "Enter the resolution for the texture of the LOD3"
-        )
-
-    bpy.types.Scene.LOD_pad_on = BoolProperty(
-        name = "Padding ratio of the LOD",
-        default = True,
-        description = "Enter the paddin ratio for the LOD"
-        )
-
-    bpy.types.Scene.LOD_use_scene_settings = BoolProperty(
-        name = "Using scene settings for bake LOD",
-        default = False,
-        description = "Enter the paddin ratio for the LOD"
-        )
-
+    bpy.types.Scene.LODnum = bpy.props.IntProperty(
+        name="LODs",
+        default=1,
+        min=1,
+        max=5,
+        description="Enter desired number of LOD (Level of Detail)"
+    )
+    bpy.types.Scene.LOD1_tex_res = bpy.props.IntProperty(
+        name="Resolution Texture of the LOD1",
+        default=2048,
+        description="Enter the resolution for the texture of the LOD1"
+    )
+    bpy.types.Scene.LOD2_tex_res = bpy.props.IntProperty(
+        name="Resolution Texture of the LOD2",
+        default=512,
+        description="Enter the resolution for the texture of the LOD2"
+    )
+    bpy.types.Scene.LOD3_tex_res = bpy.props.IntProperty(
+        name="Resolution Texture of the LOD3",
+        default=128,
+        description="Enter the resolution for the texture of the LOD3"
+    )
+    bpy.types.Scene.LOD_pad_on = bpy.props.BoolProperty(
+        name="Padding ratio of the LOD",
+        default=True,
+        description="Enter the padding ratio for the LOD"
+    )
+    bpy.types.Scene.LOD_use_scene_settings = bpy.props.BoolProperty(
+        name="Using scene settings for bake LOD",
+        default=False,
+        description="Use scene bake settings for the LOD"
+    )
+    # Nuove proprietà per il ricalcolo UV Atlas
+    bpy.types.Scene.atlas_uv_recalc = bpy.props.BoolProperty(
+        name="Recalculate Atlas UV", default=False,
+        description="If enabled, recalculate the Atlas UV mapping"
+    )
+    bpy.types.Scene.atlas_uv_algorithm = bpy.props.EnumProperty(
+        name="UV Algorithm",
+        items=[
+            ('SMART', "Smart UV (Faster)", ""),
+            ('ANGLE', "Angle Based", ""),
+            ('CONFORMAL', "Conformal", ""),
+            ('MINIMUM', "Minimum Stretch", "")
+        ],
+        default='SMART',
+        description="Select the UV mapping algorithm for the Atlas"
+    )
+    # Nuove proprietà per il formato texture
+    bpy.types.Scene.texture_format = bpy.props.EnumProperty(
+        name="Texture Format",
+        items=[('JPG', "JPG", ""), ('PNG', "PNG", "")],
+        default='JPG',
+        description="Choose texture file format"
+    )
+    bpy.types.Scene.use_alpha = bpy.props.BoolProperty(
+        name="Use Alpha", default=False,
+        description="If enabled, PNG textures will include an alpha channel"
+    )
 
 def unregister():
     for cls in classes:
@@ -756,7 +731,10 @@ def unregister():
     del bpy.types.Scene.LOD3_dec_ratio
     del bpy.types.Scene.LOD_pad_on
     del bpy.types.Scene.LOD_use_scene_settings
-
+    del bpy.types.Scene.atlas_uv_recalc
+    del bpy.types.Scene.atlas_uv_algorithm
+    del bpy.types.Scene.texture_format
+    del bpy.types.Scene.use_alpha
 
 if __name__ == "__main__":
     register()
