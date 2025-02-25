@@ -170,6 +170,10 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                     print('Creating new UV mapping layer.')
                     create_double_UV(obj_LODnew)
 
+                # Mesh decimation
+                if ratio_for_current_lod(i_lodbake_counter, context) < 1:           
+                    decimate_mesh(context, obj_LODnew, ratio_for_current_lod(i_lodbake_counter, context), currentLOD)
+
                 obj_LOD0.data.uv_layers["MultiTex"].active_render = True
 
                 # Se l'opzione è attiva, ricalcola l'UV mapping dell'Atlas usando l'algoritmo scelto
@@ -199,8 +203,6 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                         bpy.ops.uv.smart_project(scale_to_bounds=True)
                     bpy.ops.object.mode_set(mode='OBJECT')
 
-                # Mesh decimation
-                decimate_mesh(context, obj_LODnew, ratio_for_current_lod(i_lodbake_counter, context), currentLOD)
 
                 print('Creating new texture atlas for ' + currentLOD + '....')
                 tex_res = tex_res_for_current_lod(i_lodbake_counter, context)
