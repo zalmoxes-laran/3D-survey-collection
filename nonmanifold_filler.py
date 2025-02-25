@@ -45,23 +45,14 @@ class MESH_OT_fill_nonmanifold(Operator):
         if obj.mode != 'OBJECT':
             bpy.ops.object.mode_set(mode='OBJECT')
         
-        # Create or update the 'nodata' material
-        nodata_mat = self.get_or_create_nodata_material(context)
+        # Always create a new material (removing the old one if it exists)
+        self.remove_existing_nodata_material()
+        nodata_mat = self.create_new_nodata_material(context)
         
-        # Assign the material to the object if not already assigned
-        if nodata_mat.name not in [slot.material.name for slot in obj.material_slots if slot.material]:
-            obj.data.materials.append(nodata_mat)
-        
-        # Get the slot index for the nodata material
-        nodata_slot_index = -1
-        for i, slot in enumerate(obj.material_slots):
-            if slot.material and slot.material.name == nodata_mat.name:
-                nodata_slot_index = i
-                break
-        
-        # Set the active material slot to nodata material
-        if nodata_slot_index >= 0:
-            obj.active_material_index = nodata_slot_index
+        # Assign the material to the object
+        obj.data.materials.append(nodata_mat)
+        nodata_slot_index = len(obj.material_slots) - 1
+        obj.active_material_index = nodata_slot_index
         
         # Switch to edit mode and select edges
         bpy.ops.object.mode_set(mode='EDIT')
@@ -103,26 +94,29 @@ class MESH_OT_fill_nonmanifold(Operator):
         
         return {'FINISHED'}
     
-    def get_or_create_nodata_material(self, context):
-        # Check if nodata material already exists
+    def remove_existing_nodata_material(self):
+        """Remove the existing nodata material if it exists"""
         nodata_mat = bpy.data.materials.get("nodata")
-        
-        # If material doesn't exist, create it
-        if not nodata_mat:
-            nodata_mat = bpy.data.materials.new(name="nodata")
-            nodata_mat.use_nodes = True
-            self.recreate_material_nodes(nodata_mat)
-        # If it exists but our axis or scale changed, update it
-        elif (context.scene.grid_axis != self.grid_axis or 
-              context.scene.grid_scale != self.grid_scale):
-            self.recreate_material_nodes(nodata_mat)
-        
-        return nodata_mat
+        if nodata_mat:
+            # Remove from all objects that use it
+            for obj in bpy.data.objects:
+                if obj.type == 'MESH':
+                    for i, slot in enumerate(obj.material_slots):
+                        if slot.material and slot.material.name == "nodata":
+                            obj.active_material_index = i
+                            bpy.ops.object.material_slot_remove()
+            
+            # Remove the material from the blend file
+            bpy.data.materials.remove(nodata_mat)
     
-    def recreate_material_nodes(self, material):
-        """Recreate the material node setup from scratch"""
-        nodes = material.node_tree.nodes
-        links = material.node_tree.links
+    def create_new_nodata_material(self, context):
+        """Create a new nodata material from scratch"""
+        nodata_mat = bpy.data.materials.new(name="nodata")
+        nodata_mat.use_nodes = True
+        
+        # Get the node tree
+        nodes = nodata_mat.node_tree.nodes
+        links = nodata_mat.node_tree.links
         
         # Clear all nodes
         nodes.clear()
@@ -150,7 +144,7 @@ class MESH_OT_fill_nonmanifold(Operator):
         # Settaggi specifici come nell'immagine
         wave_tex.wave_type = 'BANDS'
         wave_tex.bands_direction = self.grid_axis
-        wave_tex.wave_profile = 'SIN'
+        wave_tex.wave_profile = 'SIN'  # Corretto da SINE a SIN
         wave_tex.inputs['Scale'].default_value = self.grid_scale
         wave_tex.inputs['Distortion'].default_value = 0.0
         wave_tex.inputs['Detail'].default_value = 0.0
@@ -174,6 +168,8 @@ class MESH_OT_fill_nonmanifold(Operator):
         
         # Link color ramp to emission
         links.new(color_ramp.outputs['Color'], emission.inputs['Color'])
+        
+        return nodata_mat
 
 
 class MESH_OT_adjust_nodata_material(Operator):
@@ -274,7 +270,7 @@ class MESH_OT_remove_nodata_patches(Operator):
         # Deselect everything
         bpy.ops.mesh.select_all(action='DESELECT')
         
-        # Select faces with nodata material (metodo corretto)
+        # Select faces with nodata material
         obj.active_material_index = nodata_slot_index
         bpy.ops.object.material_slot_select()
         
@@ -283,6 +279,14 @@ class MESH_OT_remove_nodata_patches(Operator):
         
         # Return to object mode
         bpy.ops.object.mode_set(mode='OBJECT')
+        
+        # Remove the material slot
+        obj.active_material_index = nodata_slot_index
+        bpy.ops.object.material_slot_remove()
+        
+        # Remove the material from the blend file if it's not used anymore
+        if nodata_mat.users == 0:
+            bpy.data.materials.remove(nodata_mat)
         
         self.report({'INFO'}, "Removed patches with nodata material")
         
