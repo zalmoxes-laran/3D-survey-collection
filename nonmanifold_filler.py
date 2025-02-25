@@ -1,13 +1,33 @@
 import bpy
 import bmesh
 from bpy.types import Operator, Panel
-from bpy.props import BoolProperty, FloatProperty, EnumProperty
+from bpy.props import BoolProperty, FloatProperty, EnumProperty, FloatVectorProperty
 
 class MESH_OT_fill_nonmanifold(Operator):
-    """Fill non-manifold edges with faces and apply nodata grid pattern material"""
+    """Fill non-manifold edges with faces and apply nodata pattern material"""
     bl_idname = "mesh.fill_nonmanifold"
-    bl_label = "Fill and Apply Grid Pattern"
+    bl_label = "Fill and Apply Pattern"
     bl_options = {'REGISTER', 'UNDO'}
+    
+    fill_type: EnumProperty(
+        name="Fill Type",
+        description="Type of fill pattern to apply",
+        items=[
+            ('SOLID', "Solid Color", "Fill with a solid color"),
+            ('GRID', "Grid Pattern", "Fill with a grid pattern"),
+        ],
+        default='SOLID'
+    )
+    
+    solid_color: FloatVectorProperty(
+        name="Color",
+        description="Solid color for fill",
+        subtype='COLOR',
+        default=(0.8, 0.8, 0.8, 1.0),
+        min=0.0,
+        max=1.0,
+        size=4
+    )
     
     grid_axis: EnumProperty(
         name="Grid Axis",
@@ -40,6 +60,13 @@ class MESH_OT_fill_nonmanifold(Operator):
     
     def execute(self, context):
         obj = context.active_object
+        
+        # Store parameters in scene properties
+        context.scene.fill_type = self.fill_type
+        context.scene.solid_color = self.solid_color
+        context.scene.grid_axis = self.grid_axis
+        context.scene.grid_scale = self.grid_scale
+        context.scene.use_f2_addon = self.use_f2
         
         # Ensure we're in object mode
         if obj.mode != 'OBJECT':
@@ -85,7 +112,8 @@ class MESH_OT_fill_nonmanifold(Operator):
                 except Exception as e:
                     self.report({'WARNING'}, f"F2 addon error: {str(e)}")
             
-            self.report({'INFO'}, f"Filled non-manifold edges and applied grid pattern material")
+            fill_type_name = "solid color" if self.fill_type == 'SOLID' else "grid pattern"
+            self.report({'INFO'}, f"Filled non-manifold edges and applied {fill_type_name} material")
         else:
             self.report({'INFO'}, "No non-manifold edges found")
         
@@ -110,7 +138,7 @@ class MESH_OT_fill_nonmanifold(Operator):
             bpy.data.materials.remove(nodata_mat)
     
     def create_new_nodata_material(self, context):
-        """Create a new nodata material from scratch"""
+        """Create a new nodata material based on the selected fill type"""
         nodata_mat = bpy.data.materials.new(name="nodata")
         nodata_mat.use_nodes = True
         
@@ -133,50 +161,78 @@ class MESH_OT_fill_nonmanifold(Operator):
         # Link emission to output
         links.new(emission.outputs['Emission'], output.inputs['Surface'])
         
-        # Create texture coordinate node
-        tex_coord = nodes.new('ShaderNodeTexCoord')
-        tex_coord.location = (-600, 0)
+        # Store the fill type in the material for reference
+        nodata_mat["fill_type"] = self.fill_type
         
-        # Create wave texture node
-        wave_tex = nodes.new('ShaderNodeTexWave')
-        wave_tex.name = "Wave Texture"
-        wave_tex.location = (-200, 0)
-        # Settaggi specifici come nell'immagine
-        wave_tex.wave_type = 'BANDS'
-        wave_tex.bands_direction = self.grid_axis
-        wave_tex.wave_profile = 'SIN'  # Corretto da SINE a SIN
-        wave_tex.inputs['Scale'].default_value = self.grid_scale
-        wave_tex.inputs['Distortion'].default_value = 0.0
-        wave_tex.inputs['Detail'].default_value = 0.0
-        wave_tex.inputs['Detail Scale'].default_value = 0.0
-        wave_tex.inputs['Detail Roughness'].default_value = 0.0
-        wave_tex.inputs['Phase Offset'].default_value = 0.0
-        
-        # Link texture coordinate to wave texture
-        links.new(tex_coord.outputs['Generated'], wave_tex.inputs['Vector'])
-        
-        # Create color ramp for the pattern
-        color_ramp = nodes.new('ShaderNodeValToRGB')
-        color_ramp.location = (0, 0)
-        color_ramp.color_ramp.elements[0].position = 0.48
-        color_ramp.color_ramp.elements[0].color = (1.0, 1.0, 1.0, 1.0)  # White
-        color_ramp.color_ramp.elements[1].position = 0.52
-        color_ramp.color_ramp.elements[1].color = (0.0, 0.0, 0.0, 1.0)  # Black
-        
-        # Link wave texture to color ramp
-        links.new(wave_tex.outputs['Color'], color_ramp.inputs['Fac'])
-        
-        # Link color ramp to emission
-        links.new(color_ramp.outputs['Color'], emission.inputs['Color'])
+        if self.fill_type == 'SOLID':
+            # For solid color, directly set the emission color
+            emission.inputs['Color'].default_value = self.solid_color
+            
+        elif self.fill_type == 'GRID':
+            # Create texture coordinate node
+            tex_coord = nodes.new('ShaderNodeTexCoord')
+            tex_coord.location = (-600, 0)
+            
+            # Create wave texture node
+            wave_tex = nodes.new('ShaderNodeTexWave')
+            wave_tex.name = "Wave Texture"
+            wave_tex.location = (-200, 0)
+            # Configure wave texture
+            wave_tex.wave_type = 'BANDS'
+            wave_tex.bands_direction = self.grid_axis
+            wave_tex.wave_profile = 'SIN'
+            wave_tex.inputs['Scale'].default_value = self.grid_scale
+            wave_tex.inputs['Distortion'].default_value = 0.0
+            wave_tex.inputs['Detail'].default_value = 0.0
+            wave_tex.inputs['Detail Scale'].default_value = 0.0
+            wave_tex.inputs['Detail Roughness'].default_value = 0.0
+            wave_tex.inputs['Phase Offset'].default_value = 0.0
+            
+            # Link texture coordinate to wave texture
+            links.new(tex_coord.outputs['Generated'], wave_tex.inputs['Vector'])
+            
+            # Create color ramp for the pattern
+            color_ramp = nodes.new('ShaderNodeValToRGB')
+            color_ramp.location = (0, 0)
+            color_ramp.color_ramp.elements[0].position = 0.48
+            color_ramp.color_ramp.elements[0].color = (1.0, 1.0, 1.0, 1.0)  # White
+            color_ramp.color_ramp.elements[1].position = 0.52
+            color_ramp.color_ramp.elements[1].color = (0.0, 0.0, 0.0, 1.0)  # Black
+            
+            # Link wave texture to color ramp
+            links.new(wave_tex.outputs['Color'], color_ramp.inputs['Fac'])
+            
+            # Link color ramp to emission
+            links.new(color_ramp.outputs['Color'], emission.inputs['Color'])
         
         return nodata_mat
 
 
 class MESH_OT_adjust_nodata_material(Operator):
-    """Adjust the grid pattern of the nodata material"""
+    """Adjust the pattern of the nodata material"""
     bl_idname = "mesh.adjust_nodata_material"
-    bl_label = "Update Grid"
+    bl_label = "Update Pattern"
     bl_options = {'REGISTER', 'UNDO'}
+    
+    fill_type: EnumProperty(
+        name="Fill Type",
+        description="Type of fill pattern to apply",
+        items=[
+            ('SOLID', "Solid Color", "Fill with a solid color"),
+            ('GRID', "Grid Pattern", "Fill with a grid pattern"),
+        ],
+        default='SOLID'
+    )
+    
+    solid_color: FloatVectorProperty(
+        name="Color",
+        description="Solid color for fill",
+        subtype='COLOR',
+        default=(0.8, 0.8, 0.8, 1.0),
+        min=0.0,
+        max=1.0,
+        size=4
+    )
     
     grid_axis: EnumProperty(
         name="Grid Axis",
@@ -209,22 +265,77 @@ class MESH_OT_adjust_nodata_material(Operator):
             self.report({'ERROR'}, "Nodata material not found")
             return {'CANCELLED'}
         
-        # Update the material
-        nodes = nodata_mat.node_tree.nodes
-        wave_tex = nodes.get("Wave Texture")
+        # Store current settings
+        context.scene.fill_type = self.fill_type
+        context.scene.solid_color = self.solid_color
+        context.scene.grid_axis = self.grid_axis
+        context.scene.grid_scale = self.grid_scale
         
-        if wave_tex:
-            wave_tex.bands_direction = self.grid_axis
-            wave_tex.inputs['Scale'].default_value = self.grid_scale
+        # Recreate the material
+        nodes = nodata_mat.node_tree.nodes
+        links = nodata_mat.node_tree.links
+        
+        # Clear all nodes
+        nodes.clear()
+        
+        # Create output node
+        output = nodes.new('ShaderNodeOutputMaterial')
+        output.location = (600, 0)
+        
+        # Create emission node for shadeless look
+        emission = nodes.new('ShaderNodeEmission')
+        emission.location = (400, 0)
+        emission.inputs['Strength'].default_value = 1.0  # Make it shadeless
+        
+        # Link emission to output
+        links.new(emission.outputs['Emission'], output.inputs['Surface'])
+        
+        # Store the fill type in the material for reference
+        nodata_mat["fill_type"] = self.fill_type
+        
+        if self.fill_type == 'SOLID':
+            # For solid color, directly set the emission color
+            emission.inputs['Color'].default_value = self.solid_color
+            self.report({'INFO'}, "Updated to solid color")
             
-            # Update the scene properties to match
-            context.scene.grid_axis = self.grid_axis
-            context.scene.grid_scale = self.grid_scale
+        elif self.fill_type == 'GRID':
+            # Create texture coordinate node
+            tex_coord = nodes.new('ShaderNodeTexCoord')
+            tex_coord.location = (-600, 0)
+            
+            # Create wave texture node
+            wave_tex = nodes.new('ShaderNodeTexWave')
+            wave_tex.name = "Wave Texture"
+            wave_tex.location = (-200, 0)
+            # Configure wave texture
+            wave_tex.wave_type = 'BANDS'
+            wave_tex.bands_direction = self.grid_axis
+            wave_tex.wave_profile = 'SIN'
+            wave_tex.inputs['Scale'].default_value = self.grid_scale
+            wave_tex.inputs['Distortion'].default_value = 0.0
+            wave_tex.inputs['Detail'].default_value = 0.0
+            wave_tex.inputs['Detail Scale'].default_value = 0.0
+            wave_tex.inputs['Detail Roughness'].default_value = 0.0
+            wave_tex.inputs['Phase Offset'].default_value = 0.0
+            
+            # Link texture coordinate to wave texture
+            links.new(tex_coord.outputs['Generated'], wave_tex.inputs['Vector'])
+            
+            # Create color ramp for the pattern
+            color_ramp = nodes.new('ShaderNodeValToRGB')
+            color_ramp.location = (0, 0)
+            color_ramp.color_ramp.elements[0].position = 0.48
+            color_ramp.color_ramp.elements[0].color = (1.0, 1.0, 1.0, 1.0)  # White
+            color_ramp.color_ramp.elements[1].position = 0.52
+            color_ramp.color_ramp.elements[1].color = (0.0, 0.0, 0.0, 1.0)  # Black
+            
+            # Link wave texture to color ramp
+            links.new(wave_tex.outputs['Color'], color_ramp.inputs['Fac'])
+            
+            # Link color ramp to emission
+            links.new(color_ramp.outputs['Color'], emission.inputs['Color'])
             
             self.report({'INFO'}, f"Updated grid pattern settings")
-        else:
-            self.report({'ERROR'}, "Wave Texture node not found in nodata material")
-            return {'CANCELLED'}
         
         return {'FINISHED'}
 
@@ -304,24 +415,39 @@ class VIEW3D_PT_nonmanifold_filler(Panel):
     
     def draw(self, context):
         layout = self.layout
+        scene = context.scene
         
         layout.label(text="Fill areas with missing surface data")
         
-        # Create Patch section
-        row = layout.row()
-        row.prop(context.scene, "grid_axis", text="Axis")
-        row = layout.row()
-        row.prop(context.scene, "grid_scale", text="Scale")
-        row = layout.row()
-        row.prop(context.scene, "use_f2_addon", text="Use F2 Addon")
-        row = layout.row()
-        row.operator("mesh.fill_nonmanifold", icon="GRID", text="Fill and Apply Grid Pattern")
+        # Fill Type dropdown
+        layout.prop(scene, "fill_type", text="Fill Type")
         
-        # Adjust and Remove - on the same row
+        # Parameters based on fill type
+        if scene.fill_type == 'SOLID':
+            layout.prop(scene, "solid_color", text="")
+        elif scene.fill_type == 'GRID':
+            layout.prop(scene, "grid_axis", text="Axis")
+            layout.prop(scene, "grid_scale", text="Scale")
+        
+        # F2 option
+        layout.prop(scene, "use_f2_addon", text="Use F2 Addon")
+        
+        # Fill button
+        row = layout.row()
+        op = row.operator("mesh.fill_nonmanifold", icon="NODE_MATERIAL")
+        op.fill_type = scene.fill_type
+        op.solid_color = scene.solid_color
+        op.grid_axis = scene.grid_axis
+        op.grid_scale = scene.grid_scale
+        op.use_f2 = scene.use_f2_addon
+        
+        # Update and Remove
         row = layout.row(align=True)
-        op = row.operator("mesh.adjust_nodata_material", icon="NODE_MATERIAL", text="Update Grid")
-        op.grid_axis = context.scene.grid_axis
-        op.grid_scale = context.scene.grid_scale
+        op = row.operator("mesh.adjust_nodata_material", icon="FILE_REFRESH", text="Update Pattern")
+        op.fill_type = scene.fill_type
+        op.solid_color = scene.solid_color
+        op.grid_axis = scene.grid_axis
+        op.grid_scale = scene.grid_scale
         row.operator("mesh.remove_nodata_patches", icon="TRASH", text="Remove Patches")
 
 # Classes for registration
@@ -337,6 +463,26 @@ def register():
         bpy.utils.register_class(cls)
     
     # Register properties
+    bpy.types.Scene.fill_type = bpy.props.EnumProperty(
+        name="Fill Type",
+        description="Type of fill pattern to apply",
+        items=[
+            ('SOLID', "Solid Color", "Fill with a solid color"),
+            ('GRID', "Grid Pattern", "Fill with a grid pattern"),
+        ],
+        default='SOLID'
+    )
+    
+    bpy.types.Scene.solid_color = bpy.props.FloatVectorProperty(
+        name="Color",
+        description="Solid color for fill",
+        subtype='COLOR',
+        default=(0.8, 0.8, 0.8, 1.0),
+        min=0.0,
+        max=1.0,
+        size=4
+    )
+    
     bpy.types.Scene.grid_axis = bpy.props.EnumProperty(
         name="Grid Axis",
         description="Axis for grid pattern",
@@ -367,6 +513,8 @@ def unregister():
         bpy.utils.unregister_class(cls)
     
     # Remove properties
+    del bpy.types.Scene.fill_type
+    del bpy.types.Scene.solid_color
     del bpy.types.Scene.grid_axis
     del bpy.types.Scene.grid_scale
     del bpy.types.Scene.use_f2_addon
