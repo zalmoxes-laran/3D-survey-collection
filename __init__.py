@@ -85,6 +85,8 @@ from .utils import mesh_cleaner
 
 from . import slicer
 
+from . import nonmanifold_filler
+
 # demo bare-bones preferences
 @addon_updater_ops.make_annotations
 
@@ -423,6 +425,8 @@ def register():
 
     slicer.register()
 
+    nonmanifold_filler.register()
+
     check_external_modules()
     bpy.types.WindowManager.interface_vars = bpy.props.PointerProperty(type=InterfaceVars)
     bpy.types.WindowManager.ccToolViewVar = bpy.props.PointerProperty(type=ccToolViewVar)
@@ -577,7 +581,7 @@ def unregister():
     LODgenerator.unregister()
     mesh_cleaner.unregister()
     slicer.unregister()
-
+    nonmanifold_filler.unregister()
 
     del bpy.types.WindowManager.interface_vars
     del bpy.types.WindowManager.suffix_num
