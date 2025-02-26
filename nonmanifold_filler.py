@@ -54,6 +54,12 @@ class MESH_OT_fill_nonmanifold(Operator):
         default=True
     )
     
+    improve_geometry: BoolProperty(
+        name="Improve Geometry",
+        description="Beautify and triangulate the filling for better topology",
+        default=True
+    )
+    
     @classmethod
     def poll(cls, context):
         return context.active_object is not None and context.active_object.type == 'MESH'
@@ -67,6 +73,7 @@ class MESH_OT_fill_nonmanifold(Operator):
         context.scene.grid_axis = self.grid_axis
         context.scene.grid_scale = self.grid_scale
         context.scene.use_f2_addon = self.use_f2
+        context.scene.improve_geometry = self.improve_geometry
         
         # Ensure we're in object mode
         if obj.mode != 'OBJECT':
@@ -99,6 +106,11 @@ class MESH_OT_fill_nonmanifold(Operator):
         if selected_edges_count > 0:
             # Fill using edge_face_add (standard Blender operation)
             bpy.ops.mesh.edge_face_add()
+            
+            # Improve geometry if option is enabled
+            if self.improve_geometry:
+                bpy.ops.mesh.quads_convert_to_tris(quad_method='BEAUTY', ngon_method='BEAUTY')
+                bpy.ops.mesh.beautify_fill()
             
             # Assign nodata material to the new faces
             bpy.ops.object.material_slot_assign()
@@ -432,6 +444,9 @@ class VIEW3D_PT_nonmanifold_filler(Panel):
         # F2 option
         layout.prop(scene, "use_f2_addon", text="Use F2 Addon")
         
+        # Improve geometry option
+        layout.prop(scene, "improve_geometry", text="Improve Geometry")
+        
         # Fill button
         row = layout.row()
         op = row.operator("mesh.fill_nonmanifold", icon="NODE_MATERIAL")
@@ -440,6 +455,7 @@ class VIEW3D_PT_nonmanifold_filler(Panel):
         op.grid_axis = scene.grid_axis
         op.grid_scale = scene.grid_scale
         op.use_f2 = scene.use_f2_addon
+        op.improve_geometry = scene.improve_geometry
         
         # Update and Remove
         row = layout.row(align=True)
@@ -507,6 +523,12 @@ def register():
         default=True,
         description="Use F2 addon for better fill results if available"
     )
+    
+    bpy.types.Scene.improve_geometry = bpy.props.BoolProperty(
+        name="Improve Geometry",
+        default=True,
+        description="Beautify and triangulate the filling for better topology"
+    )
 
 def unregister():
     for cls in reversed(classes):
@@ -518,6 +540,7 @@ def unregister():
     del bpy.types.Scene.grid_axis
     del bpy.types.Scene.grid_scale
     del bpy.types.Scene.use_f2_addon
+    del bpy.types.Scene.improve_geometry
 
 if __name__ == "__main__":
     register()
