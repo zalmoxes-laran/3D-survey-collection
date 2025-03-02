@@ -160,30 +160,48 @@ class OBJECT_OT_organize_lods_to_collections(bpy.types.Operator):
         # Dictionary to track collections and objects
         lod_collections = {}
         
-        # Examine each object's name to determine its LOD
+        # First pass: identify all LOD patterns and create collections
         for obj in selected_objects:
-            # Use regex to find LOD pattern in the name
             import re
             lod_match = re.search(r'LOD\d+', obj.name)
             
             if lod_match:
                 lod_name = lod_match.group()
                 
-                # Get or create the collection for this LOD
+                # Create collection if it doesn't exist
                 if lod_name not in lod_collections:
-                    # Check if collection already exists
                     if lod_name in bpy.data.collections:
                         lod_collections[lod_name] = bpy.data.collections[lod_name]
                     else:
-                        # Create new collection directly under the scene collection
                         new_collection = bpy.data.collections.new(lod_name)
                         context.scene.collection.children.link(new_collection)
                         lod_collections[lod_name] = new_collection
+        
+        # Second pass: organize objects
+        for obj in selected_objects:
+            lod_match = re.search(r'LOD\d+', obj.name)
+            
+            if lod_match:
+                lod_name = lod_match.group()
+                target_collection = lod_collections[lod_name]
                 
-                # Link object to appropriate collection if not already there
-                if obj.name not in lod_collections[lod_name].objects:
-                    # Link to new collection
-                    lod_collections[lod_name].objects.link(obj)
+                # Skip if object is already in the target collection
+                if obj.name in target_collection.objects:
+                    continue
+                
+                # Get all collections containing this object (except Scene Collection)
+                current_collections = []
+                for col in bpy.data.collections:
+                    if obj.name in col.objects and col != context.scene.collection:
+                        current_collections.append(col)
+                
+                # Add to target collection
+                target_collection.objects.link(obj)
+                
+                # Remove from other collections (except the target collection)
+                for col in current_collections:
+                    if col != target_collection:
+                        col.objects.unlink(obj)
             else:
                 self.report({'INFO'}, f"No LOD pattern found in object: {obj.name}")
         
