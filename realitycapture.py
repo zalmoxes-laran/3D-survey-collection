@@ -197,10 +197,10 @@ class OBJECT_OT_organize_lods_to_collections(bpy.types.Operator):
                 
                 # Add to target collection
                 target_collection.objects.link(obj)
-                
-                # Remove from other collections (except the target collection)
-                for col in current_collections:
-                    if col != target_collection:
+
+                # Remove from ALL other collections (except the Scene Collection)
+                for col in bpy.data.collections:
+                    if obj.name in col.objects and col != target_collection and col != context.scene.collection:
                         col.objects.unlink(obj)
             else:
                 self.report({'INFO'}, f"No LOD pattern found in object: {obj.name}")
