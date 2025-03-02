@@ -144,6 +144,56 @@ class OBJECT_OT_TextureRC(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class OBJECT_OT_organize_lods_to_collections(bpy.types.Operator):
+    """Organize selected objects into collections based on their LOD suffix"""
+    bl_idname = "organize.lods_to_collections"
+    bl_label = "Organize LODs to Collections"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        selected_objects = context.selected_objects
+        
+        if not selected_objects:
+            self.report({'WARNING'}, "No objects selected")
+            return {'CANCELLED'}
+        
+        # Dictionary to track collections and objects
+        lod_collections = {}
+        
+        # Examine each object's name to determine its LOD
+        for obj in selected_objects:
+            # Use regex to find LOD pattern in the name
+            import re
+            lod_match = re.search(r'LOD\d+', obj.name)
+            
+            if lod_match:
+                lod_name = lod_match.group()
+                
+                # Get or create the collection for this LOD
+                if lod_name not in lod_collections:
+                    # Check if collection already exists
+                    if lod_name in bpy.data.collections:
+                        lod_collections[lod_name] = bpy.data.collections[lod_name]
+                    else:
+                        # Create new collection directly under the scene collection
+                        new_collection = bpy.data.collections.new(lod_name)
+                        context.scene.collection.children.link(new_collection)
+                        lod_collections[lod_name] = new_collection
+                
+                # Link object to appropriate collection if not already there
+                if obj.name not in lod_collections[lod_name].objects:
+                    # Link to new collection
+                    lod_collections[lod_name].objects.link(obj)
+            else:
+                self.report({'INFO'}, f"No LOD pattern found in object: {obj.name}")
+        
+        if not lod_collections:
+            self.report({'WARNING'}, "No LOD patterns found in selected objects")
+            return {'CANCELLED'}
+        
+        self.report({'INFO'}, f"Organized objects into {len(lod_collections)} LOD collections")
+        return {'FINISHED'}
+
 
 class OBJECT_OT_correct_rc_lod_names(bpy.types.Operator):
     """Correct names of imported LOD objs"""
@@ -407,12 +457,15 @@ class ToolsPanel_dsc_RC:
         layout.operator("object.export_cleaned_obj", text="Export Cleaned OBJ BL->CS")
         layout.operator("object.texture_rc", text="Texture in RC")
         
-
-
-        row = layout.row()
+        layout.separator()
+        box = layout.box()
+        box.label(text="RealityCapture Tools:")
+        row = box.row()
         self.layout.operator("import.reconstruction_region", text="Import Reconstruction Region")
-        row = layout.row()
-        row.operator("correct.rcnames", icon="DECORATE_DRIVER", text='Correct rc names')
+        row = box.row()
+        row.operator("correct.rcnames", icon="DECORATE_DRIVER", text='Correct RC Names')
+        row = box.row()
+        row.operator("organize.lods_to_collections", icon="OUTLINER_COLLECTION", text='Organize LODs to Collections')
 
 
 
@@ -438,7 +491,8 @@ classes = [
     OBJECT_OT_ImportOBJ,
     OBJECT_OT_ExportCleanedOBJ,
     OBJECT_OT_TextureRC,
-    OBJECT_OT_ExportLOD
+    OBJECT_OT_ExportLOD,
+    OBJECT_OT_organize_lods_to_collections
 ]
 
 
@@ -465,9 +519,3 @@ def unregister():
 
 if __name__ == "__main__":
     register()
-
-
-
-
-
-
