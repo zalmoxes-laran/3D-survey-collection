@@ -415,7 +415,7 @@ def register():
     #exporter_cesium.export_tile_model.register()
     PhotogrTool.register()
     multimesh_manager.register()
-    #realitycapture.register()
+    realitycapture.register()
     
     #cesium_preprocessing.register()
 
@@ -575,7 +575,7 @@ def unregister():
     PhotogrTool.unregister()
     #exporter_cesium.export_tile_model.unregister()
     multimesh_manager.unregister()
-    #realitycapture.unregister()
+    realitycapture.unregister()
     functions.unregister()
     #cesium_preprocessing.unregister()
     LODgenerator.unregister()
