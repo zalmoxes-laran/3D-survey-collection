@@ -214,7 +214,7 @@ class OBJECT_OT_organize_lods_to_collections(bpy.types.Operator):
 
 
 class OBJECT_OT_correct_rc_lod_names(bpy.types.Operator):
-    """Correct names of imported LOD objs"""
+    """Correct names of imported LOD objs, meshes and materials"""
     bl_idname = "correct.rcnames"
     bl_label = "__LODx_number to __number_LODx"
     bl_options = {'REGISTER', 'UNDO'}
@@ -241,9 +241,40 @@ class OBJECT_OT_correct_rc_lod_names(bpy.types.Operator):
                 # Ricostruisci il nome nel formato desiderato
                 new_name = f"{parts[0]}_{number_part}_{lod_part}"
 
+                # Rinomina anche la mesh associata se l'oggetto è di tipo mesh
+                if obj.type == 'MESH' and obj.data:
+                    # Applica lo stesso pattern di ridenominazione alla mesh
+                    mesh_parts = re.split('_+', obj.data.name)
+                    if len(mesh_parts) > 2 and 'LOD' in mesh_parts[1]:
+                        new_mesh_name = f"{mesh_parts[0]}_{mesh_parts[2]}_{mesh_parts[1]}"
+                        obj.data.name = new_mesh_name
+                        print(f"Mesh rinominata in '{new_mesh_name}'")
+                    else:
+                        # Se la mesh non ha lo stesso pattern, usa il nuovo nome dell'oggetto
+                        obj.data.name = f"ME_{new_name}"
+                        print(f"Mesh rinominata in 'ME_{new_name}'")
+                
+                # Rinomina i materiali associati
+                if obj.type == 'MESH': 
+                    for slot in obj.material_slots:
+                        if slot.material:
+                            # Per i materiali, usiamo un pattern di ricerca diverso
+                            mat_name = slot.material.name
+                            # Cerca pattern come "Acropoli_LOD2_u0_v0"
+                            match = re.search(r'(.+?)_(LOD\d+)_(.+)', mat_name)
+                            if match:
+                                base_name = match.group(1)  # "Acropoli"
+                                lod_part = match.group(2)   # "LOD2"
+                                suffix = match.group(3)     # "u0_v0"
+                                
+                                # Riorganizza nel formato desiderato
+                                new_mat_name = f"{base_name}_{suffix}_{lod_part}"
+                                slot.material.name = new_mat_name
+                                print(f"Materiale rinominato in '{new_mat_name}'")
+
                 # Assegna il nuovo nome all'oggetto
                 obj.name = new_name
-                print(f"Rinominato in '{new_name}'")
+                print(f"Oggetto rinominato in '{new_name}'")
 
 
 class ReconstructionRegion:
