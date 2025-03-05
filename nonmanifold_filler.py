@@ -79,9 +79,14 @@ class MESH_OT_fill_nonmanifold(Operator):
         if obj.mode != 'OBJECT':
             bpy.ops.object.mode_set(mode='OBJECT')
         
-        # Always create a new material (removing the old one if it exists)
-        self.remove_existing_nodata_material()
-        nodata_mat = self.create_new_nodata_material(context)
+        # Create a unique material name based on the object's name
+        material_name = f"nodata_{obj.name}"
+        
+        # Remove existing material if it exists for this specific object
+        self.remove_existing_nodata_material(obj, material_name)
+        
+        # Create a new material
+        nodata_mat = self.create_new_nodata_material(context, material_name)
         
         # Assign the material to the object
         obj.data.materials.append(nodata_mat)
@@ -134,24 +139,24 @@ class MESH_OT_fill_nonmanifold(Operator):
         
         return {'FINISHED'}
     
-    def remove_existing_nodata_material(self):
-        """Remove the existing nodata material if it exists"""
-        nodata_mat = bpy.data.materials.get("nodata")
+    def remove_existing_nodata_material(self, obj, material_name):
+        """Remove the existing nodata material from the specific object if it exists"""
+        # Check if the material exists
+        nodata_mat = bpy.data.materials.get(material_name)
         if nodata_mat:
-            # Remove from all objects that use it
-            for obj in bpy.data.objects:
-                if obj.type == 'MESH':
-                    for i, slot in enumerate(obj.material_slots):
-                        if slot.material and slot.material.name == "nodata":
-                            obj.active_material_index = i
-                            bpy.ops.object.material_slot_remove()
+            # Check if the object is using this material
+            for i, slot in enumerate(obj.material_slots):
+                if slot.material and slot.material.name == material_name:
+                    obj.active_material_index = i
+                    bpy.ops.object.material_slot_remove()
             
-            # Remove the material from the blend file
-            bpy.data.materials.remove(nodata_mat)
+            # If no other objects are using this material, remove it from the blend file
+            if nodata_mat.users == 0:
+                bpy.data.materials.remove(nodata_mat)
     
-    def create_new_nodata_material(self, context):
+    def create_new_nodata_material(self, context, material_name):
         """Create a new nodata material based on the selected fill type"""
-        nodata_mat = bpy.data.materials.new(name="nodata")
+        nodata_mat = bpy.data.materials.new(name=material_name)
         nodata_mat.use_nodes = True
         
         # Get the node tree
@@ -267,14 +272,27 @@ class MESH_OT_adjust_nodata_material(Operator):
     
     @classmethod
     def poll(cls, context):
-        return bpy.data.materials.get("nodata") is not None
+        # Check if the active object has a nodata material
+        obj = context.active_object
+        if obj and obj.type == 'MESH':
+            for slot in obj.material_slots:
+                if slot.material and slot.material.name.startswith("nodata_"):
+                    return True
+        return False
     
     def execute(self, context):
-        # Get the nodata material
-        nodata_mat = bpy.data.materials.get("nodata")
+        # Get the active object
+        obj = context.active_object
+        
+        # Find the nodata material for this object
+        nodata_mat = None
+        for slot in obj.material_slots:
+            if slot.material and slot.material.name.startswith("nodata_"):
+                nodata_mat = slot.material
+                break
         
         if not nodata_mat:
-            self.report({'ERROR'}, "Nodata material not found")
+            self.report({'ERROR'}, "Nodata material not found for this object")
             return {'CANCELLED'}
         
         # Store current settings
@@ -360,7 +378,13 @@ class MESH_OT_remove_nodata_patches(Operator):
     
     @classmethod
     def poll(cls, context):
-        return context.active_object is not None and context.active_object.type == 'MESH'
+        # Check if the active object has a nodata material
+        obj = context.active_object
+        if obj and obj.type == 'MESH':
+            for slot in obj.material_slots:
+                if slot.material and slot.material.name.startswith("nodata_"):
+                    return True
+        return False
     
     def execute(self, context):
         obj = context.active_object
@@ -369,22 +393,18 @@ class MESH_OT_remove_nodata_patches(Operator):
         if obj.mode != 'OBJECT':
             bpy.ops.object.mode_set(mode='OBJECT')
         
-        # Get the nodata material
-        nodata_mat = bpy.data.materials.get("nodata")
-        
-        if not nodata_mat:
-            self.report({'INFO'}, "No nodata material found")
-            return {'CANCELLED'}
-        
-        # Find the material index
+        # Find the nodata material for this object
+        nodata_mat = None
         nodata_slot_index = -1
+        
         for i, slot in enumerate(obj.material_slots):
-            if slot.material and slot.material.name == nodata_mat.name:
+            if slot.material and slot.material.name.startswith("nodata_"):
+                nodata_mat = slot.material
                 nodata_slot_index = i
                 break
         
-        if nodata_slot_index == -1:
-            self.report({'INFO'}, "No nodata material assigned to this object")
+        if not nodata_mat:
+            self.report({'INFO'}, "No nodata material found for this object")
             return {'CANCELLED'}
         
         # Switch to edit mode
