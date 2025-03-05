@@ -184,13 +184,7 @@ class ToolsPanelQuickUtils:
         # self.layout.operator("lod0poly.reducer", icon="IMGDISPLAY", text='LOD0 mesh decimator')
         row = layout.row()
 
-        #DA RIATTIVARE
-        self.layout.operator("circum.center", icon="PROP_OFF", text='CircumCenter')
-        row = layout.row()
-
         self.layout.operator("mesh.merge_by_distance_custom", icon="PROP_OFF", text='Vertex Merge by Distance')
-
-
 
         row = layout.row()
 
