@@ -89,6 +89,8 @@ from . import nonmanifold_filler
 
 from .utils import rotation_constrained
 
+from .utils import circumcenter_tool
+
 # demo bare-bones preferences
 @addon_updater_ops.make_annotations
 
@@ -361,7 +363,6 @@ classes = (
     QuickUtils.OBJECT_OT_removefromallgroups,
     QuickUtils.OBJECT_OT_renameGEobject,
     QuickUtils.OBJECT_OT_tiff2pngrelink,
-    QuickUtils.OBJECT_OT_circumcenter,
     QuickUtils.OBJECT_OT_remove_suffixnumber,
     QuickUtils.OBJECT_OT_setmaterial_blend,
     QuickUtils.OBJECT_OT_diffuseprincipled,
@@ -436,6 +437,7 @@ def register():
 
     #def initSceneProperties(scn):
     rotation_constrained.register()
+    circumcenter_tool.register()
 
     bpy.types.Scene.SHIFT_OBJ_on = BoolProperty(
         name = "Shifting obj export",
@@ -585,6 +587,7 @@ def unregister():
     slicer.unregister()
     nonmanifold_filler.unregister()
     rotation_constrained.unregister()
+    circumcenter_tool.unregister()
 
     del bpy.types.WindowManager.interface_vars
     del bpy.types.WindowManager.suffix_num

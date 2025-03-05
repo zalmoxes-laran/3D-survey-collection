@@ -105,82 +105,8 @@ class OBJECT_OT_setroughness(bpy.types.Operator):
                                    
         return {'FINISHED'}
 
-class OBJECT_OT_circumcenter(bpy.types.Operator):
-    """Set the cursor in the center of a circumference"""
-    bl_idname = "circum.center"
-    bl_label = "Set the cursor in the center of a circumference"
-    bl_options = {'REGISTER', 'UNDO'}
 
-    def execute(self, context):
-        obj = context.active_object
-        if not obj or obj.type != 'MESH':
-            self.report({'ERROR'}, "Select a mesh object")
-            return {'CANCELLED'}
 
-        bm = bmesh.from_edit_mesh(obj.data)
-        selected_verts = [v for v in bm.verts if v.select]
-
-        if len(selected_verts) != 3:
-            self.report({'ERROR'}, "Select exactly three vertices")
-            return {'CANCELLED'}
-
-        co_final_1 = obj.matrix_world @ selected_verts[0].co
-        ax = co_final_1[0]
-        ay = co_final_1[1]
-        co_final_2 = obj.matrix_world @ selected_verts[1].co
-        bx = co_final_2[0]
-        by = co_final_2[1]
-        co_final_3 = obj.matrix_world @ selected_verts[2].co
-        cx = co_final_3[0]
-        cy = co_final_3[1]
-        abcz = (co_final_1[2] + co_final_2[2] + co_final_3[2]) / 3
-        print(str(ax) + ", " + str(ay) + ", " + str(bx) + ", " + str(by) + ", " + str(cx) + ", " + str(cy) + "," + str(abcz))
-        
-        try:
-            ux, uy = circumcenter(ax, ay, bx, by, cx, cy)
-        except ValueError as e:
-            self.report({'ERROR'}, str(e))
-            return {'CANCELLED'}
-        
-        radius_circle = calculateDistance(ux, uy, ax, ay)
-        #bpy.ops.mesh.primitive_circle_add(vertices=32, radius=radius_circle, fill_type='NOTHING', calc_uvs=True, enter_editmode=False, align='WORLD', location=(ux, uy, abcz), rotation=(0.0, 0.0, 0.0))
-
-        # Switch to Object Mode
-        bpy.ops.object.mode_set(mode='OBJECT')
-
-        # Create a new mesh object with a circle
-        bpy.ops.object.select_all(action='DESELECT')
-        bpy.ops.object.add(type='MESH', location=(ux, uy, abcz))
-        circle_obj = context.object
-        circle_obj.name = "circumference"
-        mesh = bpy.data.meshes.new("circle_mesh")
-        circle_obj.data = mesh
-        
-        # Create a circle with vertices
-        verts = [(math.cos(theta) * radius_circle, math.sin(theta) * radius_circle, 0) for theta in [i * 2 * math.pi / 32 for i in range(32)]]
-        edges = [(i, (i + 1) % 32) for i in range(32)]
-        faces = []
-        
-        mesh.from_pydata(verts, edges, faces)
-        mesh.update()
-        
-        # Set the origin to the center of geometry
-        bpy.ops.object.origin_set(type='ORIGIN_CENTER_OF_MASS', center='BOUNDS')
-        
-        return {'FINISHED'}
-
-def circumcenter(ax, ay, bx, by, cx, cy):
-    d = 2 * ((ax * (by - cy)) + (bx * (cy - ay)) + (cx * (ay - by)))
-    if d == 0:
-        raise ValueError("I punti sono collineari e non formano un triangolo valido.")
-    
-    ux = ((ax * ax + ay * ay) * (by - cy) + (bx * bx + by * by) * (cy - ay) + (cx * cx + cy * cy) * (ay - by)) / d
-    uy = ((ax * ax + ay * ay) * (cx - bx) + (bx * bx + by * by) * (ax - cx) + (cx * cx + cy * cy) * (bx - ax)) / d
-    
-    return (ux, uy)
-
-def calculateDistance(x1, y1, x2, y2):
-    return ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
 
 class OBJECT_OT_CorrectMaterial(bpy.types.Operator):
     bl_idname = "correct.material"
