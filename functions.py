@@ -298,29 +298,33 @@ def check_children_plane(cam_ob):
             check = False
     return check
 
-def decimate_mesh(context,obj,ratio,lod):
+def decimate_mesh(context,obj,ratio,lod,decimate_border):
     selected_obs = context.selected_objects
     bpy.ops.object.select_all(action='DESELECT')
     D = bpy.data
     obj.select_set(True)
     #context.scene.objects.active = obj
     context.view_layer.objects.active = obj
-    bpy.ops.object.editmode_toggle()
+
     print('Decimating the original mesh to obtain the '+lod+' mesh...')
-    bpy.ops.mesh.select_all(action='DESELECT')
-    bpy.ops.mesh.select_mode(type="VERT")
-    bpy.ops.mesh.select_non_manifold()
-    bpy.ops.object.vertex_group_add()
-    bpy.ops.object.vertex_group_assign()
-    bpy.ops.object.editmode_toggle()
-#    bpy.data.objects[lod1name].modifiers.new("Decimate", type='DECIMATE')
     D.objects[obj.name].modifiers.new("Decimate", type='DECIMATE')
+    
+    if decimate_border:
+        bpy.ops.object.editmode_toggle()
+
+        bpy.ops.mesh.select_all(action='DESELECT')
+        bpy.ops.mesh.select_mode(type="VERT")
+        bpy.ops.mesh.select_non_manifold()
+        bpy.ops.object.vertex_group_add()
+        bpy.ops.object.vertex_group_assign()
+        bpy.ops.object.editmode_toggle()
+        
+        D.objects[obj.name].modifiers["Decimate"].vertex_group = "Group"
+        D.objects[obj.name].modifiers["Decimate"].invert_vertex_group = True
+
     D.objects[obj.name].modifiers["Decimate"].ratio = ratio
-    D.objects[obj.name].modifiers["Decimate"].vertex_group = "Group"
-    D.objects[obj.name].modifiers["Decimate"].invert_vertex_group = True
     bpy.ops.object.modifier_apply(modifier="Decimate")
-#    bpy.ops.object.modifier_apply(apply_as='DATA', modifier="Decimate")
-#    print("applied modifier")
+
 
 def setupclonepaint():
     bpy.ops.object.mode_set(mode = 'TEXTURE_PAINT')

@@ -172,7 +172,7 @@ class OBJECT_OT_LOD(bpy.types.Operator):
 
                 # Mesh decimation
                 if ratio_for_current_lod(i_lodbake_counter, context) < 1:           
-                    decimate_mesh(context, obj_LODnew, ratio_for_current_lod(i_lodbake_counter, context), currentLOD)
+                    decimate_mesh(context, obj_LODnew, ratio_for_current_lod(i_lodbake_counter, context), currentLOD, context.scene.decimate_borders)
 
                 obj_LOD0.data.uv_layers["MultiTex"].active_render = True
 
@@ -561,14 +561,15 @@ class ToolsPanelLODgenerator:
         layout = self.layout
         scene = context.scene
 
-
-
         if context.object:
             self.layout.operator("lod0.creation", icon="MESH_UVSPHERE", text='LOD 0 (set as)')
             row = layout.row()
             split = layout.split()
             col = split.column(align=True)
             col.prop(scene, 'LOD_pad_on', text="UV Pad")
+            col = split.column(align=True)
+            col.prop(scene, 'decimate_borders', text="Preserve Borders")
+            split = layout.split()
             col = split.column(align=True)
             col.prop(scene, 'LOD_use_scene_settings', text="Use scene lights")
             #split = layout.split()
@@ -719,6 +720,12 @@ def register():
         name="Use Alpha", default=False,
         description="If enabled, PNG textures will include an alpha channel"
     )
+    bpy.types.Scene.decimate_borders = bpy.props.BoolProperty(
+        name="Preserve borders", 
+        default=False,
+        description="If disabled it will not preserve the borders of the mesh"
+    )
+    
 
 def unregister():
     for cls in classes:
@@ -737,6 +744,7 @@ def unregister():
     del bpy.types.Scene.atlas_uv_algorithm
     del bpy.types.Scene.texture_format
     del bpy.types.Scene.use_alpha
+    del bpy.types.Scene.decimate_borders
 
 if __name__ == "__main__":
     register()
