@@ -7,6 +7,7 @@ from .qualitycheck import *
 
 from .utils import mesh_cleaner
 
+
 class OBJECT_OT_invertcoordinates(bpy.types.Operator):
     """Invert x and y coordinates of selected objects"""
     bl_idname = "invert.coordinates"

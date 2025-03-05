@@ -189,6 +189,9 @@ class ToolsPanelQuickUtils:
         row = layout.row()
 
         self.layout.operator("mesh.merge_by_distance_custom", icon="PROP_OFF", text='Vertex Merge by Distance')
+
+
+
         row = layout.row()
 
         # self.layout.operator("tiff2png.relink", icon="META_DATA", text='Relink images from tiff to png')
@@ -223,6 +226,7 @@ class ToolsPanelQuickUtils:
         row.operator("diffuse.principled", icon="DECORATE_DRIVER", text='Diffuse 2 Principled')
         row = box.row()
         row.operator("invert.coordinates", icon="DECORATE_DRIVER", text='Invert x and y')
+
 
 class ToolsPanel_ccTool:
     bl_label = "Color Correction"

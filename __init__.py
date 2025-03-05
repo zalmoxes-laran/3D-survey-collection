@@ -87,6 +87,8 @@ from . import slicer
 
 from . import nonmanifold_filler
 
+from .utils import rotation_constrained
+
 # demo bare-bones preferences
 @addon_updater_ops.make_annotations
 
@@ -433,7 +435,7 @@ def register():
     bpy.types.WindowManager.suffix_num = bpy.props.PointerProperty(type=SuffixVars)  
 
     #def initSceneProperties(scn):
-
+    rotation_constrained.register()
 
     bpy.types.Scene.SHIFT_OBJ_on = BoolProperty(
         name = "Shifting obj export",
@@ -582,6 +584,7 @@ def unregister():
     mesh_cleaner.unregister()
     slicer.unregister()
     nonmanifold_filler.unregister()
+    rotation_constrained.unregister()
 
     del bpy.types.WindowManager.interface_vars
     del bpy.types.WindowManager.suffix_num
