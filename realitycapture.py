@@ -143,7 +143,6 @@ class OBJECT_OT_TextureRC(bpy.types.Operator):
         self.report({'INFO'}, "Texturization completed")
         return {'FINISHED'}
 
-
 class OBJECT_OT_organize_lods_to_collections(bpy.types.Operator):
     """Organize selected objects into collections based on their LOD suffix"""
     bl_idname = "organize.lods_to_collections"
@@ -212,7 +211,6 @@ class OBJECT_OT_organize_lods_to_collections(bpy.types.Operator):
         self.report({'INFO'}, f"Organized objects into {len(lod_collections)} LOD collections")
         return {'FINISHED'}
 
-
 class OBJECT_OT_correct_rc_lod_names(bpy.types.Operator):
     """Correct names of imported LOD objs, meshes and materials"""
     bl_idname = "correct.rcnames"
@@ -275,7 +273,6 @@ class OBJECT_OT_correct_rc_lod_names(bpy.types.Operator):
                 # Assegna il nuovo nome all'oggetto
                 obj.name = new_name
                 print(f"Oggetto rinominato in '{new_name}'")
-
 
 class ReconstructionRegion:
     def __init__(self, file_path=None):
@@ -350,7 +347,7 @@ class ReconstructionRegion:
         tree.write(file_path if file_path else self.file_path, encoding='utf-8', xml_declaration=True)
         
 class ImportReconstructionRegion(bpy.types.Operator, ImportHelper):
-    """Importa una ReconstructionRegion e la disegna come geometria"""
+    """Imports a ReconstructionRegion and draws it as geometry"""
     bl_idname = "import.reconstruction_region"
     bl_label = "Import Reconstruction Region"
     
@@ -464,14 +461,6 @@ class OBJECT_OT_ExportLOD(bpy.types.Operator):
         
         return {'FINISHED'}
 
-
-
-
-
-
-
-
-
 class ToolsPanel_dsc_RC:
     bl_label = "Reality Capture Integration"
     bl_idname = "SCENE_PT_rc_panel"
@@ -516,20 +505,13 @@ class ToolsPanel_dsc_RC:
         row = box.row()
         row.operator("organize.lods_to_collections", icon="OUTLINER_COLLECTION", text='Organize LODs to Collections')
 
-
-
-
 class VIEW3D_PT_dsc_Rc_ToolBar(Panel, ToolsPanel_dsc_RC):
     bl_category = "3DSC"
     bl_idname = "VIEW3D_PT_dsc_Rc_ToolBar"
     bl_context = "objectmode"
 
-
-
 def menu_func(self, context):
     self.layout.operator(ImportReconstructionRegion.bl_idname)
-
-
 
 classes = [
     VIEW3D_PT_dsc_Rc_ToolBar,
@@ -543,7 +525,6 @@ classes = [
     OBJECT_OT_ExportLOD,
     OBJECT_OT_organize_lods_to_collections
 ]
-
 
 def register():
     for cls in classes:
