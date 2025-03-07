@@ -91,6 +91,8 @@ from .utils import rotation_constrained
 
 from .utils import circumcenter_tool
 
+from .importer import import_dxf
+
 # demo bare-bones preferences
 @addon_updater_ops.make_annotations
 
@@ -438,6 +440,7 @@ def register():
     #def initSceneProperties(scn):
     rotation_constrained.register()
     circumcenter_tool.register()
+    #import_dxf.register()
 
     bpy.types.Scene.SHIFT_OBJ_on = BoolProperty(
         name = "Shifting obj export",
@@ -588,6 +591,7 @@ def unregister():
     nonmanifold_filler.unregister()
     rotation_constrained.unregister()
     circumcenter_tool.unregister()
+    #import_dxf.unregister()
 
     del bpy.types.WindowManager.interface_vars
     del bpy.types.WindowManager.suffix_num

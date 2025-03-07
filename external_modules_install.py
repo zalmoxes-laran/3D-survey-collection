@@ -18,6 +18,7 @@ def check_external_modules():
     addon_prefs = bpy.context.preferences.addons.get(__package__, None)
     try:
         import pandas
+        import ezdxf
         #import openpyxl 
         #import webdavclient3
         #import lxml
@@ -95,7 +96,8 @@ def EMdb_xlsx_modules():
         "six",
         "openpyxl",
         "webdavclient3",
-        "lxml"
+        "lxml",
+        "ezdxf"
     ]
     return list_of_modules
 
