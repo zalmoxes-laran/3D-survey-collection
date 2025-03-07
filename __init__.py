@@ -424,7 +424,7 @@ def register():
     
     #cesium_preprocessing.register()
 
-    LODgenerator.register()
+    LODgenerator.register()  
 
     mesh_cleaner.register()
 
