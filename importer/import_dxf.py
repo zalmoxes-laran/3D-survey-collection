@@ -2,6 +2,8 @@ import bpy
 import os
 import mathutils
 from bpy.props import StringProperty, BoolProperty, FloatVectorProperty, EnumProperty
+from bpy.props import IntProperty
+
 from bpy_extras.io_utils import ImportHelper
 from bpy.types import Operator
 
