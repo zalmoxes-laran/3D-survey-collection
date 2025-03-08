@@ -472,7 +472,7 @@ class OBJECT_OT_reload_python_modules(Operator):
             return {'CANCELLED'}
 
 class DXF_PT_ImportPanel(Panel):
-    """Pannello per l'importazione di file DXF con supporto per lo shift delle coordinate"""
+    """Panel for importing DXF files with coordinate shift support"""
     bl_label = "DXF Import"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
@@ -499,7 +499,7 @@ class DXF_PT_ImportPanel(Panel):
             
             # Mostra le impostazioni di shift delle coordinate
             box = layout.box()
-            box.label(text="Coordinate Shift:")
+            box.label(text="Coordinate Shift (from the SHIFT panel):")
             row = box.row()
             row.label(text=f"X: {scene.BL_x_shift}")
             row = box.row()
