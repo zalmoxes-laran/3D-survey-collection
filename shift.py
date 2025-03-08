@@ -69,7 +69,7 @@ class OBJECT_OT_IMPORT_DSC(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return is_addon_starting_with("BlenderGIS")[0] and context.scene.BL_epsg != "Not set"    
+        return is_addon_starting_with("BlenderGIS")[0] and context.scene.BL_epsg != "NotSet"    
 
     def execute(self, context):
         # Chiamata all'operatore di conferma
@@ -215,7 +215,7 @@ class ExportCoordinateShift_dsc(Operator, ExportHelper):
 
     def write_shift_data(self, context, filepath):
         scene = context.scene
-        epsg = scene.get('BL_epsg', 'Not set')
+        epsg = scene.get('BL_epsg', 'NotSet')
         x_shift = scene.get('BL_x_shift', 0.0)
         y_shift = scene.get('BL_y_shift', 0.0)
         z_shift = scene.get('BL_z_shift', 0.0)
@@ -250,7 +250,7 @@ def register():
 
     bpy.types.Scene.BL_epsg = StringProperty(
         name="EPSG",
-        default="Not set",
+        default="NotSet",
         description="Epsg code"
     )
     bpy.types.Scene.BL_x_shift = FloatProperty(

@@ -2,7 +2,7 @@ import bpy
 import os
 import math
 import mathutils
-from bpy.props import StringProperty, BoolProperty, FloatVectorProperty, EnumProperty
+from bpy.props import StringProperty, BoolProperty, FloatVectorProperty, EnumProperty, FloatProperty
 from bpy.props import IntProperty
 
 from bpy_extras.io_utils import ImportHelper
@@ -80,6 +80,21 @@ class ImportDXF_3DSC(Operator, ImportHelper):
         max=64,
     )
     
+    # Nuove opzioni per la fusione delle linee
+    merge_by_layer: BoolProperty(
+        name="Merge by Layer",
+        description="Merge line segments by layer to reduce object count",
+        default=True,
+    )
+    
+    merge_distance_tolerance: FloatProperty(
+        name="Merge Distance Tolerance",
+        description="Maximum distance between vertices to be considered for merging (in Blender units)",
+        default=0.001,
+        min=0.0001,
+        max=1.0,
+    )
+    
     def draw(self, context):
         layout = self.layout
         
@@ -99,6 +114,13 @@ class ImportDXF_3DSC(Operator, ImportHelper):
         box.prop(self, "import_entities")
         box.prop(self, "create_collection")
         box.prop(self, "curve_resolution")
+        
+        # Sezione per le opzioni di ottimizzazione
+        box = layout.box()
+        box.label(text="Optimization Settings")
+        box.prop(self, "merge_by_layer")
+        if self.merge_by_layer:
+            box.prop(self, "merge_distance_tolerance")
     
     def execute(self, context):
         # Check if ezdxf is installed
@@ -171,38 +193,195 @@ class ImportDXF_3DSC(Operator, ImportHelper):
         
         if not lines:
             return count
+        
+        if self.merge_by_layer:
+            # Dictionary to organize lines by layer
+            lines_by_layer = {}
             
-        for line in lines:
-            start = (
-                line.dxf.start.x - shift[0],
-                line.dxf.start.y - shift[1],
-                line.dxf.start.z - shift[2] if hasattr(line.dxf.start, 'z') else -shift[2]
-            )
+            for line in lines:
+                layer = line.dxf.layer if hasattr(line.dxf, 'layer') else "0"
+                
+                start = (
+                    line.dxf.start.x - shift[0],
+                    line.dxf.start.y - shift[1],
+                    line.dxf.start.z - shift[2] if hasattr(line.dxf.start, 'z') else -shift[2]
+                )
+                
+                end = (
+                    line.dxf.end.x - shift[0],
+                    line.dxf.end.y - shift[1],
+                    line.dxf.end.z - shift[2] if hasattr(line.dxf.end, 'z') else -shift[2]
+                )
+                
+                if layer not in lines_by_layer:
+                    lines_by_layer[layer] = []
+                
+                lines_by_layer[layer].append((start, end))
             
-            end = (
-                line.dxf.end.x - shift[0],
-                line.dxf.end.y - shift[1],
-                line.dxf.end.z - shift[2] if hasattr(line.dxf.end, 'z') else -shift[2]
-            )
-            
-            # Create curve
-            curve_data = bpy.data.curves.new(name="Line", type='CURVE')
-            curve_data.dimensions = '3D'
-            curve_data.resolution_u = self.curve_resolution
-            
-            # Create spline
-            polyline = curve_data.splines.new('POLY')
-            polyline.points.add(1)  # Add one point to the two default ones
-            polyline.points[0].co = (start[0], start[1], start[2], 1.0)
-            polyline.points[1].co = (end[0], end[1], end[2], 1.0)
-            
-            # Create object with layer name if available
-            layer = line.dxf.layer if hasattr(line.dxf, 'layer') else "0"
-            curve_obj = bpy.data.objects.new(f"Line_{layer}", curve_data)
-            collection.objects.link(curve_obj)
-            count += 1
+            # Process each layer
+            for layer, line_segments in lines_by_layer.items():
+                # Skip empty layers
+                if not line_segments:
+                    continue
+                
+                # Merge connected segments into polylines
+                polylines = self.merge_segments_into_polylines(line_segments)
+                
+                # Create curve objects for each polyline
+                for i, vertices in enumerate(polylines):
+                    if not vertices:
+                        continue
+                    
+                    # Create curve data
+                    curve_data = bpy.data.curves.new(name=f"Line_{layer}", type='CURVE')
+                    curve_data.dimensions = '3D'
+                    curve_data.resolution_u = self.curve_resolution
+                    
+                    # Create spline in curve
+                    spline = curve_data.splines.new('POLY')
+                    spline.points.add(len(vertices) - 1)  # -1 because one point already exists
+                    
+                    # Set points
+                    for j, vertex in enumerate(vertices):
+                        spline.points[j].co = (vertex[0], vertex[1], vertex[2], 1.0)
+                    
+                    # Create object
+                    count_suffix = f"_{i+1}" if len(polylines) > 1 else ""
+                    curve_obj = bpy.data.objects.new(f"Line_{layer}{count_suffix}", curve_data)
+                    collection.objects.link(curve_obj)
+                    count += 1
+        else:
+            # Original implementation for individual lines
+            for line in lines:
+                start = (
+                    line.dxf.start.x - shift[0],
+                    line.dxf.start.y - shift[1],
+                    line.dxf.start.z - shift[2] if hasattr(line.dxf.start, 'z') else -shift[2]
+                )
+                
+                end = (
+                    line.dxf.end.x - shift[0],
+                    line.dxf.end.y - shift[1],
+                    line.dxf.end.z - shift[2] if hasattr(line.dxf.end, 'z') else -shift[2]
+                )
+                
+                # Create curve
+                curve_data = bpy.data.curves.new(name="Line", type='CURVE')
+                curve_data.dimensions = '3D'
+                curve_data.resolution_u = self.curve_resolution
+                
+                # Create spline
+                polyline = curve_data.splines.new('POLY')
+                polyline.points.add(1)  # Add one point to the two default ones
+                polyline.points[0].co = (start[0], start[1], start[2], 1.0)
+                polyline.points[1].co = (end[0], end[1], end[2], 1.0)
+                
+                # Create object with layer name if available
+                layer = line.dxf.layer if hasattr(line.dxf, 'layer') else "0"
+                curve_obj = bpy.data.objects.new(f"Line_{layer}", curve_data)
+                collection.objects.link(curve_obj)
+                count += 1
             
         return count
+    
+    def merge_segments_into_polylines(self, line_segments):
+        """
+        Merge line segments into continuous polylines.
+        
+        Args:
+            line_segments: List of tuples (start_point, end_point), where each point is a (x, y, z) tuple
+        
+        Returns:
+            List of polylines, where each polyline is a list of points
+        """
+        # If no segments, return empty list
+        if not line_segments:
+            return []
+        
+        # Clone the input to avoid modifying the original
+        remaining_segments = line_segments.copy()
+        polylines = []
+        tolerance = self.merge_distance_tolerance
+        
+        # Loop until all segments are processed
+        while remaining_segments:
+            # Start a new polyline with the first available segment
+            start, end = remaining_segments.pop(0)
+            current_polyline = [start, end]
+            
+            # Flag to indicate if we found a connecting segment in this iteration
+            found_connection = True
+            
+            # Keep extending the polyline until no more connections can be found
+            while found_connection and remaining_segments:
+                found_connection = False
+                last_point = current_polyline[-1]
+                
+                # Look for a segment that continues from the last point of our current polyline
+                for i, (seg_start, seg_end) in enumerate(remaining_segments):
+                    # Check if the start point of the segment is close to the last point of our polyline
+                    if self.is_same_point(last_point, seg_start, tolerance):
+                        # Add the end point to our polyline
+                        current_polyline.append(seg_end)
+                        # Remove the segment from remaining segments
+                        remaining_segments.pop(i)
+                        found_connection = True
+                        break
+                    
+                    # Check if the end point of the segment is close to the last point of our polyline
+                    elif self.is_same_point(last_point, seg_end, tolerance):
+                        # Add the start point to our polyline
+                        current_polyline.append(seg_start)
+                        # Remove the segment from remaining segments
+                        remaining_segments.pop(i)
+                        found_connection = True
+                        break
+                
+                # If we didn't find a continuation, also try to add segments to the start of the polyline
+                if not found_connection and len(current_polyline) > 1:
+                    first_point = current_polyline[0]
+                    
+                    for i, (seg_start, seg_end) in enumerate(remaining_segments):
+                        # Check if the end point of the segment is close to the first point of our polyline
+                        if self.is_same_point(first_point, seg_end, tolerance):
+                            # Insert the start point at the beginning of our polyline
+                            current_polyline.insert(0, seg_start)
+                            # Remove the segment from remaining segments
+                            remaining_segments.pop(i)
+                            found_connection = True
+                            break
+                        
+                        # Check if the start point of the segment is close to the first point of our polyline
+                        elif self.is_same_point(first_point, seg_start, tolerance):
+                            # Insert the end point at the beginning of our polyline
+                            current_polyline.insert(0, seg_end)
+                            # Remove the segment from remaining segments
+                            remaining_segments.pop(i)
+                            found_connection = True
+                            break
+            
+            # Add the completed polyline to our result list
+            polylines.append(current_polyline)
+        
+        return polylines
+    
+    def is_same_point(self, p1, p2, tolerance):
+        """
+        Check if two points are the same (within tolerance).
+        
+        Args:
+            p1: First point as (x, y, z) tuple
+            p2: Second point as (x, y, z) tuple
+            tolerance: Maximum distance for points to be considered the same
+            
+        Returns:
+            True if points are within tolerance, False otherwise
+        """
+        return (
+            abs(p1[0] - p2[0]) < tolerance and
+            abs(p1[1] - p2[1]) < tolerance and
+            abs(p1[2] - p2[2]) < tolerance
+        )
     
     def import_dxf_circles(self, modelspace, collection, shift):
         """Import CIRCLE entities from DXF"""
@@ -316,73 +495,166 @@ class ImportDXF_3DSC(Operator, ImportHelper):
         """Import POLYLINE and LWPOLYLINE entities from DXF"""
         import ezdxf
         
-        polylines = list(modelspace.query('LWPOLYLINE')) + list(modelspace.query('POLYLINE'))
-        count = 0
-        
-        if not polylines:
-            return count
+        polylines = []
+        if self.merge_by_layer:
+            # Organizziamo le polilinee per layer
+            polylines_by_layer = {}
             
-        for polyline in polylines:
-            # Get the layer name if available
-            layer = polyline.dxf.layer if hasattr(polyline.dxf, 'layer') else "0"
-            
-            # Create polyline curve
-            curve_data = bpy.data.curves.new(name=f"Polyline_{layer}", type='CURVE')
-            curve_data.dimensions = '3D'
-            curve_data.resolution_u = self.curve_resolution
-            
-            # Create spline in curve
-            spline = curve_data.splines.new('POLY')
-            
-            # Get vertices from the polyline
-            if polyline.dxftype() == 'LWPOLYLINE':
-                # LWPOLYLINE is flattened to 2D
-                points = list(polyline.get_points())
+            # Aggiungiamo le LWPOLYLINE
+            for polyline in modelspace.query('LWPOLYLINE'):
+                layer = polyline.dxf.layer if hasattr(polyline.dxf, 'layer') else "0"
                 
-                # Add points to spline
-                spline.points.add(len(points) - 1)  # -1 because one point already exists
-                
-                for j, point in enumerate(points):
-                    # LWPOLYLINEs are 2D, so we use z=0 or shift[2]
-                    spline.points[j].co = (
+                # Ottieni i punti dalla polilinea
+                points = []
+                for point in polyline.get_points():
+                    # LWPOLYLINE sono 2D, quindi utilizziamo z=0 o shift[2]
+                    points.append((
                         point[0] - shift[0],
                         point[1] - shift[1],
-                        -shift[2],
-                        1.0
-                    )
-                    
-                # Set closed flag if polyline is closed
-                spline.use_cyclic_u = polyline.closed
+                        -shift[2]
+                    ))
                 
-            elif polyline.dxftype() == 'POLYLINE':
-                # POLYLINE with vertices
+                if layer not in polylines_by_layer:
+                    polylines_by_layer[layer] = []
+                
+                polylines_by_layer[layer].append({
+                    'points': points,
+                    'closed': polyline.closed
+                })
+            
+            # Aggiungiamo le POLYLINE
+            for polyline in modelspace.query('POLYLINE'):
+                layer = polyline.dxf.layer if hasattr(polyline.dxf, 'layer') else "0"
+                
+                # Ottieni i vertici dalla polilinea
                 vertices = list(polyline.vertices)
+                points = []
                 
-                # Add points to spline
-                spline.points.add(len(vertices) - 1)  # -1 because one point already exists
-                
-                for j, vertex in enumerate(vertices):
-                    # Get 3D coordinates
+                for vertex in vertices:
+                    # Ottieni le coordinate 3D
                     x = vertex.dxf.location.x if hasattr(vertex.dxf, 'location') else 0
                     y = vertex.dxf.location.y if hasattr(vertex.dxf, 'location') else 0
                     z = vertex.dxf.location.z if hasattr(vertex.dxf, 'location') else 0
                     
-                    spline.points[j].co = (
+                    points.append((
                         x - shift[0],
                         y - shift[1],
-                        z - shift[2],
-                        1.0
-                    )
+                        z - shift[2]
+                    ))
+                
+                if layer not in polylines_by_layer:
+                    polylines_by_layer[layer] = []
+                
+                polylines_by_layer[layer].append({
+                    'points': points,
+                    'closed': polyline.is_closed
+                })
+            
+            # Crea oggetti per ogni layer
+            count = 0
+            for layer, layer_polylines in polylines_by_layer.items():
+                if not layer_polylines:
+                    continue
+                
+                # Crea curve per ogni polilinea nel layer
+                for i, poly_data in enumerate(layer_polylines):
+                    points = poly_data['points']
+                    if not points:
+                        continue
                     
-                # Set closed flag if polyline is closed
-                spline.use_cyclic_u = polyline.is_closed
+                    # Crea dati della curva
+                    curve_data = bpy.data.curves.new(name=f"Polyline_{layer}", type='CURVE')
+                    curve_data.dimensions = '3D'
+                    curve_data.resolution_u = self.curve_resolution
+                    
+                    # Crea spline nella curva
+                    spline = curve_data.splines.new('POLY')
+                    
+                    # Aggiungi punti alla spline
+                    spline.points.add(len(points) - 1)  # -1 perché un punto esiste già
+                    for j, point in enumerate(points):
+                        spline.points[j].co = (point[0], point[1], point[2], 1.0)
+                    
+                    # Imposta flag di chiusura
+                    spline.use_cyclic_u = poly_data['closed']
+                    
+                    # Crea oggetto
+                    name_suffix = f"_{i+1}" if len(layer_polylines) > 1 else ""
+                    curve_obj = bpy.data.objects.new(f"Polyline_{layer}{name_suffix}", curve_data)
+                    collection.objects.link(curve_obj)
+                    count += 1
             
-            # Create object
-            curve_obj = bpy.data.objects.new(f"Polyline_{layer}", curve_data)
-            collection.objects.link(curve_obj)
-            count += 1
+            return count
+        
+        else:
+            # Implementazione originale per polilinee individuali
+            polylines = list(modelspace.query('LWPOLYLINE')) + list(modelspace.query('POLYLINE'))
+            count = 0
             
-        return count
+            if not polylines:
+                return count
+                
+            for polyline in polylines:
+                # Get the layer name if available
+                layer = polyline.dxf.layer if hasattr(polyline.dxf, 'layer') else "0"
+                
+                # Create polyline curve
+                curve_data = bpy.data.curves.new(name=f"Polyline_{layer}", type='CURVE')
+                curve_data.dimensions = '3D'
+                curve_data.resolution_u = self.curve_resolution
+                
+                # Create spline in curve
+                spline = curve_data.splines.new('POLY')
+                
+                # Get vertices from the polyline
+                if polyline.dxftype() == 'LWPOLYLINE':
+                    # LWPOLYLINE is flattened to 2D
+                    points = list(polyline.get_points())
+                    
+                    # Add points to spline
+                    spline.points.add(len(points) - 1)  # -1 because one point already exists
+                    
+                    for j, point in enumerate(points):
+                        # LWPOLYLINEs are 2D, so we use z=0 or shift[2]
+                        spline.points[j].co = (
+                            point[0] - shift[0],
+                            point[1] - shift[1],
+                            -shift[2],
+                            1.0
+                        )
+                        
+                    # Set closed flag if polyline is closed
+                    spline.use_cyclic_u = polyline.closed
+                    
+                elif polyline.dxftype() == 'POLYLINE':
+                    # POLYLINE with vertices
+                    vertices = list(polyline.vertices)
+                    
+                    # Add points to spline
+                    spline.points.add(len(vertices) - 1)  # -1 because one point already exists
+                    
+                    for j, vertex in enumerate(vertices):
+                        # Get 3D coordinates
+                        x = vertex.dxf.location.x if hasattr(vertex.dxf, 'location') else 0
+                        y = vertex.dxf.location.y if hasattr(vertex.dxf, 'location') else 0
+                        z = vertex.dxf.location.z if hasattr(vertex.dxf, 'location') else 0
+                        
+                        spline.points[j].co = (
+                            x - shift[0],
+                            y - shift[1],
+                            z - shift[2],
+                            1.0
+                        )
+                        
+                    # Set closed flag if polyline is closed
+                    spline.use_cyclic_u = polyline.is_closed
+                
+                # Create object
+                curve_obj = bpy.data.objects.new(f"Polyline_{layer}", curve_data)
+                collection.objects.link(curve_obj)
+                count += 1
+                
+            return count
     
     def import_dxf_text(self, modelspace, collection, shift):
         """Import TEXT entities from DXF"""

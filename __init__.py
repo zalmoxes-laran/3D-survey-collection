@@ -486,7 +486,7 @@ def register():
 
     bpy.types.Scene.camera_type = StringProperty(
         name = "Camera type",
-        default = "Not set",
+        default = "NotSet",
         description = "Current camera type"
         )
 
