@@ -127,6 +127,10 @@ def ezdxf_modules():
     list_of_modules = [
         "ezdxf",
         "pyparsing",
+        "typing_extensions", 
+        "numpy",              
+        "matplotlib",
+        "fontTools"         
     ]
     return list_of_modules
 
@@ -137,10 +141,26 @@ def kml_modules():
 
     return list_of_modules 
 
+
 def install_modules(list_of_modules):
     Pip.upgrade_pip()
     for module_istall in list_of_modules:
         Pip.install(module_istall)
+    
+    # Forza il percorso python a ricaricare i pacchetti sito
+    try:
+        import site
+        import sys
+        site.main()  # Ricarica i percorsi dei pacchetti
+        print("Python paths reloaded")
+        
+        # Stampa i percorsi Python per debug
+        print("Python paths:")
+        for p in sys.path:
+            print(f"  {p}")
+    except Exception as e:
+        print(f"Error reloading Python paths: {str(e)}")
+
 
 def uninstall_modules(list_of_modules):
     for module_istall in list_of_modules:

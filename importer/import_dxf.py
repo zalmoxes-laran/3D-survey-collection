@@ -8,6 +8,22 @@ from bpy.props import IntProperty
 from bpy_extras.io_utils import ImportHelper
 from bpy.types import Operator, Panel
 
+
+def check_ezdxf_installed():
+    """Verifica se il modulo ezdxf è installato e accessibile da Blender"""
+    try:
+        import ezdxf
+        # Se importiamo con successo, restituiamo True e la versione
+        return True, ezdxf.__version__
+    except ImportError as e:
+        # Registra dettagli sull'errore di importazione
+        print(f"Errore di importazione ezdxf: {str(e)}")
+        return False, str(e)
+    except Exception as e:
+        # Gestisce altri possibili errori
+        print(f"Errore con ezdxf: {str(e)}")
+        return False, str(e)
+
 class OBJECT_OT_IMPORTDXF(Operator):
     """Import DXF file with coordinate shifting support"""
     bl_idname = "import_dxf.button"
@@ -420,6 +436,41 @@ class ImportDXF_3DSC(Operator, ImportHelper):
         return count
 
 
+class OBJECT_OT_reload_python_modules(Operator):
+    """Reload Python modules path to detect installed packages"""
+    bl_idname = "import_dxf.reload_modules"
+    bl_label = "Reload Python Modules"
+    
+    def execute(self, context):
+        try:
+            import site
+            import sys
+            import importlib
+            
+            # Ricarica i percorsi dei pacchetti sito
+            site.main()
+            
+            # Ricarica il modulo se è già stato caricato
+            if "ezdxf" in sys.modules:
+                importlib.reload(sys.modules["ezdxf"])
+                
+            # Tenta di importare il modulo
+            try:
+                import ezdxf
+                self.report({'INFO'}, f"ezdxf module loaded successfully - version: {ezdxf.__version__}")
+            except ImportError as e:
+                self.report({'WARNING'}, f"Could not load ezdxf: {str(e)}")
+            
+            # Stampa i percorsi Python per debug
+            print("Python paths:")
+            for p in sys.path:
+                print(f"  {p}")
+                
+            return {'FINISHED'}
+        except Exception as e:
+            self.report({'ERROR'}, f"Error reloading Python paths: {str(e)}")
+            return {'CANCELLED'}
+
 class DXF_PT_ImportPanel(Panel):
     """Pannello per l'importazione di file DXF con supporto per lo shift delle coordinate"""
     bl_label = "DXF Import"
@@ -436,18 +487,15 @@ class DXF_PT_ImportPanel(Panel):
         layout = self.layout
         scene = context.scene
         
-        # Verifica se ezdxf è installato
-        ezdxf_installed = False
-        try:
-            import ezdxf
-            ezdxf_installed = True
-        except ImportError:
-            ezdxf_installed = False
+        # Test più rigoroso per ezdxf
+        is_installed, version_info = check_ezdxf_installed()
         
         # Mostra il pulsante per importare DXF se ezdxf è installato
-        if ezdxf_installed:
+        if is_installed:
             row = layout.row(align=True)
             row.operator("import_dxf.button", icon="IMPORT", text="Import DXF File")
+            row = layout.row()
+            row.label(text=f"ezdxf version: {version_info}")
             
             # Mostra le impostazioni di shift delle coordinate
             box = layout.box()
@@ -461,30 +509,42 @@ class DXF_PT_ImportPanel(Panel):
         else:
             # Se ezdxf non è installato, mostra un messaggio e un pulsante per installarlo
             box = layout.box()
-            box.label(text="Module 'ezdxf' is required", icon="ERROR")
-            box.label(text="for importing DXF files")
+            box.label(text="Module 'ezdxf' is not detected", icon="ERROR")
+            box.label(text=f"Error: {version_info}")
             
-            # Bottone per installare il modulo ezdxf
+            # Aggiungi un pulsante di ricarica per rigenerare i path dopo l'installazione
+            row = layout.row(align=True)
+            row.operator("import_dxf.reload_modules", icon="FILE_REFRESH", text="Reload Python Paths")
+            
+            # Bottone per installare
             row = layout.row(align=True)
             op = row.operator("install_3dsc_missing.modules", icon="IMPORT", text="Install ezdxf module")
             op.is_install = True
             op.list_modules_to_install = "ezdxf"
+            
+            # Suggerimento per riavviare Blender
+            box = layout.box()
+            box.label(text="Tip: After installation, you may need")
+            box.label(text="to restart Blender for changes to take effect")
 
 
 # Registra e deregistra le classi
+
 def register():
-    try:
-        import ezdxf
-        print("Module 'ezdxf' is already installed.")
-    except ImportError:
-        print("Warning: 'ezdxf' module not found. DXF import may not work correctly.")
-        print("Please install it via pip: pip install ezdxf or use the install button in the UI.")
-    
+    is_installed, version_info = check_ezdxf_installed()
+    if is_installed:
+        print(f"Module 'ezdxf' is installed - version: {version_info}")
+    else:
+        print(f"Module 'ezdxf' is not available: {version_info}")
+        print("Please install it via the UI button or restart Blender after installation")
+ 
     bpy.utils.register_class(OBJECT_OT_IMPORTDXF)
     bpy.utils.register_class(ImportDXF_3DSC)
     bpy.utils.register_class(DXF_PT_ImportPanel)
+    bpy.utils.register_class(OBJECT_OT_reload_python_modules)
 
 def unregister():
     bpy.utils.unregister_class(DXF_PT_ImportPanel)
     bpy.utils.unregister_class(ImportDXF_3DSC)
     bpy.utils.unregister_class(OBJECT_OT_IMPORTDXF)
+    bpy.utils.unregister_class(OBJECT_OT_reload_python_modules)
