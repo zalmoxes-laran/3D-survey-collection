@@ -1,11 +1,12 @@
 import bpy
 import os
+import math
 import mathutils
 from bpy.props import StringProperty, BoolProperty, FloatVectorProperty, EnumProperty
 from bpy.props import IntProperty
 
 from bpy_extras.io_utils import ImportHelper
-from bpy.types import Operator
+from bpy.types import Operator, Panel
 
 class OBJECT_OT_IMPORTDXF(Operator):
     """Import DXF file with coordinate shifting support"""
@@ -88,7 +89,7 @@ class ImportDXF_3DSC(Operator, ImportHelper):
         try:
             import ezdxf
         except ImportError:
-            self.report({'ERROR'}, "The 'ezdxf' module is required. Please install it via pip: pip install ezdxf")
+            self.report({'ERROR'}, "The 'ezdxf' module is required. Please install it from the DXF Import panel")
             return {'CANCELLED'}
         
         # Get shift values from 3DSC addon
@@ -418,16 +419,72 @@ class ImportDXF_3DSC(Operator, ImportHelper):
             
         return count
 
+
+class DXF_PT_ImportPanel(Panel):
+    """Pannello per l'importazione di file DXF con supporto per lo shift delle coordinate"""
+    bl_label = "DXF Import"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "3DSC"
+    bl_parent_id = "VIEW3D_PT_Import_ToolBar"  # Collegamento al pannello Importers esistente
+    
+    @classmethod
+    def poll(cls, context):
+        return True
+    
+    def draw(self, context):
+        layout = self.layout
+        scene = context.scene
+        
+        # Verifica se ezdxf è installato
+        ezdxf_installed = False
+        try:
+            import ezdxf
+            ezdxf_installed = True
+        except ImportError:
+            ezdxf_installed = False
+        
+        # Mostra il pulsante per importare DXF se ezdxf è installato
+        if ezdxf_installed:
+            row = layout.row(align=True)
+            row.operator("import_dxf.button", icon="IMPORT", text="Import DXF File")
+            
+            # Mostra le impostazioni di shift delle coordinate
+            box = layout.box()
+            box.label(text="Coordinate Shift:")
+            row = box.row()
+            row.label(text=f"X: {scene.BL_x_shift}")
+            row = box.row()
+            row.label(text=f"Y: {scene.BL_y_shift}")
+            row = box.row()
+            row.label(text=f"Z: {scene.BL_z_shift}")
+        else:
+            # Se ezdxf non è installato, mostra un messaggio e un pulsante per installarlo
+            box = layout.box()
+            box.label(text="Module 'ezdxf' is required", icon="ERROR")
+            box.label(text="for importing DXF files")
+            
+            # Bottone per installare il modulo ezdxf
+            row = layout.row(align=True)
+            op = row.operator("install_3dsc_missing.modules", icon="IMPORT", text="Install ezdxf module")
+            op.is_install = True
+            op.list_modules_to_install = "ezdxf"
+
+
+# Registra e deregistra le classi
 def register():
     try:
         import ezdxf
+        print("Module 'ezdxf' is already installed.")
     except ImportError:
         print("Warning: 'ezdxf' module not found. DXF import may not work correctly.")
-        print("Please install it via pip: pip install ezdxf")
+        print("Please install it via pip: pip install ezdxf or use the install button in the UI.")
     
     bpy.utils.register_class(OBJECT_OT_IMPORTDXF)
     bpy.utils.register_class(ImportDXF_3DSC)
+    bpy.utils.register_class(DXF_PT_ImportPanel)
 
 def unregister():
+    bpy.utils.unregister_class(DXF_PT_ImportPanel)
     bpy.utils.unregister_class(ImportDXF_3DSC)
     bpy.utils.unregister_class(OBJECT_OT_IMPORTDXF)

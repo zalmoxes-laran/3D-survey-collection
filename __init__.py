@@ -440,7 +440,7 @@ def register():
     #def initSceneProperties(scn):
     rotation_constrained.register()
     circumcenter_tool.register()
-    #import_dxf.register()
+    import_dxf.register()
 
     bpy.types.Scene.SHIFT_OBJ_on = BoolProperty(
         name = "Shifting obj export",
@@ -591,7 +591,7 @@ def unregister():
     nonmanifold_filler.unregister()
     rotation_constrained.unregister()
     circumcenter_tool.unregister()
-    #import_dxf.unregister()
+    import_dxf.unregister()
 
     del bpy.types.WindowManager.interface_vars
     del bpy.types.WindowManager.suffix_num

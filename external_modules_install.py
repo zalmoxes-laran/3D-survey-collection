@@ -26,18 +26,18 @@ def check_external_modules():
         #import google_auth_oauthlib
         #import google_auth_httplib2
         addon_prefs.preferences.is_external_module = True
-        print("emdb ci sono")
+        print("External modules are installed")
     except ImportError:
         addon_prefs.preferences.is_external_module = False
-        print("emdb Non ci sono")
+        print("External modules are not installed")
 
 class OBJECT_OT_install_3dsc_missing_modules(bpy.types.Operator):
     bl_idname = "install_3dsc_missing.modules"
     bl_label = "missing modules"
     bl_options = {"REGISTER", "UNDO"}
 
-    is_install : BoolProperty()
-    list_modules_to_install: StringProperty()
+    is_install : BoolProperty() # type: ignore
+    list_modules_to_install: StringProperty() # type: ignore
 
     def execute(self, context):
         if self.list_modules_to_install == "Google":
@@ -48,6 +48,8 @@ class OBJECT_OT_install_3dsc_missing_modules(bpy.types.Operator):
              list_modules = py3dtiles_modules()
         elif self.list_modules_to_install == "kml":
              list_modules = kml_modules()
+        elif self.list_modules_to_install == "ezdxf": 
+             list_modules = ezdxf_modules()
         if self.is_install:
             install_modules(list_modules)
         else:
@@ -121,6 +123,12 @@ def py3dtiles_modules():
 
     return list_of_modules 
 
+def ezdxf_modules():
+    list_of_modules = [
+        "ezdxf",
+        "pyparsing",
+    ]
+    return list_of_modules
 
 def kml_modules():
     list_of_modules = (
