@@ -19,6 +19,7 @@ class VIEW3D_PT_mesh_analyze(Panel, View3DCheckPanel):
     bl_category = "3DSC"
     bl_idname = "VIEW3D_PT_mesh_analyze"
     bl_context = "objectmode"
+    bl_options = {'DEFAULT_CLOSED'}
 
     _type_to_icon = {
         bmesh.types.BMVert: 'VERTEXSEL',
@@ -70,6 +71,7 @@ class VIEW3D_PT_segmentation_pan(Panel, View3DSegmentationPanel):
     bl_category = "3DSC"
     bl_idname = "VIEW3D_PT_segmentation_pan"
     bl_context = "objectmode"
+    bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
         layout = self.layout
@@ -353,22 +355,24 @@ class VIEW3D_PT_Export_ToolBar(Panel, ToolsPanelExport):
     bl_category = "3DSC"
     bl_idname = "VIEW3D_PT_Export_ToolBar"
     bl_context = "objectmode"
-
+    bl_options = {'DEFAULT_CLOSED'}
 
 class VIEW3D_PT_QuickUtils_ToolBar(Panel, ToolsPanelQuickUtils):
     bl_category = "3DSC"
     bl_idname = "VIEW3D_PT_QuickUtils_ToolBar"
-    #bl_context = "objectmode"
+    bl_options = {'DEFAULT_CLOSED'}
 
 class VIEW3D_PT_ccTool(Panel, ToolsPanel_ccTool):
     bl_category = "3DSC"
     bl_idname = "VIEW3D_PT_ccTool"
     bl_context = "objectmode"
+    bl_options = {'DEFAULT_CLOSED'}
 
 class VIEW3D_PT_TexPatcher(Panel, ToolsPanelTexPatcher):
     bl_category = "3DSC"
     bl_idname = "VIEW3D_PT_TexPatcher"
-    #bl_context = "objectmode"
+    bl_options = {'DEFAULT_CLOSED'}
+
 
 #panorama
 
@@ -481,4 +485,4 @@ class PANOToolsPanel:
 class VIEW3D_PT_SetupPanel(Panel, PANOToolsPanel):
     bl_category = "3DSC"
     bl_idname = "VIEW3D_PT_SetupPanel"
-    #bl_context = "objectmode"
+    bl_options = {'DEFAULT_CLOSED'}

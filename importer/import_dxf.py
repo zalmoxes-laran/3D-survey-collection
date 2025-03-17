@@ -750,6 +750,7 @@ class DXF_PT_ImportPanel(Panel):
     bl_region_type = 'UI'
     bl_category = "3DSC"
     bl_parent_id = "VIEW3D_PT_Import_ToolBar"  # Collegamento al pannello Importers esistente
+    bl_options = {'DEFAULT_CLOSED'}
     
     @classmethod
     def poll(cls, context):

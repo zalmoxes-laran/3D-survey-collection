@@ -428,7 +428,8 @@ class VIEW3D_PT_Import_ToolBar(Panel, ToolsPanelImport):
     bl_category = "3DSC"
     bl_idname = "VIEW3D_PT_Import_ToolBar"
     bl_context = "objectmode"
-
+    bl_options = {'DEFAULT_CLOSED'}
+    
 classes = [
     VIEW3D_PT_Import_ToolBar,
     OBJECT_OT_IMPORTPOINTS,

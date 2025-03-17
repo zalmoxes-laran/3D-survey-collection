@@ -194,7 +194,7 @@ class VIEW3D_PT_dsc_Shift_ToolBar(Panel, ToolsPanel_dsc_SHIFT):
     bl_category = "3DSC"
     bl_idname = "VIEW3D_PT_dsc_Shift_ToolBar"
     bl_context = "objectmode"
-
+    bl_options = {'DEFAULT_CLOSED'}
 
 class ExportCoordinateShift_dsc(Operator, ExportHelper):
     """Tool to export shift coordinates to a txt file"""

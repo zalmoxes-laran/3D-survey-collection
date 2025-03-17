@@ -464,7 +464,7 @@ class OBJECT_PT_Laser_Slicer_Panel(bpy.types.Panel):
     bl_region_type = "UI"
     bl_context = "objectmode"
     bl_category = "3DSC"  
-    bl_options = {'DEFAULT_CLOSED'}  # Aggiunto per uniformità con gli altri pannelli 3DSC
+    bl_options = {'DEFAULT_CLOSED'} 
 
     def draw(self, context):
         scene = context.scene

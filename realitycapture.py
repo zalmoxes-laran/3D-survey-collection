@@ -509,7 +509,8 @@ class VIEW3D_PT_dsc_Rc_ToolBar(Panel, ToolsPanel_dsc_RC):
     bl_category = "3DSC"
     bl_idname = "VIEW3D_PT_dsc_Rc_ToolBar"
     bl_context = "objectmode"
-
+    bl_options = {'DEFAULT_CLOSED'}
+    
 def menu_func(self, context):
     self.layout.operator(ImportReconstructionRegion.bl_idname)
 
