@@ -62,11 +62,10 @@ class MESH_OT_fill_nonmanifold(Operator):
     
     @classmethod
     def poll(cls, context):
-        return context.active_object is not None and context.active_object.type == 'MESH'
+        # Check if there's at least one selected mesh object
+        return any(obj.type == 'MESH' for obj in context.selected_objects)
     
     def execute(self, context):
-        obj = context.active_object
-        
         # Store parameters in scene properties
         context.scene.fill_type = self.fill_type
         context.scene.solid_color = self.solid_color
@@ -75,67 +74,106 @@ class MESH_OT_fill_nonmanifold(Operator):
         context.scene.use_f2_addon = self.use_f2
         context.scene.improve_geometry = self.improve_geometry
         
-        # Ensure we're in object mode
-        if obj.mode != 'OBJECT':
+        # Get active object and selection
+        active_obj = context.active_object
+        selected_objects = [obj for obj in context.selected_objects if obj.type == 'MESH']
+        
+        if not selected_objects:
+            self.report({'WARNING'}, "No mesh objects selected")
+            return {'CANCELLED'}
+        
+        # Make sure we're in object mode
+        if context.mode != 'OBJECT':
             bpy.ops.object.mode_set(mode='OBJECT')
         
-        # Create a unique material name based on the object's name
-        material_name = f"nodata_{obj.name}"
+        # Process each selected mesh object
+        processed_count = 0
+        skipped_count = 0
         
-        # Remove existing material if it exists for this specific object
-        self.remove_existing_nodata_material(obj, material_name)
-        
-        # Create a new material
-        nodata_mat = self.create_new_nodata_material(context, material_name)
-        
-        # Assign the material to the object
-        obj.data.materials.append(nodata_mat)
-        nodata_slot_index = len(obj.material_slots) - 1
-        obj.active_material_index = nodata_slot_index
-        
-        # Switch to edit mode and select edges
-        bpy.ops.object.mode_set(mode='EDIT')
-        
-        # Set selection mode to edges
-        bpy.ops.mesh.select_mode(type='EDGE')
-        
-        # Select non-manifold edges
-        bpy.ops.mesh.select_all(action='DESELECT')
-        bpy.ops.mesh.select_non_manifold()
-        
-        # Get the mesh data in bmesh to check if we have selected edges
-        me = obj.data
-        bm = bmesh.from_edit_mesh(me)
-        selected_edges_count = len([e for e in bm.edges if e.select])
-        
-        if selected_edges_count > 0:
-            # Fill using edge_face_add (standard Blender operation)
-            bpy.ops.mesh.edge_face_add()
+        for obj in selected_objects:
+            # Set the current object as active
+            context.view_layer.objects.active = obj
             
-            # Improve geometry if option is enabled
-            if self.improve_geometry:
-                bpy.ops.mesh.quads_convert_to_tris(quad_method='BEAUTY', ngon_method='BEAUTY')
-                bpy.ops.mesh.beautify_fill()
+            # Create a unique material name based on the object's name
+            material_name = f"nodata_{obj.name}"
             
-            # Assign nodata material to the new faces
-            bpy.ops.object.material_slot_assign()
+            # Remove existing material if it exists for this specific object
+            self.remove_existing_nodata_material(obj, material_name)
             
-            # If F2 is available and enabled, use it for better fill results
-            if self.use_f2:
-                try:
-                    bpy.ops.mesh.f2()
-                    # Ensure the material gets assigned to any new faces created by F2
-                    bpy.ops.object.material_slot_assign()
-                except Exception as e:
-                    self.report({'WARNING'}, f"F2 addon error: {str(e)}")
+            # Create a new material
+            nodata_mat = self.create_new_nodata_material(context, material_name)
             
-            fill_type_name = "solid color" if self.fill_type == 'SOLID' else "grid pattern"
-            self.report({'INFO'}, f"Filled non-manifold edges and applied {fill_type_name} material")
+            # Assign the material to the object
+            obj.data.materials.append(nodata_mat)
+            nodata_slot_index = len(obj.material_slots) - 1
+            obj.active_material_index = nodata_slot_index
+            
+            # Switch to edit mode and select edges
+            bpy.ops.object.mode_set(mode='EDIT')
+            
+            # Set selection mode to edges
+            bpy.ops.mesh.select_mode(type='EDGE')
+            
+            # Select non-manifold edges
+            bpy.ops.mesh.select_all(action='DESELECT')
+            bpy.ops.mesh.select_non_manifold()
+            
+            # Get the mesh data in bmesh to check if we have selected edges
+            me = obj.data
+            bm = bmesh.from_edit_mesh(me)
+            selected_edges_count = len([e for e in bm.edges if e.select])
+            
+            if selected_edges_count > 0:
+                # Fill using edge_face_add (standard Blender operation)
+                bpy.ops.mesh.edge_face_add()
+                
+                # Improve geometry if option is enabled
+                if self.improve_geometry:
+                    bpy.ops.mesh.quads_convert_to_tris(quad_method='BEAUTY', ngon_method='BEAUTY')
+                    bpy.ops.mesh.beautify_fill()
+                
+                # Assign nodata material to the new faces
+                bpy.ops.object.material_slot_assign()
+                
+                # If F2 is available and enabled, use it for better fill results
+                if self.use_f2:
+                    try:
+                        bpy.ops.mesh.f2()
+                        # Ensure the material gets assigned to any new faces created by F2
+                        bpy.ops.object.material_slot_assign()
+                    except Exception as e:
+                        self.report({'WARNING'}, f"F2 addon error for {obj.name}: {str(e)}")
+                
+                processed_count += 1
+            else:
+                skipped_count += 1
+                # Remove the unused material
+                bpy.ops.object.mode_set(mode='OBJECT')
+                obj.active_material_index = nodata_slot_index
+                bpy.ops.object.material_slot_remove()
+                if nodata_mat.users == 0:
+                    bpy.data.materials.remove(nodata_mat)
+                continue
+            
+            # Return to object mode before processing the next object
+            bpy.ops.object.mode_set(mode='OBJECT')
+        
+        # Restore the active object if it still exists
+        if active_obj:
+            # Check if the object is still in the scene
+            if active_obj.name in context.view_layer.objects:
+                context.view_layer.objects.active = active_obj
+        
+        # Report results
+        fill_type_name = "solid color" if self.fill_type == 'SOLID' else "grid pattern"
+        
+        if processed_count > 0:
+            if skipped_count > 0:
+                self.report({'INFO'}, f"Processed {processed_count} objects with {fill_type_name} material. Skipped {skipped_count} objects with no non-manifold edges.")
+            else:
+                self.report({'INFO'}, f"Processed {processed_count} objects with {fill_type_name} material.")
         else:
-            self.report({'INFO'}, "No non-manifold edges found")
-        
-        # Always return to object mode
-        bpy.ops.object.mode_set(mode='OBJECT')
+            self.report({'INFO'}, "No non-manifold edges found in any of the selected objects")
         
         return {'FINISHED'}
     
@@ -226,7 +264,7 @@ class MESH_OT_fill_nonmanifold(Operator):
 
 
 class MESH_OT_adjust_nodata_material(Operator):
-    """Adjust the pattern of the nodata material"""
+    """Adjust the pattern of the nodata material for all selected objects"""
     bl_idname = "mesh.adjust_nodata_material"
     bl_label = "Update Pattern"
     bl_options = {'REGISTER', 'UNDO'}
@@ -272,166 +310,217 @@ class MESH_OT_adjust_nodata_material(Operator):
     
     @classmethod
     def poll(cls, context):
-        # Check if the active object has a nodata material
-        obj = context.active_object
-        if obj and obj.type == 'MESH':
-            for slot in obj.material_slots:
-                if slot.material and slot.material.name.startswith("nodata_"):
-                    return True
+        # Check if any selected object has a nodata material
+        for obj in context.selected_objects:
+            if obj.type == 'MESH':
+                for slot in obj.material_slots:
+                    if slot.material and slot.material.name.startswith("nodata_"):
+                        return True
         return False
     
     def execute(self, context):
-        # Get the active object
-        obj = context.active_object
-        
-        # Find the nodata material for this object
-        nodata_mat = None
-        for slot in obj.material_slots:
-            if slot.material and slot.material.name.startswith("nodata_"):
-                nodata_mat = slot.material
-                break
-        
-        if not nodata_mat:
-            self.report({'ERROR'}, "Nodata material not found for this object")
-            return {'CANCELLED'}
-        
         # Store current settings
         context.scene.fill_type = self.fill_type
         context.scene.solid_color = self.solid_color
         context.scene.grid_axis = self.grid_axis
         context.scene.grid_scale = self.grid_scale
         
-        # Recreate the material
-        nodes = nodata_mat.node_tree.nodes
-        links = nodata_mat.node_tree.links
+        # Get active object for restoring later
+        active_obj = context.active_object
+        selected_objects = [obj for obj in context.selected_objects if obj.type == 'MESH']
         
-        # Clear all nodes
-        nodes.clear()
+        if not selected_objects:
+            self.report({'WARNING'}, "No mesh objects selected")
+            return {'CANCELLED'}
         
-        # Create output node
-        output = nodes.new('ShaderNodeOutputMaterial')
-        output.location = (600, 0)
+        updated_count = 0
         
-        # Create emission node for shadeless look
-        emission = nodes.new('ShaderNodeEmission')
-        emission.location = (400, 0)
-        emission.inputs['Strength'].default_value = 1.0  # Make it shadeless
+        # Process each selected mesh object
+        for obj in selected_objects:
+            # Find the nodata material for this object
+            nodata_mat = None
+            for slot in obj.material_slots:
+                if slot.material and slot.material.name.startswith(f"nodata_{obj.name}"):
+                    nodata_mat = slot.material
+                    break
+            
+            if not nodata_mat:
+                continue  # Skip objects without nodata material
+            
+            # Recreate the material
+            nodes = nodata_mat.node_tree.nodes
+            links = nodata_mat.node_tree.links
+            
+            # Clear all nodes
+            nodes.clear()
+            
+            # Create output node
+            output = nodes.new('ShaderNodeOutputMaterial')
+            output.location = (600, 0)
+            
+            # Create emission node for shadeless look
+            emission = nodes.new('ShaderNodeEmission')
+            emission.location = (400, 0)
+            emission.inputs['Strength'].default_value = 1.0  # Make it shadeless
+            
+            # Link emission to output
+            links.new(emission.outputs['Emission'], output.inputs['Surface'])
+            
+            # Store the fill type in the material for reference
+            nodata_mat["fill_type"] = self.fill_type
+            
+            if self.fill_type == 'SOLID':
+                # For solid color, directly set the emission color
+                emission.inputs['Color'].default_value = self.solid_color
+                
+            elif self.fill_type == 'GRID':
+                # Create texture coordinate node
+                tex_coord = nodes.new('ShaderNodeTexCoord')
+                tex_coord.location = (-600, 0)
+                
+                # Create wave texture node
+                wave_tex = nodes.new('ShaderNodeTexWave')
+                wave_tex.name = "Wave Texture"
+                wave_tex.location = (-200, 0)
+                # Configure wave texture
+                wave_tex.wave_type = 'BANDS'
+                wave_tex.bands_direction = self.grid_axis
+                wave_tex.wave_profile = 'SIN'
+                wave_tex.inputs['Scale'].default_value = self.grid_scale
+                wave_tex.inputs['Distortion'].default_value = 0.0
+                wave_tex.inputs['Detail'].default_value = 0.0
+                wave_tex.inputs['Detail Scale'].default_value = 0.0
+                wave_tex.inputs['Detail Roughness'].default_value = 0.0
+                wave_tex.inputs['Phase Offset'].default_value = 0.0
+                
+                # Link texture coordinate to wave texture
+                links.new(tex_coord.outputs['Generated'], wave_tex.inputs['Vector'])
+                
+                # Create color ramp for the pattern
+                color_ramp = nodes.new('ShaderNodeValToRGB')
+                color_ramp.location = (0, 0)
+                color_ramp.color_ramp.elements[0].position = 0.48
+                color_ramp.color_ramp.elements[0].color = (1.0, 1.0, 1.0, 1.0)  # White
+                color_ramp.color_ramp.elements[1].position = 0.52
+                color_ramp.color_ramp.elements[1].color = (0.0, 0.0, 0.0, 1.0)  # Black
+                
+                # Link wave texture to color ramp
+                links.new(wave_tex.outputs['Color'], color_ramp.inputs['Fac'])
+                
+                # Link color ramp to emission
+                links.new(color_ramp.outputs['Color'], emission.inputs['Color'])
+            
+            updated_count += 1
         
-        # Link emission to output
-        links.new(emission.outputs['Emission'], output.inputs['Surface'])
+        # Restore the active object if it still exists
+        if active_obj:
+            if active_obj.name in context.view_layer.objects:
+                context.view_layer.objects.active = active_obj
         
-        # Store the fill type in the material for reference
-        nodata_mat["fill_type"] = self.fill_type
-        
-        if self.fill_type == 'SOLID':
-            # For solid color, directly set the emission color
-            emission.inputs['Color'].default_value = self.solid_color
-            self.report({'INFO'}, "Updated to solid color")
-            
-        elif self.fill_type == 'GRID':
-            # Create texture coordinate node
-            tex_coord = nodes.new('ShaderNodeTexCoord')
-            tex_coord.location = (-600, 0)
-            
-            # Create wave texture node
-            wave_tex = nodes.new('ShaderNodeTexWave')
-            wave_tex.name = "Wave Texture"
-            wave_tex.location = (-200, 0)
-            # Configure wave texture
-            wave_tex.wave_type = 'BANDS'
-            wave_tex.bands_direction = self.grid_axis
-            wave_tex.wave_profile = 'SIN'
-            wave_tex.inputs['Scale'].default_value = self.grid_scale
-            wave_tex.inputs['Distortion'].default_value = 0.0
-            wave_tex.inputs['Detail'].default_value = 0.0
-            wave_tex.inputs['Detail Scale'].default_value = 0.0
-            wave_tex.inputs['Detail Roughness'].default_value = 0.0
-            wave_tex.inputs['Phase Offset'].default_value = 0.0
-            
-            # Link texture coordinate to wave texture
-            links.new(tex_coord.outputs['Generated'], wave_tex.inputs['Vector'])
-            
-            # Create color ramp for the pattern
-            color_ramp = nodes.new('ShaderNodeValToRGB')
-            color_ramp.location = (0, 0)
-            color_ramp.color_ramp.elements[0].position = 0.48
-            color_ramp.color_ramp.elements[0].color = (1.0, 1.0, 1.0, 1.0)  # White
-            color_ramp.color_ramp.elements[1].position = 0.52
-            color_ramp.color_ramp.elements[1].color = (0.0, 0.0, 0.0, 1.0)  # Black
-            
-            # Link wave texture to color ramp
-            links.new(wave_tex.outputs['Color'], color_ramp.inputs['Fac'])
-            
-            # Link color ramp to emission
-            links.new(color_ramp.outputs['Color'], emission.inputs['Color'])
-            
-            self.report({'INFO'}, f"Updated grid pattern settings")
+        # Report results
+        fill_type_name = "solid color" if self.fill_type == 'SOLID' else "grid pattern"
+        if updated_count > 0:
+            self.report({'INFO'}, f"Updated {updated_count} objects with {fill_type_name} material")
+        else:
+            self.report({'INFO'}, "No nodata materials found to update")
         
         return {'FINISHED'}
 
 
 class MESH_OT_remove_nodata_patches(Operator):
-    """Remove faces with nodata material"""
+    """Remove faces with nodata material from all selected objects"""
     bl_idname = "mesh.remove_nodata_patches"
     bl_label = "Remove Patches"
     bl_options = {'REGISTER', 'UNDO'}
     
     @classmethod
     def poll(cls, context):
-        # Check if the active object has a nodata material
-        obj = context.active_object
-        if obj and obj.type == 'MESH':
-            for slot in obj.material_slots:
-                if slot.material and slot.material.name.startswith("nodata_"):
-                    return True
+        # Check if any selected object has a nodata material
+        for obj in context.selected_objects:
+            if obj.type == 'MESH':
+                for slot in obj.material_slots:
+                    if slot.material and slot.material.name.startswith("nodata_"):
+                        return True
         return False
     
     def execute(self, context):
-        obj = context.active_object
+        # Store the active object for restoring later
+        active_obj = context.active_object
+        selected_objects = [obj for obj in context.selected_objects if obj.type == 'MESH']
         
-        # Ensure we're in object mode
-        if obj.mode != 'OBJECT':
-            bpy.ops.object.mode_set(mode='OBJECT')
-        
-        # Find the nodata material for this object
-        nodata_mat = None
-        nodata_slot_index = -1
-        
-        for i, slot in enumerate(obj.material_slots):
-            if slot.material and slot.material.name.startswith("nodata_"):
-                nodata_mat = slot.material
-                nodata_slot_index = i
-                break
-        
-        if not nodata_mat:
-            self.report({'INFO'}, "No nodata material found for this object")
+        if not selected_objects:
+            self.report({'WARNING'}, "No mesh objects selected")
             return {'CANCELLED'}
         
-        # Switch to edit mode
-        bpy.ops.object.mode_set(mode='EDIT')
+        # Ensure we're in object mode
+        if context.mode != 'OBJECT':
+            bpy.ops.object.mode_set(mode='OBJECT')
         
-        # Deselect everything
-        bpy.ops.mesh.select_all(action='DESELECT')
+        removed_count = 0
+        skipped_count = 0
+        removed_materials = []
         
-        # Select faces with nodata material
-        obj.active_material_index = nodata_slot_index
-        bpy.ops.object.material_slot_select()
+        # Process each selected mesh object
+        for obj in selected_objects:
+            # Set the current object as active
+            context.view_layer.objects.active = obj
+            
+            # Find the nodata material for this object
+            nodata_mat = None
+            nodata_slot_index = -1
+            
+            for i, slot in enumerate(obj.material_slots):
+                if slot.material and slot.material.name.startswith(f"nodata_{obj.name}"):
+                    nodata_mat = slot.material
+                    nodata_slot_index = i
+                    break
+            
+            if not nodata_mat:
+                skipped_count += 1
+                continue  # Skip objects without nodata material
+            
+            # Switch to edit mode
+            bpy.ops.object.mode_set(mode='EDIT')
+            
+            # Deselect everything
+            bpy.ops.mesh.select_all(action='DESELECT')
+            
+            # Select faces with nodata material
+            obj.active_material_index = nodata_slot_index
+            bpy.ops.object.material_slot_select()
+            
+            # Delete the selected faces
+            bpy.ops.mesh.delete(type='FACE')
+            
+            # Return to object mode
+            bpy.ops.object.mode_set(mode='OBJECT')
+            
+            # Remove the material slot
+            obj.active_material_index = nodata_slot_index
+            bpy.ops.object.material_slot_remove()
+            
+            # Add to the list of materials to check later
+            removed_materials.append(nodata_mat)
+            removed_count += 1
         
-        # Delete the selected faces
-        bpy.ops.mesh.delete(type='FACE')
+        # Remove materials that are no longer used
+        for mat in removed_materials:
+            if mat.users == 0:
+                bpy.data.materials.remove(mat)
         
-        # Return to object mode
-        bpy.ops.object.mode_set(mode='OBJECT')
+        # Restore the active object if it still exists
+        if active_obj:
+            if active_obj.name in context.view_layer.objects:
+                context.view_layer.objects.active = active_obj
         
-        # Remove the material slot
-        obj.active_material_index = nodata_slot_index
-        bpy.ops.object.material_slot_remove()
-        
-        # Remove the material from the blend file if it's not used anymore
-        if nodata_mat.users == 0:
-            bpy.data.materials.remove(nodata_mat)
-        
-        self.report({'INFO'}, "Removed patches with nodata material")
+        # Report results
+        if removed_count > 0:
+            if skipped_count > 0:
+                self.report({'INFO'}, f"Removed patches from {removed_count} objects. Skipped {skipped_count} objects without nodata materials.")
+            else:
+                self.report({'INFO'}, f"Removed patches from {removed_count} objects.")
+        else:
+            self.report({'INFO'}, "No nodata materials found to remove")
         
         return {'FINISHED'}
 
