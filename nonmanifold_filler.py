@@ -2,6 +2,7 @@ import bpy
 import bmesh
 from bpy.types import Operator, Panel
 from bpy.props import BoolProperty, FloatProperty, EnumProperty, FloatVectorProperty
+import time
 
 class MESH_OT_fill_nonmanifold(Operator):
     """Fill non-manifold edges with faces and apply nodata pattern material"""
@@ -76,6 +77,9 @@ class MESH_OT_fill_nonmanifold(Operator):
         
         # Get active object and selection
         active_obj = context.active_object
+        active_obj_name = active_obj.name if active_obj else None
+        
+        # Process objects one by one
         selected_objects = [obj for obj in context.selected_objects if obj.type == 'MESH']
         
         if not selected_objects:
@@ -86,29 +90,61 @@ class MESH_OT_fill_nonmanifold(Operator):
         if context.mode != 'OBJECT':
             bpy.ops.object.mode_set(mode='OBJECT')
         
-        # Process each selected mesh object
         processed_count = 0
         skipped_count = 0
         
+        # First, create all materials (while in Object mode)
+        materials_map = {}
         for obj in selected_objects:
-            # Set the current object as active
-            context.view_layer.objects.active = obj
-            
             # Create a unique material name based on the object's name
             material_name = f"nodata_{obj.name}"
+            print(f"Creating material '{material_name}' for object '{obj.name}'")
             
-            # Remove existing material if it exists for this specific object
-            self.remove_existing_nodata_material(obj, material_name)
+            # Remove any existing material with this name
+            existing_mat = bpy.data.materials.get(material_name)
+            if existing_mat:
+                bpy.data.materials.remove(existing_mat)
             
-            # Create a new material
+            # Create new material
             nodata_mat = self.create_new_nodata_material(context, material_name)
+            materials_map[obj.name] = nodata_mat
+        
+        # Now process each object individually
+        for obj in selected_objects:
+            print(f"\n\nProcessing object: {obj.name}")
             
-            # Assign the material to the object
-            obj.data.materials.append(nodata_mat)
-            nodata_slot_index = len(obj.material_slots) - 1
+            # Set the current object as active and deselect others
+            bpy.ops.object.select_all(action='DESELECT')
+            obj.select_set(True)
+            context.view_layer.objects.active = obj
+            
+            # Get the material created for this object
+            nodata_mat = materials_map.get(obj.name)
+            if not nodata_mat:
+                print(f"  Error: No material found for {obj.name}")
+                skipped_count += 1
+                continue
+            
+            # Add material to object
+            if nodata_mat.name not in [slot.material.name if slot.material else "" for slot in obj.material_slots]:
+                obj.data.materials.append(nodata_mat)
+            
+            # Get the index of the nodata material
+            nodata_slot_index = -1
+            for i, slot in enumerate(obj.material_slots):
+                if slot.material and slot.material.name == nodata_mat.name:
+                    nodata_slot_index = i
+                    break
+            
+            if nodata_slot_index == -1:
+                print(f"  Error: Material slot not found for {obj.name}")
+                skipped_count += 1
+                continue
+            
+            # Set the nodata material as active
             obj.active_material_index = nodata_slot_index
             
-            # Switch to edit mode and select edges
+            # Switch to edit mode
             bpy.ops.object.mode_set(mode='EDIT')
             
             # Set selection mode to edges
@@ -118,51 +154,94 @@ class MESH_OT_fill_nonmanifold(Operator):
             bpy.ops.mesh.select_all(action='DESELECT')
             bpy.ops.mesh.select_non_manifold()
             
-            # Get the mesh data in bmesh to check if we have selected edges
+            # Get bmesh to check if we have selected edges
             me = obj.data
             bm = bmesh.from_edit_mesh(me)
+            bm.select_flush(True)
+            
+            # Count selected edges
             selected_edges_count = len([e for e in bm.edges if e.select])
+            print(f"  Selected non-manifold edges: {selected_edges_count}")
             
             if selected_edges_count > 0:
-                # Fill using edge_face_add (standard Blender operation)
-                bpy.ops.mesh.edge_face_add()
-                
-                # Improve geometry if option is enabled
-                if self.improve_geometry:
-                    bpy.ops.mesh.quads_convert_to_tris(quad_method='BEAUTY', ngon_method='BEAUTY')
-                    bpy.ops.mesh.beautify_fill()
-                
-                # Assign nodata material to the new faces
-                bpy.ops.object.material_slot_assign()
-                
-                # If F2 is available and enabled, use it for better fill results
-                if self.use_f2:
-                    try:
-                        bpy.ops.mesh.f2()
-                        # Ensure the material gets assigned to any new faces created by F2
-                        bpy.ops.object.material_slot_assign()
-                    except Exception as e:
-                        self.report({'WARNING'}, f"F2 addon error for {obj.name}: {str(e)}")
-                
-                processed_count += 1
+                try:
+                    # Remember which edge indices were selected
+                    selected_edge_indices = []
+                    for i, e in enumerate(bm.edges):
+                        if e.select:
+                            # Store indices, not edges
+                            selected_edge_indices.append(i)
+                    
+                    # Fill using edge_face_add
+                    bpy.ops.mesh.edge_face_add()
+                    print(f"  Created faces from edges")
+                    
+                    # Improve geometry if option is enabled
+                    if self.improve_geometry:
+                        bpy.ops.mesh.quads_convert_to_tris(quad_method='BEAUTY', ngon_method='BEAUTY')
+                        bpy.ops.mesh.beautify_fill()
+                        print(f"  Improved geometry")
+                    
+                    # After modifying the mesh, we need to update bmesh
+                    bmesh.update_edit_mesh(me)
+                    
+                    # The BMesh may have changed, so we select faces in a different way
+                    # Switch to face select mode
+                    bpy.ops.mesh.select_mode(type='FACE')
+                    
+                    # Select all faces
+                    bpy.ops.mesh.select_all(action='SELECT')
+                    
+                    # Invert the selection (select unassigned faces)
+                    bpy.ops.object.material_slot_select()
+                    bpy.ops.mesh.select_all(action='INVERT')
+                    
+                    # Assign material to selected faces (which are the newly created ones)
+                    bpy.ops.object.material_slot_assign()
+                    print(f"  Assigned material to new faces")
+                    
+                    # Use F2 addon if available and enabled
+                    if self.use_f2:
+                        try:
+                            bpy.ops.mesh.f2()
+                            # Re-select and assign material to any new faces
+                            bpy.ops.mesh.select_all(action='DESELECT')
+                            bpy.ops.object.material_slot_select()
+                            bpy.ops.mesh.select_all(action='INVERT')
+                            bpy.ops.object.material_slot_assign()
+                        except Exception as e:
+                            print(f"  F2 addon error: {str(e)}")
+                    
+                    processed_count += 1
+                    print(f"  Successfully processed {obj.name}")
+                    
+                except Exception as e:
+                    print(f"  Error during processing: {str(e)}")
+                    # Continue to the next object
+                    bpy.ops.object.mode_set(mode='OBJECT')
+                    skipped_count += 1
+                    continue
             else:
+                print(f"  No non-manifold edges found in {obj.name}")
                 skipped_count += 1
-                # Remove the unused material
+                # Clean up unused material
                 bpy.ops.object.mode_set(mode='OBJECT')
-                obj.active_material_index = nodata_slot_index
-                bpy.ops.object.material_slot_remove()
-                if nodata_mat.users == 0:
+                if nodata_mat.users == 1:  # Only used by this object
+                    obj.active_material_index = nodata_slot_index
+                    bpy.ops.object.material_slot_remove()
                     bpy.data.materials.remove(nodata_mat)
                 continue
             
             # Return to object mode before processing the next object
             bpy.ops.object.mode_set(mode='OBJECT')
         
-        # Restore the active object if it still exists
-        if active_obj:
-            # Check if the object is still in the scene
-            if active_obj.name in context.view_layer.objects:
-                context.view_layer.objects.active = active_obj
+        # Restore original active object and selection
+        bpy.ops.object.select_all(action='DESELECT')
+        for obj in selected_objects:
+            obj.select_set(True)
+        
+        if active_obj_name and active_obj_name in bpy.data.objects:
+            context.view_layer.objects.active = bpy.data.objects[active_obj_name]
         
         # Report results
         fill_type_name = "solid color" if self.fill_type == 'SOLID' else "grid pattern"
@@ -176,21 +255,6 @@ class MESH_OT_fill_nonmanifold(Operator):
             self.report({'INFO'}, "No non-manifold edges found in any of the selected objects")
         
         return {'FINISHED'}
-    
-    def remove_existing_nodata_material(self, obj, material_name):
-        """Remove the existing nodata material from the specific object if it exists"""
-        # Check if the material exists
-        nodata_mat = bpy.data.materials.get(material_name)
-        if nodata_mat:
-            # Check if the object is using this material
-            for i, slot in enumerate(obj.material_slots):
-                if slot.material and slot.material.name == material_name:
-                    obj.active_material_index = i
-                    bpy.ops.object.material_slot_remove()
-            
-            # If no other objects are using this material, remove it from the blend file
-            if nodata_mat.users == 0:
-                bpy.data.materials.remove(nodata_mat)
     
     def create_new_nodata_material(self, context, material_name):
         """Create a new nodata material based on the selected fill type"""
@@ -327,6 +391,8 @@ class MESH_OT_adjust_nodata_material(Operator):
         
         # Get active object for restoring later
         active_obj = context.active_object
+        active_obj_name = active_obj.name if active_obj else None
+        
         selected_objects = [obj for obj in context.selected_objects if obj.type == 'MESH']
         
         if not selected_objects:
@@ -412,10 +478,9 @@ class MESH_OT_adjust_nodata_material(Operator):
             
             updated_count += 1
         
-        # Restore the active object if it still exists
-        if active_obj:
-            if active_obj.name in context.view_layer.objects:
-                context.view_layer.objects.active = active_obj
+        # Restore original active object and selection
+        if active_obj_name and active_obj_name in bpy.data.objects:
+            context.view_layer.objects.active = bpy.data.objects[active_obj_name]
         
         # Report results
         fill_type_name = "solid color" if self.fill_type == 'SOLID' else "grid pattern"
@@ -446,6 +511,8 @@ class MESH_OT_remove_nodata_patches(Operator):
     def execute(self, context):
         # Store the active object for restoring later
         active_obj = context.active_object
+        active_obj_name = active_obj.name if active_obj else None
+        
         selected_objects = [obj for obj in context.selected_objects if obj.type == 'MESH']
         
         if not selected_objects:
@@ -458,11 +525,13 @@ class MESH_OT_remove_nodata_patches(Operator):
         
         removed_count = 0
         skipped_count = 0
-        removed_materials = []
+        materials_to_remove = []
         
-        # Process each selected mesh object
+        # Process each selected mesh object individually
         for obj in selected_objects:
-            # Set the current object as active
+            # Process one object at a time
+            bpy.ops.object.select_all(action='DESELECT')
+            obj.select_set(True)
             context.view_layer.objects.active = obj
             
             # Find the nodata material for this object
@@ -476,6 +545,7 @@ class MESH_OT_remove_nodata_patches(Operator):
                     break
             
             if not nodata_mat:
+                print(f"No nodata material found for {obj.name}")
                 skipped_count += 1
                 continue  # Skip objects without nodata material
             
@@ -500,18 +570,24 @@ class MESH_OT_remove_nodata_patches(Operator):
             bpy.ops.object.material_slot_remove()
             
             # Add to the list of materials to check later
-            removed_materials.append(nodata_mat)
+            if nodata_mat not in materials_to_remove:
+                materials_to_remove.append(nodata_mat)
+            
             removed_count += 1
         
         # Remove materials that are no longer used
-        for mat in removed_materials:
+        for mat in materials_to_remove:
             if mat.users == 0:
                 bpy.data.materials.remove(mat)
         
-        # Restore the active object if it still exists
-        if active_obj:
-            if active_obj.name in context.view_layer.objects:
-                context.view_layer.objects.active = active_obj
+        # Restore original selection
+        bpy.ops.object.select_all(action='DESELECT')
+        for obj in selected_objects:
+            obj.select_set(True)
+        
+        # Restore original active object
+        if active_obj_name and active_obj_name in bpy.data.objects:
+            context.view_layer.objects.active = bpy.data.objects[active_obj_name]
         
         # Report results
         if removed_count > 0:
