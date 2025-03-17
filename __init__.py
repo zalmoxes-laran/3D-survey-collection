@@ -23,9 +23,9 @@ bl_info = {
     "blender": (4, 2, 0),
     "location": "3D View > Toolbox",
     "description": "A collection of tools for 3D Survey activities",
-    "warning": "Beta version of 1.6.1 3DSC dev7",
+    "warning": "Beta version of 1.6.1 3DSC dev8",
     "wiki_url": "",
-    "devel_version": " 3DSC 1.6.1 dev7",  # Aggiunto campo devel_version
+    "devel_version": " 3DSC 1.6.1 dev8",  # Aggiunto campo devel_version
     "category": "Tools",
     }
 

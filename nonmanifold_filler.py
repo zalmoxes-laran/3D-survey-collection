@@ -93,9 +93,15 @@ class MESH_OT_fill_nonmanifold(Operator):
         processed_count = 0
         skipped_count = 0
         
-        # First, create all materials (while in Object mode)
-        materials_map = {}
+        # Process each object individually
         for obj in selected_objects:
+            print(f"\n\nProcessing object: {obj.name}")
+            
+            # Set the current object as active and deselect others
+            bpy.ops.object.select_all(action='DESELECT')
+            obj.select_set(True)
+            context.view_layer.objects.active = obj
+            
             # Create a unique material name based on the object's name
             material_name = f"nodata_{obj.name}"
             print(f"Creating material '{material_name}' for object '{obj.name}'")
@@ -107,39 +113,12 @@ class MESH_OT_fill_nonmanifold(Operator):
             
             # Create new material
             nodata_mat = self.create_new_nodata_material(context, material_name)
-            materials_map[obj.name] = nodata_mat
-        
-        # Now process each object individually
-        for obj in selected_objects:
-            print(f"\n\nProcessing object: {obj.name}")
-            
-            # Set the current object as active and deselect others
-            bpy.ops.object.select_all(action='DESELECT')
-            obj.select_set(True)
-            context.view_layer.objects.active = obj
-            
-            # Get the material created for this object
-            nodata_mat = materials_map.get(obj.name)
-            if not nodata_mat:
-                print(f"  Error: No material found for {obj.name}")
-                skipped_count += 1
-                continue
             
             # Add material to object
-            if nodata_mat.name not in [slot.material.name if slot.material else "" for slot in obj.material_slots]:
-                obj.data.materials.append(nodata_mat)
+            obj.data.materials.append(nodata_mat)
             
             # Get the index of the nodata material
-            nodata_slot_index = -1
-            for i, slot in enumerate(obj.material_slots):
-                if slot.material and slot.material.name == nodata_mat.name:
-                    nodata_slot_index = i
-                    break
-            
-            if nodata_slot_index == -1:
-                print(f"  Error: Material slot not found for {obj.name}")
-                skipped_count += 1
-                continue
+            nodata_slot_index = len(obj.material_slots) - 1
             
             # Set the nodata material as active
             obj.active_material_index = nodata_slot_index
@@ -150,8 +129,10 @@ class MESH_OT_fill_nonmanifold(Operator):
             # Set selection mode to edges
             bpy.ops.mesh.select_mode(type='EDGE')
             
-            # Select non-manifold edges
+            # Deselect all
             bpy.ops.mesh.select_all(action='DESELECT')
+            
+            # Select non-manifold edges
             bpy.ops.mesh.select_non_manifold()
             
             # Get bmesh to check if we have selected edges
@@ -165,16 +146,13 @@ class MESH_OT_fill_nonmanifold(Operator):
             
             if selected_edges_count > 0:
                 try:
-                    # Remember which edge indices were selected
-                    selected_edge_indices = []
-                    for i, e in enumerate(bm.edges):
-                        if e.select:
-                            # Store indices, not edges
-                            selected_edge_indices.append(i)
-                    
                     # Fill using edge_face_add
                     bpy.ops.mesh.edge_face_add()
                     print(f"  Created faces from edges")
+                    
+                    # SIMPLIFIED APPROACH: The newly created faces remain selected after edge_face_add
+                    # Switch to face select mode to work with the created faces
+                    bpy.ops.mesh.select_mode(type='FACE')
                     
                     # Improve geometry if option is enabled
                     if self.improve_geometry:
@@ -182,35 +160,17 @@ class MESH_OT_fill_nonmanifold(Operator):
                         bpy.ops.mesh.beautify_fill()
                         print(f"  Improved geometry")
                     
-                    # After modifying the mesh, we need to update bmesh
-                    bmesh.update_edit_mesh(me)
-                    
-                    # The BMesh may have changed, so we select faces in a different way
-                    # Switch to face select mode
-                    bpy.ops.mesh.select_mode(type='FACE')
-                    
-                    # Select all faces
-                    bpy.ops.mesh.select_all(action='SELECT')
-                    
-                    # Invert the selection (select unassigned faces)
-                    bpy.ops.object.material_slot_select()
-                    bpy.ops.mesh.select_all(action='INVERT')
-                    
-                    # Assign material to selected faces (which are the newly created ones)
-                    bpy.ops.object.material_slot_assign()
-                    print(f"  Assigned material to new faces")
-                    
                     # Use F2 addon if available and enabled
                     if self.use_f2:
                         try:
                             bpy.ops.mesh.f2()
-                            # Re-select and assign material to any new faces
-                            bpy.ops.mesh.select_all(action='DESELECT')
-                            bpy.ops.object.material_slot_select()
-                            bpy.ops.mesh.select_all(action='INVERT')
-                            bpy.ops.object.material_slot_assign()
                         except Exception as e:
                             print(f"  F2 addon error: {str(e)}")
+                    
+                    # Directly assign the material to the selected faces
+                    # (which are the newly created ones since they remain selected)
+                    bpy.ops.object.material_slot_assign()
+                    print(f"  Assigned material to new faces")
                     
                     processed_count += 1
                     print(f"  Successfully processed {obj.name}")
