@@ -40,22 +40,34 @@ class OBJECT_OT_install_3dsc_missing_modules(bpy.types.Operator):
     list_modules_to_install: StringProperty() # type: ignore
 
     def execute(self, context):
-        if self.list_modules_to_install == "Google":
-            list_modules = google_list_modules()
-        elif self.list_modules_to_install == "EMdb_xlsx":
-            list_modules = EMdb_xlsx_modules()
-        elif self.list_modules_to_install == "py3dtiles":
-             list_modules = py3dtiles_modules()
-        elif self.list_modules_to_install == "kml":
-             list_modules = kml_modules()
-        elif self.list_modules_to_install == "ezdxf": 
-             list_modules = ezdxf_modules()
-        if self.is_install:
-            install_modules(list_modules)
-        else:
-            uninstall_modules(list_modules)
-        check_external_modules()
-        return {'FINISHED'}
+        try:
+            if self.list_modules_to_install == "Google":
+                list_modules = google_list_modules()
+            elif self.list_modules_to_install == "EMdb_xlsx":
+                list_modules = EMdb_xlsx_modules()
+            elif self.list_modules_to_install == "py3dtiles":
+                list_modules = py3dtiles_modules()
+            elif self.list_modules_to_install == "kml":
+                list_modules = kml_modules()
+            elif self.list_modules_to_install == "ezdxf":
+                list_modules = ezdxf_modules()
+            else:
+                self.report({'ERROR'}, f"Unknown module type: {self.list_modules_to_install}")
+                return {'CANCELLED'}
+                
+            if self.is_install:
+                install_modules(list_modules)
+                self.report({'INFO'}, f"Successfully installed {self.list_modules_to_install} modules")
+            else:
+                uninstall_modules(list_modules)
+                self.report({'INFO'}, f"Successfully uninstalled {self.list_modules_to_install} modules")
+                
+            check_external_modules()
+            return {'FINISHED'}
+            
+        except Exception as e:
+            self.report({'ERROR'}, f"Error: {str(e)}")
+            return {'CANCELLED'}
 
 def google_list_modules():
     list_of_modules =[
@@ -124,6 +136,7 @@ def py3dtiles_modules():
     return list_of_modules 
 
 def ezdxf_modules():
+    """Return list of modules needed for ezdxf"""
     list_of_modules = [
         "ezdxf",
         "pyparsing",
@@ -186,4 +199,4 @@ def unregister():
 
 if __name__ == '__main__':
     #install_modules(google_list_modules())
-    install_modules(EMdb_xlsx_modules())    
+    install_modules(EMdb_xlsx_modules())
