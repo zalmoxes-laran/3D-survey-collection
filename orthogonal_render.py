@@ -28,6 +28,32 @@ RESOLUTION_PRESETS = [
     ("HIGH", "High (6000x6000)", "6000x6000 pixels", 6000)
 ]
 
+
+def get_text_dimensions(text, font, draw=None):
+    """Get text dimensions in a way that works with any PIL version"""
+    try:
+        # Nuove versioni di PIL
+        if hasattr(font, "getbbox"):
+            bbox = font.getbbox(text)
+            return bbox[2] - bbox[0], bbox[3] - bbox[1]
+        # Versione di transizione
+        elif hasattr(font, "getsize"):
+            return font.getsize(text)
+        # Metodo più vecchio con ImageDraw 
+        elif draw and hasattr(draw, "textsize"):
+            return draw.textsize(text, font=font)
+        # Ancora più recente (se cambia l'API in futuro)
+        elif hasattr(font, "getlength"):
+            return font.getlength(text), font.getsize_multiline("X")[1]
+        else:
+            # Fallback
+            return len(text) * 20, 40
+    except Exception as e:
+        print(f"Error getting text dimensions: {e}")
+        # Fallback a valori ragionevoli
+        return len(text) * 20, 40
+
+
 class OBJECT_OT_setup_orthogonal_render(Operator):
     """Setup orthogonal rendering for the selected object with standardized views"""
     bl_idname = "object.setup_orthogonal_render"
@@ -256,6 +282,10 @@ class RENDER_OT_orthogonal_views(Operator):
     
     @classmethod
     def poll(cls, context):
+        # Check if blend file is saved
+        if not bpy.data.filepath:
+            return False
+            
         return (context.scene.camera is not None and 
                 "OrthoRenderCamera" in bpy.data.objects and 
                 context.active_object is not None)
@@ -306,6 +336,414 @@ class RENDER_OT_orthogonal_views(Operator):
         return {'FINISHED'}
 
 
+class RENDER_OT_create_orthogonal_svg(Operator):
+    """Create an SVG file with the orthogonal renders"""
+    bl_idname = "render.create_orthogonal_svg"
+    bl_label = "Create SVG Layout"
+    bl_options = {'REGISTER'}
+    
+    document_name: StringProperty(
+        name="Document Name",
+        description="Name of the SVG document",
+        default="orthogonal_renders"
+    )
+    
+    project_title: StringProperty(
+        name="Project Title",
+        description="Title of the project",
+        default=""
+    )
+    
+    measurement_unit: EnumProperty(
+        name="Measurement Unit",
+        description="Unit for dimensions",
+        items=[('cm', "Centimeters", "Use centimeters"),
+               ('m', "Meters", "Use meters"),
+               ('mm', "Millimeters", "Use millimeters")],
+        default='cm'
+    )
+    
+    template_name: StringProperty(
+        name="Template Name",
+        description="Name of the SVG template file to use (without extension)",
+        default="MASTER_1m"
+    )
+    
+    # Dinamicamente popolare la lista dei template disponibili
+    def get_available_templates(self, context):
+        templates = []
+        
+        # Percorsi possibili in cui cercare i template
+        possible_paths = [
+            # Percorso standard all'interno dell'addon
+            os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "svg_templates"),
+            # Percorso relativo al blend file
+            os.path.join(os.path.dirname(bpy.data.filepath), "svg_templates"),
+            # Percorso alternativo per sviluppo/test
+            os.path.join(os.path.dirname(bpy.data.filepath), "3DSC", "svg_templates")
+        ]
+        
+        # Cerca in tutti i percorsi possibili
+        for path in possible_paths:
+            if os.path.exists(path):
+                for file in os.listdir(path):
+                    if file.endswith(".svg"):
+                        name = os.path.splitext(file)[0]
+                        templates.append((name, name, f"Use template {name}"))
+        
+        # Aggiungi un template di fallback per evitare lista vuota
+        if not templates:
+            templates.append(("MASTER_1m", "MASTER_1m", "Default template"))
+        
+        return templates
+    
+    template_select: EnumProperty(
+        name="Template",
+        description="Select SVG template to use",
+        items=get_available_templates,
+    )
+    
+    auto_select_template: BoolProperty(
+        name="Auto-select Template",
+        description="Automatically select the best template based on object size",
+        default=True
+    )
+    
+    open_file: BoolProperty(
+        name="Open After Export",
+        description="Open the SVG file with the default application after export",
+        default=True
+    )
+    
+    @classmethod
+    def poll(cls, context):
+        # Check if the blend file is saved
+        if not bpy.data.filepath:
+            return False
+        
+        output_path = bpy.path.abspath(context.scene.ortho_render_output_path)
+        
+        # Check if output directory exists and contains rendered images
+        if not os.path.exists(output_path):
+            return False
+        
+        # Check if we have a camera and target set up
+        return "OrthoRenderCamera" in bpy.data.objects and context.active_object is not None
+    
+    def invoke(self, context, event):
+        # Set default name based on active object
+        if context.active_object:
+            self.document_name = context.active_object.name
+            self.project_title = context.active_object.name
+        
+        # Determina automaticamente il template migliore basato sulla dimensione
+        if self.auto_select_template:
+            obj = context.active_object
+            if obj:
+                bbox_dims = self.get_object_dimensions(obj)
+                max_dim = max(bbox_dims)
+                
+                # Seleziona il template appropriato in base alla dimensione
+                if max_dim <= 0.5:  # Oggetti piccoli (<= 50cm)
+                    self.template_select = "MASTER_50cm" if self.template_exists("MASTER_50cm") else "MASTER_1m"
+                elif max_dim <= 1.0:  # Oggetti medi (<= 1m)
+                    self.template_select = "MASTER_1m"
+                elif max_dim <= 2.0:  # Oggetti grandi (<= 2m)
+                    self.template_select = "MASTER_2m" if self.template_exists("MASTER_2m") else "MASTER_1m"
+                else:  # Oggetti molto grandi (> 2m)
+                    self.template_select = "MASTER_5m" if self.template_exists("MASTER_5m") else "MASTER_1m"
+        
+        return context.window_manager.invoke_props_dialog(self)
+    
+    def template_exists(self, template_name):
+        """Verifica se esiste un template con il nome specificato"""
+        template_paths = self.find_template_paths(template_name)
+        return len(template_paths) > 0
+    
+    def find_template_paths(self, template_name):
+        """Trova tutti i possibili percorsi per un dato template"""
+        template_paths = []
+        
+        # Percorsi possibili in cui cercare i template
+        possible_paths = [
+            # Percorso standard all'interno dell'addon
+            os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "svg_templates"),
+            # Percorso relativo al blend file
+            os.path.join(os.path.dirname(bpy.data.filepath), "svg_templates"),
+            # Percorso alternativo per sviluppo/test
+            os.path.join(os.path.dirname(bpy.data.filepath), "3DSC", "svg_templates")
+        ]
+        
+        for path in possible_paths:
+            if os.path.exists(path):
+                full_path = os.path.join(path, f"{template_name}.svg")
+                if os.path.exists(full_path):
+                    template_paths.append(full_path)
+        
+        return template_paths
+    
+    def draw(self, context):
+        layout = self.layout
+        
+        box = layout.box()
+        box.label(text="SVG Document Settings")
+        box.prop(self, "document_name")
+        box.prop(self, "project_title")
+        
+        box = layout.box()
+        box.label(text="Object Measurements")
+        box.prop(self, "measurement_unit")
+        
+        box = layout.box()
+        box.label(text="Template Selection")
+        box.prop(self, "auto_select_template")
+        
+        if not self.auto_select_template:
+            box.prop(self, "template_select")
+        else:
+            # Mostra il template selezionato automaticamente
+            box.label(text=f"Selected template: {self.template_select}")
+        
+        box = layout.box()
+        box.prop(self, "open_file")
+        
+        # Mostra avvisi per problemi comuni
+        if not bpy.data.filepath:
+            box = layout.box()
+            box.label(text="Warning: Blend file not saved", icon='ERROR')
+            box.label(text="Please save your file first")
+        
+        # Verifica se il template esiste
+        template_paths = self.find_template_paths(self.template_select)
+        if not template_paths:
+            box = layout.box()
+            box.label(text=f"Template '{self.template_select}' not found", icon='ERROR')
+            box.label(text="Check the svg_templates folder")
+    
+    def execute(self, context):
+        if not bpy.data.filepath:
+            self.report({'ERROR'}, "Please save your blend file first")
+            return {'CANCELLED'}
+        
+        obj = context.active_object
+        output_path = bpy.path.abspath(context.scene.ortho_render_output_path)
+        
+        # If output directory doesn't exist, create it
+        if not os.path.exists(output_path):
+            os.makedirs(output_path, exist_ok=True)
+        
+        # Get paths for each view based on defined positions
+        camera_positions = [
+            ("FR", "Front", "Front view (Y+)"),
+            ("BA", "Back", "Back view (Y-)"),
+            ("RI", "Right", "Right view (X+)"),
+            ("LE", "Left", "Left view (X-)"),
+            ("TO", "Top", "Top view (Z+)"),
+            ("BO", "Bottom", "Bottom view (Z-)")
+        ]
+        
+        image_paths = {}
+        for i, (code, name, _) in enumerate(camera_positions):
+            img_path = os.path.join(output_path, f"{obj.name}_{code}.png")
+            if os.path.exists(img_path):
+                image_paths[i+1] = img_path
+            else:
+                self.report({'WARNING'}, f"Missing render for {name} view. File not found: {img_path}")
+                image_paths[i+1] = ""
+        
+        # Get object dimensions
+        dimensions = self.get_object_dimensions(obj)
+        formatted_dimensions = self.format_dimensions(dimensions, self.measurement_unit)
+        
+        # Find the SVG template
+        template_paths = self.find_template_paths(self.template_select)
+        
+        if not template_paths:
+            self.report({'ERROR'}, f"Template '{self.template_select}' not found. Check the svg_templates folder")
+            return {'CANCELLED'}
+        
+        # Use the first found template
+        template_path = template_paths[0]
+        
+        # Read the template
+        try:
+            with open(template_path, 'r', encoding='utf-8') as f:
+                svg_content = f.read()
+        except Exception as e:
+            self.report({'ERROR'}, f"Error reading template: {e}")
+            return {'CANCELLED'}
+        
+        # Perform replacements
+        svg_content = svg_content.replace('_3dscnamedocument.svg', f"{self.document_name}.svg")
+        svg_content = svg_content.replace('_3dsctitolo', self.project_title)
+        svg_content = svg_content.replace('_3dscnomeblocco', obj.name)
+        svg_content = svg_content.replace('_3dscmisure', formatted_dimensions)
+        
+        # Trova il percorso dove creare i placeholder se necessario
+        placeholder_path = os.path.join(os.path.dirname(template_path), "placeholder.png")
+        if not os.path.exists(placeholder_path):
+            self.create_placeholder_image(placeholder_path)
+        
+        # Replace image references
+        for i in range(1, 7):
+            if i in image_paths and image_paths[i]:
+                svg_content = svg_content.replace(f'_image{i}', image_paths[i])
+                svg_content = svg_content.replace(f'_ref_image{i}', image_paths[i])
+            else:
+                svg_content = svg_content.replace(f'_image{i}', placeholder_path)
+                svg_content = svg_content.replace(f'_ref_image{i}', placeholder_path)
+        
+        # Handle special case for image 7 and 8 (used for section views)
+        svg_content = svg_content.replace('_image7', placeholder_path)
+        svg_content = svg_content.replace('_ref_image7', placeholder_path)
+        svg_content = svg_content.replace('_image_8', placeholder_path)
+        svg_content = svg_content.replace('_ref_image_8', placeholder_path)
+        
+        # Replace logo if it exists
+        logo_path = os.path.join(os.path.dirname(template_path), "logo.png")
+        if os.path.exists(logo_path):
+            svg_content = svg_content.replace('_logo', logo_path)
+            svg_content = svg_content.replace('_ref_logo', logo_path)
+        
+        # Create the output path for the SVG file
+        svg_output_path = os.path.join(output_path, f"{self.document_name}.svg")
+        
+        # Write the modified SVG file
+        try:
+            with open(svg_output_path, 'w', encoding='utf-8') as f:
+                f.write(svg_content)
+        except Exception as e:
+            self.report({'ERROR'}, f"Error writing SVG file: {e}")
+            return {'CANCELLED'}
+        
+        # Open the file if requested
+        if self.open_file:
+            try:
+                import subprocess
+                if os.name == 'nt':  # Windows
+                    os.startfile(svg_output_path)
+                elif os.name == 'posix':  # Linux or Mac
+                    subprocess.Popen(['xdg-open', svg_output_path])
+            except Exception as e:
+                self.report({'WARNING'}, f"Could not open file: {e}")
+        
+        self.report({'INFO'}, f"SVG created successfully at {svg_output_path}")
+        return {'FINISHED'}
+    
+    def get_object_dimensions(self, obj):
+        """Get the object's bounding box dimensions in world space"""
+        bbox_corners = [obj.matrix_world @ Vector(corner) for corner in obj.bound_box]
+        
+        # Calculate the dimensions
+        min_x = min(corner.x for corner in bbox_corners)
+        max_x = max(corner.x for corner in bbox_corners)
+        min_y = min(corner.y for corner in bbox_corners)
+        max_y = max(corner.y for corner in bbox_corners)
+        min_z = min(corner.z for corner in bbox_corners)
+        max_z = max(corner.z for corner in bbox_corners)
+        
+        width = max_x - min_x
+        depth = max_y - min_y
+        height = max_z - min_z
+        
+        return (depth, width, height)
+    
+    def format_dimensions(self, dimensions, unit):
+        """Format dimensions with the proper unit"""
+        if unit == 'm':
+            # Convert from meters to meters (no change)
+            formatted = f"{dimensions[0]:.2f} x {dimensions[1]:.2f} x {dimensions[2]:.2f} m"
+        elif unit == 'cm':
+            # Convert from meters to centimeters
+            dim_cm = [d * 100 for d in dimensions]
+            formatted = f"{dim_cm[0]:.1f} x {dim_cm[1]:.1f} x {dim_cm[2]:.1f} cm"
+        elif unit == 'mm':
+            # Convert from meters to millimeters
+            dim_mm = [d * 1000 for d in dimensions]
+            formatted = f"{int(dim_mm[0])} x {int(dim_mm[1])} x {int(dim_mm[2])} mm"
+        else:
+            formatted = f"{dimensions[0]:.2f} x {dimensions[1]:.2f} x {dimensions[2]:.2f}"
+        
+        return formatted
+    
+    def create_placeholder_image(self, placeholder_path):
+        """Create a placeholder image at the specified path"""
+        try:
+            # Only import PIL if we need to create the placeholder
+            from PIL import Image, ImageDraw, ImageFont
+            
+            # Create the directory if it doesn't exist
+            os.makedirs(os.path.dirname(placeholder_path), exist_ok=True)
+            
+            # Create a simple placeholder image
+            width, height = 800, 800
+            image = Image.new('RGBA', (width, height), (50, 50, 50, 255))
+            draw = ImageDraw.Draw(image)
+            
+            # Draw a grid pattern
+            grid_spacing = 50
+            color1 = (60, 60, 60, 255)
+            color2 = (40, 40, 40, 255)
+            
+            for x in range(0, width, grid_spacing):
+                for y in range(0, height, grid_spacing):
+                    if (x // grid_spacing + y // grid_spacing) % 2 == 0:
+                        draw.rectangle([x, y, x + grid_spacing, y + grid_spacing], fill=color1)
+                    else:
+                        draw.rectangle([x, y, x + grid_spacing, y + grid_spacing], fill=color2)
+            
+            # Draw diagonal lines
+            draw.line((0, 0, width, height), fill=(100, 100, 100), width=5)
+            draw.line((0, height, width, 0), fill=(100, 100, 100), width=5)
+            
+            # Draw a message in the center
+            try:
+                # Try to use a font if available
+                font = ImageFont.truetype("arial.ttf", 40)
+            except:
+                # Fallback to default
+                font = ImageFont.load_default()
+                
+            text = "View Not Rendered"
+            
+            # Get text dimensions (compatible with any PIL version)
+            text_width, text_height = get_text_dimensions(text, font, draw)
+            text_position = ((width - text_width) // 2, (height - text_height) // 2)
+            
+            # Draw text with shadow
+            draw.text((text_position[0]+2, text_position[1]+2), text, font=font, fill=(0, 0, 0, 255))
+            draw.text(text_position, text, font=font, fill=(200, 200, 200, 255))
+            
+            # Save the image
+            image.save(placeholder_path)
+            print(f"Created placeholder image at {placeholder_path}")
+            
+        except Exception as e:
+            print(f"Error creating placeholder image: {e}")
+            # Create a simple fallback if PIL is not available
+            try:
+                if not os.path.exists(placeholder_path):
+                    # Create a simple numpy array and save it with matplotlib
+                    import numpy as np
+                    import matplotlib.pyplot as plt
+                    
+                    arr = np.zeros((800, 800, 3))
+                    for i in range(800):
+                        for j in range(800):
+                            if (i//50 + j//50) % 2 == 0:
+                                arr[i, j] = [0.2, 0.2, 0.2]
+                            else:
+                                arr[i, j] = [0.15, 0.15, 0.15]
+                    
+                    # Add diagonal lines
+                    for i in range(800):
+                        arr[i, i] = [0.4, 0.4, 0.4]
+                        arr[i, 799-i] = [0.4, 0.4, 0.4]
+                    
+                    plt.imsave(placeholder_path, arr)
+                    print(f"Created fallback placeholder image at {placeholder_path}")
+            except:
+                print("Could not create placeholder image")
 class VIEW3D_PT_orthogonal_render(Panel):
     """Panel for orthogonal rendering setup"""
     bl_label = "Orthogonal Render"
@@ -355,6 +793,13 @@ class VIEW3D_PT_orthogonal_render(Panel):
         # Output path
         box = layout.box()
         box.label(text="Output Settings", icon='FOLDER_REDIRECT')
+        
+        # Warning if file is not saved
+        if not bpy.data.filepath:
+            row = box.row()
+            row.alert = True
+            row.label(text="Save file first!", icon='ERROR')
+        
         box.prop(scene, "ortho_render_output_path", text="")
         
         # Setup and render buttons
@@ -380,11 +825,140 @@ class VIEW3D_PT_orthogonal_render(Panel):
                     box.label(text=f"Current Size: {scene.ortho_render_size_category}")
                     
                 box.label(text=f"Resolution: {scene.render.resolution_x}x{scene.render.resolution_y}")
+        
+        # SVG Export section
+        box = layout.box()
+        box.label(text="SVG Layout Export", icon='FILE_IMAGE')
+        
+        # Check if SVG template exists
+        template_exists = ensure_svg_templates_folder()
+        
+        if not template_exists:
+            box.label(text="SVG template not found", icon='ERROR')
+            box.label(text="Please install the template files")
+        elif not bpy.data.filepath:
+            box.label(text="Save file before exporting SVG", icon='ERROR')
+        else:
+            # Check if we have renders available
+            has_renders = False
+            output_path = bpy.path.abspath(context.scene.ortho_render_output_path)
+            if os.path.exists(output_path):
+                # Check for at least one rendered view
+                if context.active_object:
+                    front_view = os.path.join(output_path, f"{context.active_object.name}_FR.png")
+                    if os.path.exists(front_view):
+                        has_renders = True
+            
+            if not has_renders:
+                box.label(text="Render views before creating SVG", icon='INFO')
+                box.label(text="At least one view is required")
+        
+        # Create SVG button
+        row = box.row(align=True)
+        row.scale_y = 1.2
+        row.enabled = template_exists and bpy.data.filepath and has_renders
+        row.operator("render.create_orthogonal_svg", icon='OUTLINER_OB_FONT')
+
+
+# Function to make sure the SVG template folder exists and create it if not
+def ensure_svg_templates_folder():
+    # Possibili percorsi per i template
+    possible_paths = [
+        # Percorso standard all'interno dell'addon
+        os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "svg_templates"),
+        # Percorso relativo al blend file 
+        os.path.join(os.path.dirname(bpy.data.filepath), "svg_templates"),
+        # Percorso alternativo per sviluppo/test
+        os.path.join(os.path.dirname(bpy.data.filepath), "3DSC", "svg_templates")
+    ]
+    
+    # Percorsi esistenti
+    existing_paths = [p for p in possible_paths if os.path.exists(p)]
+    
+    # Se non esiste alcun percorso, creane uno
+    if not existing_paths:
+        try:
+            os.makedirs(possible_paths[0], exist_ok=True)
+            existing_paths = [possible_paths[0]]
+        except Exception as e:
+            print(f"Error creating svg_templates directory: {e}")
+            return False
+    
+    # Verifica se esiste almeno un template SVG
+    has_template = False
+    for path in existing_paths:
+        for file in os.listdir(path):
+            if file.endswith(".svg"):
+                has_template = True
+                break
+        if has_template:
+            break
+    
+    # Se non esiste alcun template, copia il template di base
+    if not has_template:
+        try:
+            # Copia il template integrato nell'addon
+            import shutil
+            source_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "svg_templates", "MASTER_1m.svg")
+            if os.path.exists(source_path):
+                shutil.copy(source_path, os.path.join(existing_paths[0], "MASTER_1m.svg"))
+                has_template = True
+        except Exception as e:
+            print(f"Error copying template: {e}")
+    
+    # Crea il placeholder se necessario
+    for path in existing_paths:
+        placeholder_path = os.path.join(path, "placeholder.png")
+        if not os.path.exists(placeholder_path):
+            try:
+                # Create placeholder
+                from PIL import Image, ImageDraw, ImageFont
+                
+                width, height = 800, 800
+                image = Image.new('RGBA', (width, height), (50, 50, 50, 255))
+                draw = ImageDraw.Draw(image)
+                
+                # Draw a grid pattern
+                grid_spacing = 50
+                color1 = (60, 60, 60, 255)
+                color2 = (40, 40, 40, 255)
+                
+                for x in range(0, width, grid_spacing):
+                    for y in range(0, height, grid_spacing):
+                        if (x // grid_spacing + y // grid_spacing) % 2 == 0:
+                            draw.rectangle([x, y, x + grid_spacing, y + grid_spacing], fill=color1)
+                        else:
+                            draw.rectangle([x, y, x + grid_spacing, y + grid_spacing], fill=color2)
+                
+                # Draw diagonals
+                draw.line((0, 0, width, height), fill=(100, 100, 100), width=5)
+                draw.line((0, height, width, 0), fill=(100, 100, 100), width=5)
+                
+                # Add text
+                try:
+                    font = ImageFont.truetype("arial.ttf", 40)
+                except:
+                    font = ImageFont.load_default()
+                
+                text = "View Not Rendered"
+                text_width, text_height = get_text_dimensions(text, font, draw)
+                text_position = ((width - text_width) // 2, (height - text_height) // 2)
+                
+                draw.text((text_position[0]+2, text_position[1]+2), text, font=font, fill=(0, 0, 0, 255))
+                draw.text(text_position, text, font=font, fill=(200, 200, 200, 255))
+                
+                image.save(placeholder_path)
+                print(f"Created placeholder at {placeholder_path}")
+            except Exception as e:
+                print(f"Error creating placeholder: {e}")
+    
+    return has_template
 
 
 def register():
     bpy.utils.register_class(OBJECT_OT_setup_orthogonal_render)
     bpy.utils.register_class(RENDER_OT_orthogonal_views)
+    bpy.utils.register_class(RENDER_OT_create_orthogonal_svg)
     bpy.utils.register_class(VIEW3D_PT_orthogonal_render)
     
     # Register properties
@@ -465,6 +1039,7 @@ def register():
 
 def unregister():
     bpy.utils.unregister_class(VIEW3D_PT_orthogonal_render)
+    bpy.utils.unregister_class(RENDER_OT_create_orthogonal_svg)
     bpy.utils.unregister_class(RENDER_OT_orthogonal_views)
     bpy.utils.unregister_class(OBJECT_OT_setup_orthogonal_render)
     
