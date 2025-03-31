@@ -76,6 +76,7 @@ else:
             multimesh_manager,
             realitycapture,
             cesium_preprocessing,
+            orthogonal_render
             )
     
     from .exporter_cesium import export_tile_model
@@ -91,7 +92,8 @@ from .utils import rotation_constrained
 
 from .utils import circumcenter_tool
 
-from .importer import import_dxf
+from .importer import import_dxf, import_linked_lod
+
 
 # demo bare-bones preferences
 @addon_updater_ops.make_annotations
@@ -441,6 +443,9 @@ def register():
     rotation_constrained.register()
     circumcenter_tool.register()
     import_dxf.register()
+    import_linked_lod.register()
+    orthogonal_render.register()
+
 
     bpy.types.Scene.SHIFT_OBJ_on = BoolProperty(
         name = "Shifting obj export",
@@ -592,6 +597,9 @@ def unregister():
     rotation_constrained.unregister()
     circumcenter_tool.unregister()
     import_dxf.unregister()
+    import_linked_lod.unregister()
+    orthogonal_render.unregister()
+
 
     del bpy.types.WindowManager.interface_vars
     del bpy.types.WindowManager.suffix_num
