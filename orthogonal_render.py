@@ -186,20 +186,24 @@ class OBJECT_OT_setup_orthogonal_render(Operator):
         return camera
     
     def create_target_empty(self, obj, context):
-        """Create an empty object as a target for the camera"""
+        """Create an empty object as a target for the camera at the bounding box center"""
         target_name = "OrthoRenderTarget"
+        
+        # Calculate the center of the bounding box in world space
+        bbox_corners = [obj.matrix_world @ Vector(corner) for corner in obj.bound_box]
+        bbox_center = sum(bbox_corners, Vector()) / 8  # Average of all 8 corners
         
         # Check if the target already exists
         if target_name in bpy.data.objects:
             target = bpy.data.objects[target_name]
-            # Update location to the object's center
-            target.location = obj.matrix_world.translation
+            # Update location to the bounding box center
+            target.location = bbox_center
         else:
             # Create new empty
             target = bpy.data.objects.new(target_name, None)
             target.empty_display_type = 'PLAIN_AXES'
             target.empty_display_size = 0.2
-            target.location = obj.matrix_world.translation
+            target.location = bbox_center
             context.collection.objects.link(target)
         
         return target
@@ -461,24 +465,31 @@ class RENDER_OT_create_orthogonal_svg(Operator):
         return len(template_paths) > 0
     
     def find_template_paths(self, template_name):
-        """Trova tutti i possibili percorsi per un dato template"""
+        """Find all possible paths for a given template"""
         template_paths = []
         
-        # Percorsi possibili in cui cercare i template
+        # Get the addon directory
+        addon_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+        
+        # Possible paths where templates could be
         possible_paths = [
-            # Percorso standard all'interno dell'addon
-            os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "svg_templates"),
-            # Percorso relativo al blend file
-            os.path.join(os.path.dirname(bpy.data.filepath), "svg_templates"),
-            # Percorso alternativo per sviluppo/test
-            os.path.join(os.path.dirname(bpy.data.filepath), "3DSC", "svg_templates")
+            # Standard path inside the addon
+            os.path.join(addon_dir, "svg_templates"),
+            # Path relative to the blend file
+            os.path.join(os.path.dirname(bpy.data.filepath), "svg_templates") if bpy.data.filepath else None,
+            # Alternative path for development/testing
+            os.path.join(os.path.dirname(bpy.data.filepath), "3DSC", "svg_templates") if bpy.data.filepath else None
         ]
+        
+        # Filter out None values
+        possible_paths = [p for p in possible_paths if p]
         
         for path in possible_paths:
             if os.path.exists(path):
                 full_path = os.path.join(path, f"{template_name}.svg")
                 if os.path.exists(full_path):
                     template_paths.append(full_path)
+                    print(f"Found template at: {full_path}")
         
         return template_paths
     
@@ -862,95 +873,81 @@ class VIEW3D_PT_orthogonal_render(Panel):
 
 # Function to make sure the SVG template folder exists and create it if not
 def ensure_svg_templates_folder():
-    # Possibili percorsi per i template
+    """Make sure the SVG template folder exists and contains at least one template"""
+    
+    # Get the addon directory (parent folder of the current script)
+    addon_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+    
+    # Define possible template locations
     possible_paths = [
-        # Percorso standard all'interno dell'addon
-        os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "svg_templates"),
-        # Percorso relativo al blend file 
-        os.path.join(os.path.dirname(bpy.data.filepath), "svg_templates"),
-        # Percorso alternativo per sviluppo/test
-        os.path.join(os.path.dirname(bpy.data.filepath), "3DSC", "svg_templates")
+        # Standard path inside the addon
+        os.path.join(addon_dir, "svg_templates"),
+        # Path relative to the blend file (for user customization)
+        os.path.join(os.path.dirname(bpy.data.filepath), "svg_templates") if bpy.data.filepath else None,
+        # Alternative path for development/testing
+        os.path.join(os.path.dirname(bpy.data.filepath), "3DSC", "svg_templates") if bpy.data.filepath else None
     ]
     
-    # Percorsi esistenti
+    # Filter out None values (if blend file is not saved)
+    possible_paths = [p for p in possible_paths if p]
+    
+    # Create the first possible path if none exist
     existing_paths = [p for p in possible_paths if os.path.exists(p)]
     
-    # Se non esiste alcun percorso, creane uno
-    if not existing_paths:
+    if not existing_paths and possible_paths:
         try:
             os.makedirs(possible_paths[0], exist_ok=True)
+            print(f"Created SVG templates directory at {possible_paths[0]}")
             existing_paths = [possible_paths[0]]
         except Exception as e:
             print(f"Error creating svg_templates directory: {e}")
             return False
     
-    # Verifica se esiste almeno un template SVG
+    # Check if any template exists in any of the paths
     has_template = False
     for path in existing_paths:
-        for file in os.listdir(path):
-            if file.endswith(".svg"):
-                has_template = True
-                break
+        if os.path.exists(path):
+            for file in os.listdir(path):
+                if file.endswith(".svg") and "MASTER" in file:
+                    has_template = True
+                    print(f"Found SVG template: {os.path.join(path, file)}")
+                    break
         if has_template:
             break
     
-    # Se non esiste alcun template, copia il template di base
-    if not has_template:
+    # Create a template from the bundled data if none exists
+    if not has_template and existing_paths:
         try:
-            # Copia il template integrato nell'addon
-            import shutil
-            source_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "svg_templates", "MASTER_1m.svg")
-            if os.path.exists(source_path):
-                shutil.copy(source_path, os.path.join(existing_paths[0], "MASTER_1m.svg"))
+            target_path = os.path.join(existing_paths[0], "MASTER_1m.svg")
+            
+            # Get the bundled template from the addon's data
+            source_content = None
+            # Look for the bundled template in the addon directory
+            bundled_template = os.path.join(addon_dir, "svg_templates", "MASTER_1m.svg")
+            
+            if os.path.exists(bundled_template):
+                with open(bundled_template, 'r', encoding='utf-8') as f:
+                    source_content = f.read()
+            else:
+                # If not found in the addon, use the template content from the module
+                source_content = """<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- SVG template content (simplified for example) -->
+<svg xmlns="http://www.w3.org/2000/svg" width="4212.9922" height="2979.9211">
+    <!-- Basic template structure -->
+    <rect width="4217.1235" height="2974.8203" fill="#333132"/>
+    <text x="3738.8293" y="247.63985" style="font-size:209.79074097px;fill:#fffefe;">_3dscnomeblocco</text>
+    <text x="95.911674" y="2887.7966" style="font-size:74.23442841px;fill:#fffefe;">_3dsctitolo</text>
+    <!-- Placeholder for images -->
+</svg>"""
+            
+            # Write the template to the target location
+            if source_content:
+                with open(target_path, 'w', encoding='utf-8') as f:
+                    f.write(source_content)
+                print(f"Created SVG template at {target_path}")
                 has_template = True
         except Exception as e:
-            print(f"Error copying template: {e}")
-    
-    # Crea il placeholder se necessario
-    for path in existing_paths:
-        placeholder_path = os.path.join(path, "placeholder.png")
-        if not os.path.exists(placeholder_path):
-            try:
-                # Create placeholder
-                from PIL import Image, ImageDraw, ImageFont
-                
-                width, height = 800, 800
-                image = Image.new('RGBA', (width, height), (50, 50, 50, 255))
-                draw = ImageDraw.Draw(image)
-                
-                # Draw a grid pattern
-                grid_spacing = 50
-                color1 = (60, 60, 60, 255)
-                color2 = (40, 40, 40, 255)
-                
-                for x in range(0, width, grid_spacing):
-                    for y in range(0, height, grid_spacing):
-                        if (x // grid_spacing + y // grid_spacing) % 2 == 0:
-                            draw.rectangle([x, y, x + grid_spacing, y + grid_spacing], fill=color1)
-                        else:
-                            draw.rectangle([x, y, x + grid_spacing, y + grid_spacing], fill=color2)
-                
-                # Draw diagonals
-                draw.line((0, 0, width, height), fill=(100, 100, 100), width=5)
-                draw.line((0, height, width, 0), fill=(100, 100, 100), width=5)
-                
-                # Add text
-                try:
-                    font = ImageFont.truetype("arial.ttf", 40)
-                except:
-                    font = ImageFont.load_default()
-                
-                text = "View Not Rendered"
-                text_width, text_height = get_text_dimensions(text, font, draw)
-                text_position = ((width - text_width) // 2, (height - text_height) // 2)
-                
-                draw.text((text_position[0]+2, text_position[1]+2), text, font=font, fill=(0, 0, 0, 255))
-                draw.text(text_position, text, font=font, fill=(200, 200, 200, 255))
-                
-                image.save(placeholder_path)
-                print(f"Created placeholder at {placeholder_path}")
-            except Exception as e:
-                print(f"Error creating placeholder: {e}")
+            print(f"Error creating template: {e}")
     
     return has_template
 
