@@ -577,44 +577,49 @@ class RENDER_OT_create_orthogonal_svg(Operator):
         dimensions = self.get_object_dimensions(obj)
         formatted_dimensions = self.format_dimensions(dimensions, self.measurement_unit)
         
-        # Find the SVG template - NO FALLBACK
+        # Find the SVG template
         template_paths = self.find_template_paths(self.template_select)
 
         if not template_paths:
-            # Simply report error and abort if template not found
             self.report({'ERROR'}, f"Template '{self.template_select}' not found. Operation cancelled.")
             return {'CANCELLED'}
 
         # Use the first template found
         template_path = template_paths[0]
-
-        # Read the template - NO FALLBACK
+        
+        # Create the output path for the SVG file
+        svg_output_path = os.path.join(output_path, f"{self.document_name}.svg")
+        
+        # Copy the template file directly to destination instead of loading it in memory first
         try:
-            with open(template_path, 'r', encoding='utf-8') as f:
-                svg_content = f.read()
-                print(f"SVG template read successfully from {template_path}, size: {len(svg_content)} bytes")
+            import shutil
+            shutil.copy2(template_path, svg_output_path)
+            print(f"Template copied from {template_path} to {svg_output_path}")
         except Exception as e:
-            self.report({'ERROR'}, f"Error reading template file: {e}")
+            self.report({'ERROR'}, f"Error copying template file: {e}")
             return {'CANCELLED'}
-
-        # Simple replacements for text and names
+        
+        # Now read the copied file for replacements
+        try:
+            with open(svg_output_path, 'r', encoding='utf-8') as f:
+                svg_content = f.read()
+                print(f"Read {len(svg_content)} bytes from copied template")
+        except Exception as e:
+            self.report({'ERROR'}, f"Error reading copied template: {e}")
+            return {'CANCELLED'}
+        
+        # Handle placeholder for missing images
+        placeholder_path = os.path.join(os.path.dirname(template_path), "placeholder.png")
+        if not os.path.exists(placeholder_path):
+            self.create_placeholder_image(placeholder_path)
+        
+        # Make all required replacements
         svg_content = svg_content.replace('_3dscnamedocument.svg', f"{self.document_name}.svg")
         svg_content = svg_content.replace('_3dsctitolo', self.project_title)
         svg_content = svg_content.replace('_3dscnomeblocco', obj.name)
         svg_content = svg_content.replace('_3dscmisure', formatted_dimensions)
-
-        # Handle placeholder for missing images
-        placeholder_path = os.path.join(os.path.dirname(template_path), "placeholder.png")
-        if not os.path.exists(placeholder_path):
-            print(f"Creating placeholder at {placeholder_path}")
-            self.create_placeholder_image(placeholder_path)
-        elif not os.path.getsize(placeholder_path) > 0:
-            print(f"Existing placeholder is empty, recreating...")
-            self.create_placeholder_image(placeholder_path)
-        else:
-            print(f"Using existing placeholder: {placeholder_path}")
-
-        # Replace image references (main views)
+        
+        # Replace image references
         for i in range(1, 7):
             if i in image_paths and image_paths[i] and os.path.exists(image_paths[i]):
                 print(f"Using actual image for view {i}: {image_paths[i]}")
@@ -624,8 +629,8 @@ class RENDER_OT_create_orthogonal_svg(Operator):
                 print(f"Using placeholder for view {i}")
                 svg_content = svg_content.replace(f'_image{i}', placeholder_path)
                 svg_content = svg_content.replace(f'_ref_image{i}', placeholder_path)
-
-        # Handle special images (section and other views)
+        
+        # Handle special images
         special_images = [
             ('_image7', '_ref_image7'),
             ('_image_8', '_ref_image_8')
@@ -633,29 +638,23 @@ class RENDER_OT_create_orthogonal_svg(Operator):
         for img_tag, ref_tag in special_images:
             svg_content = svg_content.replace(img_tag, placeholder_path)
             svg_content = svg_content.replace(ref_tag, placeholder_path)
-            print(f"Set {img_tag} to placeholder")
-
+        
         # Handle logo
         logo_path = os.path.join(os.path.dirname(template_path), "logo.png")
         if os.path.exists(logo_path):
-            print(f"Logo found at {logo_path}")
             svg_content = svg_content.replace('_logo', logo_path)
             svg_content = svg_content.replace('_ref_logo', logo_path)
         else:
-            print(f"Logo not found at {logo_path}, using placeholder")
             svg_content = svg_content.replace('_logo', placeholder_path)
-            svg_content = svg_content.replace('_ref_logo', placeholder_path)     
+            svg_content = svg_content.replace('_ref_logo', placeholder_path)
         
-        # Create the output path for the SVG file
-        svg_output_path = os.path.join(output_path, f"{self.document_name}.svg")
-        
-        # Write the modified SVG file
+        # Write back the modified content
         try:
             with open(svg_output_path, 'w', encoding='utf-8') as f:
                 f.write(svg_content)
-                print(f"Successfully wrote SVG file with {len(svg_content)} bytes to {svg_output_path}")
+                print(f"Modified SVG written back with {len(svg_content)} bytes")
         except Exception as e:
-            self.report({'ERROR'}, f"Error writing SVG file: {e}")
+            self.report({'ERROR'}, f"Error writing modified SVG: {e}")
             return {'CANCELLED'}
         
         # Open the file if requested
