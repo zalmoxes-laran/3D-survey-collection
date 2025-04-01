@@ -480,9 +480,9 @@ class RENDER_OT_create_orthogonal_svg(Operator):
             # Standard path inside the addon
             os.path.join(addon_dir, "svg_templates"),
             # Path relative to the blend file
-            os.path.join(os.path.dirname(bpy.data.filepath), "svg_templates") if bpy.data.filepath else None,
+            #os.path.join(os.path.dirname(bpy.data.filepath), "svg_templates") if bpy.data.filepath else None,
             # Alternative path for development
-            os.path.join(os.path.dirname(bpy.data.filepath), "3DSC", "svg_templates") if bpy.data.filepath else None
+            #os.path.join(os.path.dirname(bpy.data.filepath), "3DSC", "svg_templates") if bpy.data.filepath else None
         ]
         
         # Filter out None values
@@ -913,9 +913,9 @@ def ensure_svg_templates_folder():
         # Standard path inside the addon
         os.path.join(addon_dir, "svg_templates"),
         # Path relative to the blend file 
-        os.path.join(os.path.dirname(bpy.data.filepath), "svg_templates") if bpy.data.filepath else None,
+        #os.path.join(os.path.dirname(bpy.data.filepath), "svg_templates") if bpy.data.filepath else None,
         # Alternative path for development/testing
-        os.path.join(os.path.dirname(bpy.data.filepath), "3DSC", "svg_templates") if bpy.data.filepath else None
+        #os.path.join(os.path.dirname(bpy.data.filepath), "3DSC", "svg_templates") if bpy.data.filepath else None
     ]
     
     # Filter out None values (e.g., if blend file is not saved)
