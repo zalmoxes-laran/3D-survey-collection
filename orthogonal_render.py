@@ -4,6 +4,7 @@ import math
 from mathutils import Vector
 from bpy.props import EnumProperty, IntProperty, StringProperty, BoolProperty, FloatProperty
 from bpy.types import Panel, Operator
+from .functions import make_path_relative
 
 # Constants
 SIZE_CATEGORIES = [
@@ -467,22 +468,22 @@ class RENDER_OT_create_orthogonal_svg(Operator):
         template_paths = self.find_template_paths(template_name)
         return len(template_paths) > 0
     
-    def find_template_paths(self, template_name):
+    def find_template_paths(self, template_name):        
         """Find all possible paths for a given template"""
         template_paths = []
         self.last_checked_paths = []  # Resetta la lista
         
         # Get the addon directory
-        addon_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+        addon_dir = get_addon_path()
         
         # Possible paths
         possible_paths = [
             # Standard path inside the addon
             os.path.join(addon_dir, "svg_templates"),
             # Path relative to the blend file
-            #os.path.join(os.path.dirname(bpy.data.filepath), "svg_templates") if bpy.data.filepath else None,
+            os.path.join(os.path.dirname(bpy.data.filepath), "svg_templates") if bpy.data.filepath else None,
             # Alternative path for development
-            #os.path.join(os.path.dirname(bpy.data.filepath), "3DSC", "svg_templates") if bpy.data.filepath else None
+            os.path.join(os.path.dirname(bpy.data.filepath), "3DSC", "svg_templates") if bpy.data.filepath else None
         ]
         
         # Filter out None values
@@ -593,12 +594,12 @@ class RENDER_OT_create_orthogonal_svg(Operator):
         # Copy the template file directly to destination instead of loading it in memory first
         try:
             import shutil
-            shutil.copy2(template_path, svg_output_path)
+            shutil.copy(template_path, svg_output_path)
             print(f"Template copied from {template_path} to {svg_output_path}")
         except Exception as e:
             self.report({'ERROR'}, f"Error copying template file: {e}")
             return {'CANCELLED'}
-        
+        #return {'FINISHED'}
         # Now read the copied file for replacements
         try:
             with open(svg_output_path, 'r', encoding='utf-8') as f:
@@ -609,12 +610,12 @@ class RENDER_OT_create_orthogonal_svg(Operator):
             return {'CANCELLED'}
         
         # Handle placeholder for missing images
-        placeholder_path = os.path.join(os.path.dirname(template_path), "placeholder.png")
+        placeholder_path = os.path.join(os.path.dirname(svg_output_path), "placeholder.png")
         if not os.path.exists(placeholder_path):
             self.create_placeholder_image(placeholder_path)
         
         # Make all required replacements
-        svg_content = svg_content.replace('_3dscnamedocument.svg', f"{self.document_name}.svg")
+        #svg_content = svg_content.replace('_3dscnamedocument.svg', f"{self.document_name}.svg")
         svg_content = svg_content.replace('_3dsctitolo', self.project_title)
         svg_content = svg_content.replace('_3dscnomeblocco', obj.name)
         svg_content = svg_content.replace('_3dscmisure', formatted_dimensions)
@@ -623,29 +624,31 @@ class RENDER_OT_create_orthogonal_svg(Operator):
         for i in range(1, 7):
             if i in image_paths and image_paths[i] and os.path.exists(image_paths[i]):
                 print(f"Using actual image for view {i}: {image_paths[i]}")
-                svg_content = svg_content.replace(f'_image{i}', image_paths[i])
-                svg_content = svg_content.replace(f'_ref_image{i}', image_paths[i])
+                current_image_relative_path = make_path_relative(image_paths[i], output_path)
+                svg_content = svg_content.replace(f'_ref_image{i}', current_image_relative_path)
+                #svg_content = svg_content.replace(f'_ref_image{i}', f'file:///{image_paths[i]}')
             else:
                 print(f"Using placeholder for view {i}")
-                svg_content = svg_content.replace(f'_image{i}', placeholder_path)
-                svg_content = svg_content.replace(f'_ref_image{i}', placeholder_path)
+                placeholder_relative_path = make_path_relative(placeholder_path, output_path)
+                svg_content = svg_content.replace(f'_ref_image{i}', placeholder_relative_path)
+                #svg_content = svg_content.replace(f'_ref_image{i}', placeholder_path)
         
         # Handle special images
-        special_images = [
-            ('_image7', '_ref_image7'),
-            ('_image_8', '_ref_image_8')
-        ]
-        for img_tag, ref_tag in special_images:
-            svg_content = svg_content.replace(img_tag, placeholder_path)
-            svg_content = svg_content.replace(ref_tag, placeholder_path)
+        #special_images = [
+        #    ('_image7', '_ref_image7'),
+        #    ('_image_8', '_ref_image_8')
+        #]
+        #for img_tag, ref_tag in special_images:
+        #    svg_content = svg_content.replace(img_tag, placeholder_path)
+        #    svg_content = svg_content.replace(ref_tag, placeholder_path)
         
         # Handle logo
         logo_path = os.path.join(os.path.dirname(template_path), "logo.png")
         if os.path.exists(logo_path):
-            svg_content = svg_content.replace('_logo', logo_path)
+            #svg_content = svg_content.replace('_logo', logo_path)
             svg_content = svg_content.replace('_ref_logo', logo_path)
         else:
-            svg_content = svg_content.replace('_logo', placeholder_path)
+            #svg_content = svg_content.replace('_logo', placeholder_path)
             svg_content = svg_content.replace('_ref_logo', placeholder_path)
         
         # Write back the modified content
@@ -785,6 +788,27 @@ class RENDER_OT_create_orthogonal_svg(Operator):
                     print(f"Created fallback placeholder image at {placeholder_path}")
             except:
                 print("Could not create placeholder image")
+
+
+def get_addon_path():
+    """Get the correct path to the addon directory"""
+    # Determina il percorso al file corrente
+    current_path = os.path.realpath(__file__)
+    
+    # Se il file è in una sottocartella dell'addon (come utils/), adatta il percorso
+    path_parts = current_path.split(os.sep)
+    
+    # Cerca l'indice di "3D-survey-collection" nel percorso
+    try:
+        addon_index = path_parts.index("3D-survey-collection")
+        # Ricostruisci il percorso fino alla cartella dell'addon
+        addon_path = os.sep.join(path_parts[:addon_index+1])
+    except ValueError:
+        # Fallback: risali di un solo livello
+        addon_path = os.path.dirname(os.path.dirname(current_path))
+    
+    return addon_path
+
 class VIEW3D_PT_orthogonal_render(Panel):
     """Panel for orthogonal rendering setup"""
     bl_label = "Orthogonal Render"
@@ -906,16 +930,16 @@ def ensure_svg_templates_folder():
     """Make sure the SVG template folder exists with at least one template"""
     
     # Get addon directory
-    addon_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+    addon_dir = get_addon_path()
     
     # Define possible template locations
     possible_paths = [
         # Standard path inside the addon
         os.path.join(addon_dir, "svg_templates"),
         # Path relative to the blend file 
-        #os.path.join(os.path.dirname(bpy.data.filepath), "svg_templates") if bpy.data.filepath else None,
+        os.path.join(os.path.dirname(bpy.data.filepath), "svg_templates") if bpy.data.filepath else None,
         # Alternative path for development/testing
-        #os.path.join(os.path.dirname(bpy.data.filepath), "3DSC", "svg_templates") if bpy.data.filepath else None
+        os.path.join(os.path.dirname(bpy.data.filepath), "3DSC", "svg_templates") if bpy.data.filepath else None
     ]
     
     # Filter out None values (e.g., if blend file is not saved)

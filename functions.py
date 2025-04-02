@@ -53,6 +53,44 @@ class OBJECT_OT_createcyclesmat(bpy.types.Operator):
 
 ##########################################################################################
 
+def make_path_relative(file_path, base_folder):
+    """
+    Converte un percorso assoluto in un percorso relativo rispetto a una cartella base.
+    
+    Args:
+        file_path (str): Il percorso assoluto del file da convertire
+        base_folder (str): La cartella base rispetto alla quale creare il percorso relativo
+        
+    Returns:
+        str: Il percorso relativo, o il percorso originale se non può essere reso relativo
+    """
+    import os
+    
+    # Normalizza i percorsi (rimuove '.', '..' e assicura separatori corretti)
+    abs_file_path = os.path.normpath(os.path.abspath(file_path))
+    abs_base_folder = os.path.normpath(os.path.abspath(base_folder))
+    
+    # Verifica che il percorso della base sia una directory
+    if not os.path.isdir(abs_base_folder):
+        return file_path  # Restituisci il percorso originale se la base non è una directory
+    
+    # Assicurati che la cartella base finisca con un separatore
+    if not abs_base_folder.endswith(os.sep):
+        abs_base_folder += os.sep
+    
+    # Verifica se il file è all'interno della cartella base
+    if abs_file_path.startswith(abs_base_folder):
+        # Crea il percorso relativo rimuovendo la parte base
+        rel_path = abs_file_path[len(abs_base_folder):]
+        return rel_path
+    else:
+        # Calcola il percorso relativo usando os.path.relpath
+        try:
+            return os.path.relpath(abs_file_path, abs_base_folder)
+        except ValueError:
+            # In caso di errore (ad esempio unità diverse su Windows)
+            return file_path
+
 def rename_ge(ob):
     if ob.name.startswith('OB_'):
         #print(ob.name)
