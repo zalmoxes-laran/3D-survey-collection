@@ -212,9 +212,9 @@ class OBJECT_OT_organize_lods_to_collections(bpy.types.Operator):
         return {'FINISHED'}
 
 class OBJECT_OT_correct_rc_lod_names(bpy.types.Operator):
-    """Correct names of imported LOD objs, meshes and materials"""
+    """Correct names of imported LOD objs, meshes and materials - works for both old and new naming formats"""
     bl_idname = "correct.rcnames"
-    bl_label = "__LODx_number to __number_LODx"
+    bl_label = "Correct LOD Names (Mesh & Materials)"
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
@@ -222,57 +222,132 @@ class OBJECT_OT_correct_rc_lod_names(bpy.types.Operator):
         return {'FINISHED'}
     
     def rename_lods_reality_capture(self):
-        # Ottieni tutti gli oggetti selezionati nella scena
+        # Get all selected objects in the scene
         selected_objects = bpy.context.selected_objects
         
-        # Ciclo su ogni oggetto selezionato
+        # Loop through each selected object
         for obj in selected_objects:
-            # Usa una regex per dividere il nome in base a singoli o doppi underscore
-            parts = re.split('_+', obj.name)  # Questo divide il nome sia per singoli che per multipli underscore
-
-            # Verifica che ci siano almeno tre parti e che una di esse contenga 'LOD'
-            if len(parts) > 2 and 'LOD' in parts[1]:
-                # Estrai il numero di LOD (es. 'LOD0') e il numero finale
-                lod_part = parts[1]  # 'LOD0', 'LOD1', ecc.
-                number_part = parts[2]  # '0000000', ecc.
-
-                # Ricostruisci il nome nel formato desiderato
-                new_name = f"{parts[0]}_{number_part}_{lod_part}"
-
-                # Rinomina anche la mesh associata se l'oggetto è di tipo mesh
-                if obj.type == 'MESH' and obj.data:
-                    # Applica lo stesso pattern di ridenominazione alla mesh
-                    mesh_parts = re.split('_+', obj.data.name)
-                    if len(mesh_parts) > 2 and 'LOD' in mesh_parts[1]:
-                        new_mesh_name = f"{mesh_parts[0]}_{mesh_parts[2]}_{mesh_parts[1]}"
-                        obj.data.name = new_mesh_name
-                        print(f"Mesh rinominata in '{new_mesh_name}'")
-                    else:
-                        # Se la mesh non ha lo stesso pattern, usa il nuovo nome dell'oggetto
-                        obj.data.name = f"ME_{new_name}"
-                        print(f"Mesh rinominata in 'ME_{new_name}'")
+            # Check if it's a mesh object
+            if obj.type != 'MESH':
+                continue
                 
-                # Rinomina i materiali associati
-                if obj.type == 'MESH': 
-                    for slot in obj.material_slots:
-                        if slot.material:
-                            # Per i materiali, usiamo un pattern di ricerca diverso
-                            mat_name = slot.material.name
-                            # Cerca pattern come "Acropoli_LOD2_u0_v0"
-                            match = re.search(r'(.+?)_(LOD\d+)_(.+)', mat_name)
-                            if match:
-                                base_name = match.group(1)  # "Acropoli"
-                                lod_part = match.group(2)   # "LOD2"
-                                suffix = match.group(3)     # "u0_v0"
-                                
-                                # Riorganizza nel formato desiderato
-                                new_mat_name = f"{base_name}_{suffix}_{lod_part}"
-                                slot.material.name = new_mat_name
-                                print(f"Materiale rinominato in '{new_mat_name}'")
-
-                # Assegna il nuovo nome all'oggetto
+            # First determine if the object name contains LOD pattern
+            lod_match = re.search(r'LOD\d+', obj.name)
+            if not lod_match:
+                continue
+                
+            lod_part = lod_match.group()  # e.g., 'LOD0', 'LOD1', etc.
+            
+            # CASE 1: Objects with old naming format "__LODx_number"
+            old_format_match = re.search(r'(.+?)_(LOD\d+)_(\d+)', obj.name)
+            if old_format_match:
+                base_name = old_format_match.group(1)  # e.g. "Basilica"
+                lod_part = old_format_match.group(2)   # e.g. "LOD0"
+                number_part = old_format_match.group(3)  # e.g. "0000001"
+                
+                # Create the new name in the format desired
+                new_name = f"{base_name}_{number_part}_{lod_part}"
                 obj.name = new_name
-                print(f"Oggetto rinominato in '{new_name}'")
+                print(f"Object renamed (old format) to '{new_name}'")
+            
+            # CASE 2: Objects with new naming format "__number_LODx" but possibly not fixed meshes/materials
+            new_format_match = re.search(r'(.+?)_(\d+)_(LOD\d+)', obj.name)
+            if new_format_match:
+                base_name = new_format_match.group(1)  # e.g. "Basilica"
+                number_part = new_format_match.group(2)  # e.g. "0000001"
+                lod_part = new_format_match.group(3)   # e.g. "LOD0"
+                
+                # Object is already correctly named, but we'll process meshes and materials anyway
+                print(f"Object already correctly named as '{obj.name}', checking mesh and materials...")
+            
+            # If neither pattern matched, try a more generic approach for unusual cases
+            if not old_format_match and not new_format_match:
+                # Split by underscores and try to identify components
+                parts = re.split('_+', obj.name)
+                
+                # Check if we have at least 3 parts and LOD is one of them
+                if len(parts) >= 3:
+                    # Find which part contains LOD
+                    lod_idx = -1
+                    number_idx = -1
+                    
+                    for i, part in enumerate(parts):
+                        if 'LOD' in part:
+                            lod_idx = i
+                        elif part.isdigit():
+                            number_idx = i
+                    
+                    if lod_idx >= 0 and number_idx >= 0:
+                        # Construct name from parts, putting LOD at the end
+                        base_parts = [p for i, p in enumerate(parts) if i != lod_idx and i != number_idx]
+                        base_name = '_'.join(base_parts)
+                        number_part = parts[number_idx]
+                        lod_part = parts[lod_idx]
+                        
+                        new_name = f"{base_name}_{number_part}_{lod_part}"
+                        obj.name = new_name
+                        print(f"Object renamed (generic format) to '{new_name}'")
+            
+            # Now fix the mesh data name regardless of object name pattern
+            if obj.data:
+                # Try to match the same patterns in the mesh name
+                mesh_old_format = re.search(r'(.+?)_(LOD\d+)_(\d+)', obj.data.name)
+                mesh_new_format = re.search(r'(.+?)_(\d+)_(LOD\d+)', obj.data.name)
+                
+                if mesh_old_format:
+                    mesh_base = mesh_old_format.group(1)
+                    mesh_lod = mesh_old_format.group(2)
+                    mesh_num = mesh_old_format.group(3)
+                    obj.data.name = f"{mesh_base}_{mesh_num}_{mesh_lod}"
+                    print(f"Mesh renamed to '{obj.data.name}'")
+                elif mesh_new_format:
+                    # Mesh already has correct format
+                    pass
+                else:
+                    # Use object name as reference, prefix with ME_
+                    obj.data.name = f"ME_{obj.name}"
+                    print(f"Mesh renamed to 'ME_{obj.name}'")
+            
+            # Fix the materials
+            for slot in obj.material_slots:
+                if slot.material:
+                    mat_name = slot.material.name
+                    
+                    # Check material name patterns
+                    mat_old_format = re.search(r'(.+?)_(LOD\d+)_(.+)', mat_name)
+                    mat_new_format = re.search(r'(.+?)_(.+)_(LOD\d+)', mat_name)
+                    
+                    if mat_old_format:
+                        mat_base = mat_old_format.group(1)  # e.g. "Basilica"
+                        mat_lod = mat_old_format.group(2)   # e.g. "LOD0"
+                        mat_suffix = mat_old_format.group(3)  # e.g. "u0_v0"
+                        
+                        new_mat_name = f"{mat_base}_{mat_suffix}_{mat_lod}"
+                        slot.material.name = new_mat_name
+                        print(f"Material renamed to '{new_mat_name}'")
+                    elif mat_new_format:
+                        # Material already has correct format
+                        pass
+                    else:
+                        # For materials with unknown format, try a more generic approach
+                        if lod_match:
+                            # Extract any part that might be position identifiers (u#_v#)
+                            uv_match = re.search(r'(u\d+_v\d+)', mat_name)
+                            if uv_match:
+                                uv_part = uv_match.group(1)
+                                # Remove the object name and LOD part from material if present
+                                base_part = re.sub(r'_LOD\d+', '', mat_name)
+                                base_part = re.sub(r'_' + re.escape(uv_part), '', base_part)
+                                
+                                new_mat_name = f"{base_part}_{uv_part}_{lod_part}"
+                                slot.material.name = new_mat_name
+                                print(f"Material renamed (generic) to '{new_mat_name}'")
+                            else:
+                                # Just add the LOD suffix if no UV part is found
+                                if not lod_part in mat_name:
+                                    new_mat_name = f"{mat_name}_{lod_part}"
+                                    slot.material.name = new_mat_name
+                                    print(f"Material renamed (simple) to '{new_mat_name}'")
 
 class ReconstructionRegion:
     def __init__(self, file_path=None):
