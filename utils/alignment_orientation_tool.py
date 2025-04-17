@@ -44,11 +44,11 @@ class OBJECT_OT_create_alignment_orientation(Operator):
         name="Alignment Type",
         description="How to align the orientation",
         items=[
-            ('XY', "XY from Points", "Point 1 to Point 2 defines the X axis"),
-            ('XYZ', "XYZ from Points", "Point 1 is origin, Point 2 defines direction"),
+            ('XYZ', "XYZ from Points", "Point 1 to Point 2 defines the X axis, Z is calculated assuming X and Y are at the same level"),
+            ('XY', "XY axis from Points - Z not modified", "Point 1 is origin, Point 2 defines x direction, Z axis remains as Global"),
         ],
-        default='XYZ'
-    )
+        default='XY'
+    ) # type: ignore
 
     keep_object: BoolProperty(
         name="Keep Reference Object",
@@ -292,10 +292,10 @@ def register():
         name="Alignment Type",
         description="How to align the orientation",
         items=[
-            ('XY', "XY from Points", "Point 1 to Point 2 defines the X axis"),
-            ('XYZ', "XYZ from Points", "Point 1 is origin, Point 2 defines direction"),
+            ('XYZ', "XYZ from Points", "Point 1 to Point 2 defines the X axis, Z is calculated assuming X and Y are at the same level"),
+            ('XY', "XY axis from Points - Z not modified", "Point 1 is origin, Point 2 defines x direction, Z axis remains as Global"),
         ],
-        default='XYZ'
+        default='XY'
     )
     
     bpy.types.Scene.keep_alignment_object = BoolProperty(
