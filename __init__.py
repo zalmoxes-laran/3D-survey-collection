@@ -23,9 +23,9 @@ bl_info = {
     "blender": (4, 2, 0),
     "location": "3D View > Toolbox",
     "description": "A collection of tools for 3D Survey activities",
-    "warning": "Beta version of 1.6.1 3DSC dev9",
+    "warning": "Beta version of 1.6.1 3DSC dev10",
     "wiki_url": "",
-    "devel_version": " 3DSC 1.6.1 dev9",  # Aggiunto campo devel_version
+    "devel_version": " 3DSC 1.6.1 dev10",  # Aggiunto campo devel_version
     "category": "Tools",
     }
 
@@ -91,6 +91,8 @@ from . import nonmanifold_filler
 from .utils import rotation_constrained
 
 from .utils import circumcenter_tool
+
+from .utils import alignment_orientation_tool
 
 from .importer import import_dxf, import_linked_lod
 
@@ -445,6 +447,7 @@ def register():
     import_dxf.register()
     import_linked_lod.register()
     orthogonal_render.register()
+    alignment_orientation_tool.register()
 
 
     bpy.types.Scene.SHIFT_OBJ_on = BoolProperty(
@@ -599,6 +602,7 @@ def unregister():
     import_dxf.unregister()
     import_linked_lod.unregister()
     orthogonal_render.unregister()
+    alignment_orientation_tool.unregister()
 
 
     del bpy.types.WindowManager.interface_vars
