@@ -23,9 +23,9 @@ bl_info = {
     "blender": (4, 2, 0),
     "location": "3D View > Toolbox",
     "description": "A collection of tools for 3D Survey activities",
-    "warning": "Beta version of 1.6.1 3DSC dev10",
+    "warning": "Beta version of 1.6.1 3DSC dev11",
     "wiki_url": "",
-    "devel_version": " 3DSC 1.6.1 dev10",  # Aggiunto campo devel_version
+    "devel_version": " 3DSC 1.6.1 dev11",  # Aggiunto campo devel_version
     "category": "Tools",
     }
 
@@ -76,7 +76,8 @@ else:
             multimesh_manager,
             realitycapture,
             cesium_preprocessing,
-            orthogonal_render
+            orthogonal_render,
+            mets_exporter
             )
     
     from .exporter_cesium import export_tile_model
@@ -448,6 +449,8 @@ def register():
     import_linked_lod.register()
     orthogonal_render.register()
     alignment_orientation_tool.register()
+    mets_exporter.register()
+
 
 
     bpy.types.Scene.SHIFT_OBJ_on = BoolProperty(
@@ -603,6 +606,8 @@ def unregister():
     import_linked_lod.unregister()
     orthogonal_render.unregister()
     alignment_orientation_tool.unregister()
+    mets_exporter.unregister()
+
 
 
     del bpy.types.WindowManager.interface_vars
