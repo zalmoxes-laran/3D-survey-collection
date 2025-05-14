@@ -140,17 +140,15 @@ class OBJECT_OT_ExportButtonName(bpy.types.Operator):
             
         return {'FINISHED'}
 
-def write_some_data(context, filepath, shift, rot, cam, nam):
+
+def write_some_data(context, filepath, shift, rot, cam, nam, y_up):
     print("running write some data...")
     
     selection = bpy.context.selected_objects
     bpy.ops.object.select_all(action='DESELECT')
 
-
     f = open(filepath, 'w', encoding='utf-8')
         
-    #file = open(fn + ".txt", 'w')
-
     # write selected objects coordinate
     for obj in selection:
         obj.select_set(True)
@@ -159,10 +157,28 @@ def write_some_data(context, filepath, shift, rot, cam, nam):
         y_coor = obj.location[1]
         z_coor = obj.location[2]
         
+        # Applica trasformazione Y-up se necessario
+        if y_up:
+            # Blender usa Z-up, per Y-up dobbiamo scambiare Y e Z
+            # e negare la nuova Y (che era Z in Blender)
+            temp_y = y_coor
+            y_coor = z_coor
+            z_coor = -temp_y
+        
         if rot == True or cam == True:
             rotation_grad_x = math.degrees(obj.rotation_euler[0])
             rotation_grad_y = math.degrees(obj.rotation_euler[1])
             rotation_grad_z = math.degrees(obj.rotation_euler[2])
+            
+            # Applica trasformazione Y-up anche alle rotazioni se necessario
+            if y_up:
+                # Trasforma le rotazioni per Y-up
+                temp_rot_y = rotation_grad_y
+                rotation_grad_y = rotation_grad_z
+                rotation_grad_z = -temp_rot_y
+                # Anche X potrebbe richiedere inversione a seconda del sistema
+                rotation_grad_x = -rotation_grad_x
+            
             scale_grad_x = obj.scale[0]
             scale_grad_y = obj.scale[1]
             scale_grad_z = obj.scale[2]
@@ -172,10 +188,15 @@ def write_some_data(context, filepath, shift, rot, cam, nam):
             shift_y = context.scene.BL_y_shift
             shift_z = context.scene.BL_z_shift
             x_coor = x_coor+shift_x
-            y_coor = y_coor+shift_y
-            z_coor = z_coor+shift_z
-
-        # Generate UV sphere at x = lon and y = lat (and z = 0 )
+            
+            if not y_up:
+                y_coor = y_coor+shift_y
+                z_coor = z_coor+shift_z
+            else:
+                # Applica shift con trasformazione Y-up
+                temp_shift_y = shift_y
+                y_coor = y_coor+shift_z
+                z_coor = z_coor-temp_shift_y
 
         if rot == True:
             if nam == True:
@@ -192,7 +213,6 @@ def write_some_data(context, filepath, shift, rot, cam, nam):
                 f.write("%s %s %s\n" % (x_coor, y_coor, z_coor))
         
     f.close()    
-    
 
     return {'FINISHED'}
 
@@ -237,8 +257,14 @@ class ExportCoordinates(Operator, ExportHelper):
             default=False,
             ) # type: ignore
 
+    y_up: BoolProperty(
+            name="Y-Up coordinate system",
+            description="Export coordinates with Y-Up instead of Z-Up (useful for Unity, Unreal, etc.)",
+            default=False,
+            ) # type: ignore
+
     def execute(self, context):
-        return write_some_data(context, self.filepath, self.shift, self.rot, self.cam, self.nam)
+        return write_some_data(context, self.filepath, self.shift, self.rot, self.cam, self.nam, self.y_up)
 
 # Only needed if you want to add into a dynamic menu
 def menu_func_export(self, context):
