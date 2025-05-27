@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 def check_external_modules():
     addon_prefs = bpy.context.preferences.addons.get(__package__, None)
     try:
-        import pandas
+        #import pandas
         import ezdxf
         #import openpyxl 
         #import webdavclient3
@@ -103,10 +103,10 @@ def EMdb_xlsx_modules():
     # https://pypi.org/project/optimize-images/
     # da aggiungere per ottimizzare le immagini in export
     list_of_modules =[
-        "pandas",
+        #"pandas",
         "pytz",
         "python-dateutil",
-        "numpy",
+        #"numpy",
         "six",
         "openpyxl",
         "webdavclient3",
@@ -123,7 +123,7 @@ def py3dtiles_modules():
         "earcut==1.1.5",
         "lz4",
         "numba",
-        "numpy>=1.24.0,<2.0.0",
+        #"numpy>=1.24.0,<2.0.0",
         "psutil",
         "pyproj",
         "pyzmq",
@@ -141,7 +141,7 @@ def ezdxf_modules():
         "ezdxf",
         "pyparsing",
         "typing_extensions", 
-        "numpy",              
+        #"numpy",              
         "matplotlib",
         "fontTools"         
     ]
