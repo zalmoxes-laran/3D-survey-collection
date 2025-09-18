@@ -441,26 +441,23 @@ class OBJECT_OT_changeLOD(bpy.types.Operator):
                     for object_in_library in data_to.objects:
                         if object_in_library.name == target_name:
                             found = True
-                            # === FIX PER COLLEZIONI ANNIDATE ===
+                            # === FIX PER COLLEZIONI ANNIDATE MIGLIORATO ===
                             collection_list_for_current_ob = []
                             for collection in bpy.data.collections:
-                                # Usa all_objects invece di objects per gestire le collezioni annidate
-                                for obj in collection.all_objects:
-                                    if obj.name == object_in_lod_list.name:
-                                        collection_list_for_current_ob.append(collection.name)
-                            
+                                # Usa objects (non all_objects) per controllare solo gli oggetti direttamente nella collezione
+                                if object_in_lod_list.name in [obj.name for obj in collection.objects]:
+                                    collection_list_for_current_ob.append(collection.name)
+
                             # Gestisci il linking/unlinking con controllo errori
                             for relevant_collection in collection_list_for_current_ob:
                                 try:
                                     # Link il nuovo oggetto alla collezione
                                     bpy.data.collections[relevant_collection].objects.link(bpy.data.objects[target_name])
-                                    # Unlink l'oggetto vecchio solo dalle collezioni che lo contengono direttamente
-                                    if object_in_lod_list.name in [obj.name for obj in bpy.data.collections[relevant_collection].objects]:
-                                        bpy.data.collections[relevant_collection].objects.unlink(bpy.data.objects[object_in_lod_list.name])
+                                    # Unlink l'oggetto vecchio dalle collezioni che lo contengono direttamente
+                                    bpy.data.collections[relevant_collection].objects.unlink(bpy.data.objects[object_in_lod_list.name])
                                 except RuntimeError as e:
                                     print(f"Warning: Could not process collection '{relevant_collection}': {e}")
                                     continue
-                            # === FINE FIX ===
                     if not found:
                         object_clean_name = target_name[:-5]
                         print('The object "' + object_clean_name + '" has no ' + LOD_target + " in library")
