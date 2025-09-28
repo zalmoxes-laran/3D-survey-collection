@@ -153,6 +153,8 @@ class ToolsPanelExport:
                      text="Use Shift (slower, only obj)")
             row = box.row()
             row.prop(scene, 'collgerarchy_to_foldtree', text="Use collection gerarchy")
+
+        
         else:
             row.label(text="Select object(s) to see tools here.")
             row = layout.row() 

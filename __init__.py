@@ -25,7 +25,7 @@ bl_info = {
     "description": "A collection of tools for 3D Survey activities",
     "warning": "Beta version of 1.6.2 3DSC dev13",
     "wiki_url": "",
-    "devel_version": " 3DSC 1.6.2 dev14",  # Aggiunto campo devel_version
+    "devel_version": " 3DSC 1.6.2 dev15",  # Aggiunto campo devel_version
     "category": "Tools",
     }
 
@@ -77,7 +77,8 @@ else:
             realitycapture,
             cesium_preprocessing,
             orthogonal_render,
-            mets_exporter
+            mets_exporter,
+            camera_unreal_exporter
             )
     
     from .exporter_cesium import export_tile_model
@@ -422,6 +423,7 @@ def register():
     shift.register()
     external_modules_install.register()
     export_3DSC.register()
+    camera_unreal_exporter.register()
     #exporter_cesium.export_tile_model.register()
     PhotogrTool.register()
     multimesh_manager.register()
@@ -450,6 +452,7 @@ def register():
     orthogonal_render.register()
     alignment_orientation_tool.register()
     mets_exporter.register()
+    
 
 
 
@@ -587,6 +590,7 @@ def unregister():
         except RuntimeError:
                 pass
         
+    camera_unreal_exporter.unregister()
     import_3DSC.unregister()
     external_modules_install.unregister()
     export_3DSC.unregister()
