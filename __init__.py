@@ -23,9 +23,9 @@ bl_info = {
     "blender": (4, 2, 0),
     "location": "3D View > Toolbox",
     "description": "A collection of tools for 3D Survey activities",
-    "warning": "Beta version of 1.6.2 3DSC dev13",
+    "warning": "Beta version of 1.6.2 3DSC dev16",
     "wiki_url": "",
-    "devel_version": " 3DSC 1.6.2 dev15",  # Aggiunto campo devel_version
+    "devel_version": " 3DSC 1.6.2 dev16",  # Aggiunto campo devel_version
     "category": "Tools",
     }
 
@@ -78,7 +78,8 @@ else:
             cesium_preprocessing,
             orthogonal_render,
             mets_exporter,
-            camera_unreal_exporter
+            camera_unreal_exporter,
+            lod_shortcuts
             )
     
     from .exporter_cesium import export_tile_model
@@ -431,7 +432,9 @@ def register():
     
     #cesium_preprocessing.register()
 
-    LODgenerator.register()  
+    LODgenerator.register()
+
+    lod_shortcuts.register() 
 
     mesh_cleaner.register()
 
@@ -600,6 +603,7 @@ def unregister():
     realitycapture.unregister()
     functions.unregister()
     #cesium_preprocessing.unregister()
+    lod_shortcuts.register()
     LODgenerator.unregister()
     mesh_cleaner.unregister()
     slicer.unregister()

@@ -464,7 +464,7 @@ class OBJECT_OT_changeLOD(bpy.types.Operator):
         return {'FINISHED'}
 
 class OBJECT_OT_changemeshLOD(bpy.types.Operator):
-    """Change LOD for selected objects with linked meshes and update object names"""
+    """Change LOD for selected objects with linked meshes and update object names (CTRL+SHIFT+ALT+0-4)"""
     bl_idname = "object.change_lod"
     bl_label = "Change LOD"
     bl_options = {"REGISTER", "UNDO"}
