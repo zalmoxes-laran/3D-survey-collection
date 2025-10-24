@@ -191,7 +191,7 @@ class ImportDXF_3DSC(Operator, ImportHelper):
     
     def import_dxf_lines(self, modelspace, collection, shift):
         """Import LINE entities from DXF"""
-        import ezdxf
+        import ezdxf # type: ignore
         
         lines = modelspace.query('LINE')
         count = 0
@@ -390,7 +390,7 @@ class ImportDXF_3DSC(Operator, ImportHelper):
     
     def import_dxf_circles(self, modelspace, collection, shift):
         """Import CIRCLE entities from DXF"""
-        import ezdxf
+        import ezdxf # type: ignore
         import math
         
         circles = modelspace.query('CIRCLE')
@@ -441,7 +441,7 @@ class ImportDXF_3DSC(Operator, ImportHelper):
     
     def import_dxf_arcs(self, modelspace, collection, shift):
         """Import ARC entities from DXF"""
-        import ezdxf
+        import ezdxf # type: ignore
         import math
         
         arcs = modelspace.query('ARC')
@@ -498,7 +498,7 @@ class ImportDXF_3DSC(Operator, ImportHelper):
     
     def import_dxf_polylines(self, modelspace, collection, shift):
         """Import POLYLINE and LWPOLYLINE entities from DXF"""
-        import ezdxf
+        import ezdxf # type: ignore
         
         polylines = []
         if self.merge_by_layer:
@@ -714,25 +714,31 @@ class ImportDXF_3DSC(Operator, ImportHelper):
 
     def import_dxf_hatches(self, modelspace, collection, shift):
         """Import HATCH entities from DXF as polygon meshes"""
-        import ezdxf # type: ignore
-        import bmesh # type: ignore
-        from mathutils import Vector # type: ignore
+        import ezdxf
+        import bmesh
+        from mathutils import Vector
         
         hatches = modelspace.query('HATCH')
         count = 0
         
+        print(f"DEBUG: Found {len(hatches)} HATCH entities in DXF")
+        
         if not hatches:
+            print("DEBUG: No HATCH entities found in modelspace")
             return count
         
-        for hatch in hatches:
+        for hatch_idx, hatch in enumerate(hatches):
             try:
                 # Get layer name
                 layer = hatch.dxf.layer if hasattr(hatch.dxf, 'layer') else "0"
+                print(f"DEBUG: Processing HATCH {hatch_idx} on layer '{layer}'")
                 
                 # Get all boundary paths
                 paths = hatch.paths
+                print(f"DEBUG: HATCH {hatch_idx} has {len(paths)} paths")
                 
                 if not paths:
+                    print(f"DEBUG: HATCH {hatch_idx} has no paths, skipping")
                     continue
                 
                 # Create a new mesh for this hatch
@@ -742,137 +748,163 @@ class ImportDXF_3DSC(Operator, ImportHelper):
                 # Create bmesh to build the geometry
                 bm = bmesh.new()
                 
-                all_vertices = []
-                all_faces = []
-                vertex_offset = 0
-                
                 # Process each boundary path
-                for path in paths:
+                for path_idx, path in enumerate(paths):
                     vertices = []
+                    print(f"DEBUG: Processing path {path_idx}, type: {path.path_type_flags}")
                     
-                    # Get edges from the path
-                    if hasattr(path, 'edges'):
-                        for edge in path.edges:
-                            # LINE edge
-                            if edge.EDGE_TYPE == "LineEdge":
-                                start = edge.start
+                    # Check path type - can be POLYLINE or EDGE-based
+                    if path.path_type_flags & 2:  # POLYLINE path
+                        print(f"DEBUG: Path {path_idx} is POLYLINE type")
+                        # Handle polyline boundary
+                        if hasattr(path, 'vertices') and path.vertices:
+                            for v in path.vertices:
                                 vertices.append((
-                                    start[0] - shift[0],
-                                    start[1] - shift[1],
-                                    -shift[2] if len(start) < 3 else start[2] - shift[2]
+                                    v[0] - shift[0],
+                                    v[1] - shift[1],
+                                    -shift[2] if len(v) < 3 else v[2] - shift[2]
                                 ))
-                            
-                            # ARC edge
-                            elif edge.EDGE_TYPE == "ArcEdge":
-                                # Sample points along the arc
-                                center = edge.center
-                                radius = edge.radius
-                                start_angle = math.radians(edge.start_angle)
-                                end_angle = math.radians(edge.end_angle)
+                            print(f"DEBUG: Extracted {len(vertices)} vertices from polyline")
+                    
+                    else:  # EDGE-based path
+                        print(f"DEBUG: Path {path_idx} is EDGE-based, has {len(path.edges) if hasattr(path, 'edges') else 0} edges")
+                        
+                        # Get edges from the path
+                        if hasattr(path, 'edges') and path.edges:
+                            for edge_idx, edge in enumerate(path.edges):
+                                edge_type = edge.EDGE_TYPE
+                                print(f"DEBUG: Edge {edge_idx} type: {edge_type}")
                                 
-                                # Determine number of segments based on arc length
-                                arc_length = abs(end_angle - start_angle)
-                                num_segments = max(3, int(arc_length * radius / 0.5))
-                                
-                                is_ccw = edge.is_counter_clockwise
-                                if not is_ccw and end_angle < start_angle:
-                                    end_angle += 2 * math.pi
-                                elif is_ccw and start_angle < end_angle:
-                                    start_angle += 2 * math.pi
-                                
-                                for i in range(num_segments):
-                                    t = i / num_segments
-                                    if is_ccw:
-                                        angle = start_angle - t * (start_angle - end_angle)
-                                    else:
-                                        angle = start_angle + t * (end_angle - start_angle)
-                                    
-                                    x = center[0] + radius * math.cos(angle)
-                                    y = center[1] + radius * math.sin(angle)
-                                    z = -shift[2] if len(center) < 3 else center[2] - shift[2]
-                                    
+                                # LINE edge
+                                if edge_type == "LineEdge":
+                                    start = edge.start
+                                    end = edge.end
+                                    # Add start point (end will be added by next edge or closing)
                                     vertices.append((
-                                        x - shift[0],
-                                        y - shift[1],
-                                        z
+                                        start[0] - shift[0],
+                                        start[1] - shift[1],
+                                        -shift[2] if len(start) < 3 else start[2] - shift[2]
                                     ))
-                            
-                            # ELLIPSE edge
-                            elif edge.EDGE_TYPE == "EllipseEdge":
-                                # Sample points along the ellipse
-                                center = edge.center
-                                major_axis = edge.major_axis
-                                ratio = edge.ratio
-                                start_angle = math.radians(edge.start_angle)
-                                end_angle = math.radians(edge.end_angle)
+                                    print(f"DEBUG: LineEdge added, vertices count: {len(vertices)}")
                                 
-                                # Calculate minor axis length
-                                major_length = math.sqrt(major_axis[0]**2 + major_axis[1]**2)
-                                minor_length = major_length * ratio
-                                
-                                # Rotation angle of the ellipse
-                                rotation = math.atan2(major_axis[1], major_axis[0])
-                                
-                                num_segments = max(8, int(abs(end_angle - start_angle) * 10))
-                                
-                                for i in range(num_segments):
-                                    t = i / num_segments
-                                    angle = start_angle + t * (end_angle - start_angle)
+                                # ARC edge
+                                elif edge_type == "ArcEdge":
+                                    center = edge.center
+                                    radius = edge.radius
+                                    start_angle = math.radians(edge.start_angle)
+                                    end_angle = math.radians(edge.end_angle)
                                     
-                                    # Parametric ellipse equation
-                                    x_local = major_length * math.cos(angle)
-                                    y_local = minor_length * math.sin(angle)
+                                    # Determine number of segments based on arc length
+                                    arc_length = abs(end_angle - start_angle)
+                                    num_segments = max(3, int(arc_length * radius / 0.5))
                                     
-                                    # Rotate and translate
-                                    x = center[0] + x_local * math.cos(rotation) - y_local * math.sin(rotation)
-                                    y = center[1] + x_local * math.sin(rotation) + y_local * math.cos(rotation)
-                                    z = -shift[2] if len(center) < 3 else center[2] - shift[2]
+                                    is_ccw = edge.is_counter_clockwise
+                                    if not is_ccw and end_angle < start_angle:
+                                        end_angle += 2 * math.pi
+                                    elif is_ccw and start_angle < end_angle:
+                                        start_angle += 2 * math.pi
                                     
-                                    vertices.append((
-                                        x - shift[0],
-                                        y - shift[1],
-                                        z
-                                    ))
-                            
-                            # SPLINE edge
-                            elif edge.EDGE_TYPE == "SplineEdge":
-                                # Get control points and approximate with line segments
-                                if hasattr(edge, 'control_points'):
-                                    for point in edge.control_points:
+                                    for i in range(num_segments):
+                                        t = i / num_segments
+                                        if is_ccw:
+                                            angle = start_angle - t * (start_angle - end_angle)
+                                        else:
+                                            angle = start_angle + t * (end_angle - start_angle)
+                                        
+                                        x = center[0] + radius * math.cos(angle)
+                                        y = center[1] + radius * math.sin(angle)
+                                        z = -shift[2] if len(center) < 3 else center[2] - shift[2]
+                                        
                                         vertices.append((
-                                            point[0] - shift[0],
-                                            point[1] - shift[1],
-                                            -shift[2] if len(point) < 3 else point[2] - shift[2]
+                                            x - shift[0],
+                                            y - shift[1],
+                                            z
                                         ))
+                                    print(f"DEBUG: ArcEdge added {num_segments} vertices, total: {len(vertices)}")
+                                
+                                # ELLIPSE edge
+                                elif edge_type == "EllipseEdge":
+                                    center = edge.center
+                                    major_axis = edge.major_axis
+                                    ratio = edge.ratio
+                                    start_angle = math.radians(edge.start_angle)
+                                    end_angle = math.radians(edge.end_angle)
+                                    
+                                    major_length = math.sqrt(major_axis[0]**2 + major_axis[1]**2)
+                                    minor_length = major_length * ratio
+                                    rotation = math.atan2(major_axis[1], major_axis[0])
+                                    
+                                    num_segments = max(8, int(abs(end_angle - start_angle) * 10))
+                                    
+                                    for i in range(num_segments):
+                                        t = i / num_segments
+                                        angle = start_angle + t * (end_angle - start_angle)
+                                        
+                                        x_local = major_length * math.cos(angle)
+                                        y_local = minor_length * math.sin(angle)
+                                        
+                                        x = center[0] + x_local * math.cos(rotation) - y_local * math.sin(rotation)
+                                        y = center[1] + x_local * math.sin(rotation) + y_local * math.cos(rotation)
+                                        z = -shift[2] if len(center) < 3 else center[2] - shift[2]
+                                        
+                                        vertices.append((
+                                            x - shift[0],
+                                            y - shift[1],
+                                            z
+                                        ))
+                                    print(f"DEBUG: EllipseEdge added {num_segments} vertices, total: {len(vertices)}")
+                                
+                                # SPLINE edge
+                                elif edge_type == "SplineEdge":
+                                    if hasattr(edge, 'control_points') and edge.control_points:
+                                        for point in edge.control_points:
+                                            vertices.append((
+                                                point[0] - shift[0],
+                                                point[1] - shift[1],
+                                                -shift[2] if len(point) < 3 else point[2] - shift[2]
+                                            ))
+                                        print(f"DEBUG: SplineEdge added {len(edge.control_points)} vertices, total: {len(vertices)}")
                     
                     # If we have vertices, create face
                     if len(vertices) >= 3:
+                        print(f"DEBUG: Path {path_idx} has {len(vertices)} vertices, creating face")
+                        
                         # Remove duplicate consecutive vertices
                         cleaned_vertices = [vertices[0]]
                         for i in range(1, len(vertices)):
-                            if not self.points_are_close(vertices[i], cleaned_vertices[-1], 0.0001):
+                            if not self.is_same_point(vertices[i], cleaned_vertices[-1], 0.0001):
                                 cleaned_vertices.append(vertices[i])
                         
-                        # Close the loop if needed
-                        if len(cleaned_vertices) >= 3 and not self.points_are_close(
-                            cleaned_vertices[0], cleaned_vertices[-1], 0.0001
-                        ):
-                            cleaned_vertices.append(cleaned_vertices[0])
+                        # Check if loop needs closing
+                        if len(cleaned_vertices) >= 3:
+                            if not self.is_same_point(cleaned_vertices[0], cleaned_vertices[-1], 0.0001):
+                                # Don't add duplicate closing vertex - bmesh will handle it
+                                pass
+                            else:
+                                # Remove the duplicate closing vertex
+                                cleaned_vertices = cleaned_vertices[:-1]
+                        
+                        print(f"DEBUG: After cleaning: {len(cleaned_vertices)} vertices")
                         
                         if len(cleaned_vertices) >= 3:
                             # Add vertices to bmesh
                             face_verts = []
-                            for v in cleaned_vertices[:-1]:  # Exclude last duplicate vertex
+                            for v in cleaned_vertices:
                                 vert = bm.verts.new(v)
                                 face_verts.append(vert)
                             
                             # Create face if we have enough vertices
                             if len(face_verts) >= 3:
                                 try:
-                                    bm.faces.new(face_verts)
-                                except ValueError:
-                                    # Face already exists or invalid, skip
+                                    # Ensure vertices are indexed
+                                    bm.verts.ensure_lookup_table()
+                                    face = bm.faces.new(face_verts)
+                                    print(f"DEBUG: Face created successfully with {len(face_verts)} vertices")
+                                except ValueError as e:
+                                    print(f"DEBUG: Failed to create face: {e}")
                                     pass
+                    else:
+                        print(f"DEBUG: Path {path_idx} has insufficient vertices ({len(vertices)})")
                 
                 # Update bmesh and create mesh
                 bm.to_mesh(mesh)
@@ -882,15 +914,20 @@ class ImportDXF_3DSC(Operator, ImportHelper):
                 if len(mesh.vertices) > 0:
                     collection.objects.link(obj)
                     count += 1
+                    print(f"DEBUG: HATCH {hatch_idx} successfully imported with {len(mesh.vertices)} vertices")
                 else:
                     # Clean up empty mesh
                     bpy.data.objects.remove(obj)
                     bpy.data.meshes.remove(mesh)
+                    print(f"DEBUG: HATCH {hatch_idx} resulted in empty mesh, removed")
                     
             except Exception as e:
-                print(f"Error importing hatch: {str(e)}")
+                print(f"DEBUG: Error importing hatch {hatch_idx}: {str(e)}")
+                import traceback
+                traceback.print_exc()
                 continue
         
+        print(f"DEBUG: Total HATCH entities imported: {count}")
         return count
 
 class OBJECT_OT_reload_python_modules(Operator):

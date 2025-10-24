@@ -603,7 +603,7 @@ def unregister():
     realitycapture.unregister()
     functions.unregister()
     #cesium_preprocessing.unregister()
-    lod_shortcuts.register()
+    lod_shortcuts.unregister()
     LODgenerator.unregister()
     mesh_cleaner.unregister()
     slicer.unregister()
