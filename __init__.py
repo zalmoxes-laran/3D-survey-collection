@@ -99,6 +99,7 @@ from .utils import alignment_orientation_tool
 
 from .importer import import_dxf, import_linked_lod
 
+from . import TSM
 
 # demo bare-bones preferences
 @addon_updater_ops.make_annotations
@@ -455,6 +456,7 @@ def register():
     orthogonal_render.register()
     alignment_orientation_tool.register()
     mets_exporter.register()
+    TSM.register()
     
 
 
@@ -592,7 +594,7 @@ def unregister():
                 bpy.utils.unregister_class(cls)
         except RuntimeError:
                 pass
-        
+    TSM.unregister()
     camera_unreal_exporter.unregister()
     import_3DSC.unregister()
     external_modules_install.unregister()
