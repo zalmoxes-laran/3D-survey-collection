@@ -261,8 +261,8 @@ class OBJECT_OT_setup_orthogonal_render(Operator):
         scene = context.scene
         
         # Make sure we're using a render engine that supports alpha
-        if scene.render.engine not in ['CYCLES', 'BLENDER_EEVEE_NEXT']:
-            scene.render.engine = 'BLENDER_EEVEE_NEXT'
+        if scene.render.engine not in ['CYCLES', 'BLENDER_EEVEE']:
+            scene.render.engine = 'BLENDER_EEVEE'
         
         # Set up transparency settings
         scene.render.film_transparent = True
