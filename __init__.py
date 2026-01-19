@@ -25,7 +25,7 @@ bl_info = {
     "description": "A collection of tools for 3D Survey activities",
     "warning": "Beta version of 1.6.2 3DSC dev1",
     "wiki_url": "",
-    "devel_version": " 3DSC 1.6.2 dev19",  # Aggiunto campo devel_version
+    "devel_version": " 3DSC 1.6.2 dev20",  # Aggiunto campo devel_version
     "category": "Tools",
     }
 

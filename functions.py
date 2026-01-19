@@ -816,9 +816,11 @@ def set_texset_obj(context):
             mat = matslot.material
             set_texset(mat, view_mode)
 
-def create_material_from_image(context,image,oggetto,connect):
+def create_material_from_image(context,image,oggetto,connect,custom_name=None):
 
-    mat = bpy.data.materials.new(name='M_'+ oggetto.name)
+    # Use custom name if provided, otherwise use object name
+    mat_name = 'M_' + custom_name if custom_name else 'M_' + oggetto.name
+    mat = bpy.data.materials.new(name=mat_name)
     mat.use_nodes = True
     bsdf = mat.node_tree.nodes["Principled BSDF"]
     bsdf.inputs['Roughness'].default_value = 1.0

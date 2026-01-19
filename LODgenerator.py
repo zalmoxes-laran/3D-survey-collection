@@ -49,6 +49,16 @@ class OBJECT_OT_LOD0(bpy.types.Operator):
 
     def execute(self, context):
         selected_objs = bpy.context.selected_objects
+
+        # Create or get LOD0 collection
+        if bpy.data.collections.get("LOD0") is None:
+            LOD0Col = bpy.data.collections.new("LOD0")
+            context.scene.collection.children.link(LOD0Col)
+            print('Created LOD0 collection')
+        else:
+            LOD0Col = bpy.data.collections.get("LOD0")
+            print('Found existing LOD0 collection')
+
         for obj in selected_objs:
             bpy.ops.object.select_all(action='DESELECT')
             obj.select_set(True)
@@ -62,7 +72,26 @@ class OBJECT_OT_LOD0(bpy.types.Operator):
                     pass
             else:
                 create_double_UV(obj)
-            rename_ge(obj)            
+            rename_ge(obj)
+
+            # Move object to LOD0 collection
+            # First, find all collections containing this object
+            obj_collections = [col for col in bpy.data.collections if obj.name in col.objects]
+
+            # Link to LOD0 collection if not already there
+            if obj.name not in LOD0Col.objects:
+                LOD0Col.objects.link(obj)
+                print(f'Linked "{obj.name}" to LOD0 collection')
+
+            # Unlink from other collections (except LOD0)
+            for col in obj_collections:
+                if col != LOD0Col:
+                    try:
+                        col.objects.unlink(obj)
+                        print(f'Unlinked "{obj.name}" from collection "{col.name}"')
+                    except:
+                        pass
+
         return {'FINISHED'}
 
 #_____________________________________________________________________________
@@ -85,6 +114,57 @@ def tex_res_for_current_lod(lod, context):
         tex_res = context.scene.LOD3_tex_res
     return tex_res
 
+def update_lod_progress(context, task="", current_obj=0, total_obj=0, current_lod=0, total_lod=0, elapsed=0.0):
+    """Update LOD generation progress information"""
+    scene = context.scene
+    if task:
+        scene.lod_progress_current_task = task
+    if total_obj > 0:
+        scene.lod_progress_current_object = current_obj
+        scene.lod_progress_total_objects = total_obj
+    if total_lod > 0:
+        scene.lod_progress_current_lod = current_lod
+        scene.lod_progress_total_lods = total_lod
+    if elapsed > 0:
+        scene.lod_progress_elapsed_time = elapsed
+
+    # Force UI update for all windows
+    for window in context.window_manager.windows:
+        for area in window.screen.areas:
+            if area.type == 'VIEW_3D':
+                area.tag_redraw()
+
+    # Force immediate update with redraw timer
+    try:
+        bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
+    except:
+        pass
+
+def add_to_lod_log(context, message):
+    """Add a message to the LOD progress log"""
+    scene = context.scene
+    if scene.lod_progress_log:
+        scene.lod_progress_log += "\n" + message
+    else:
+        scene.lod_progress_log = message
+
+    # Keep only last 20 lines
+    log_lines = scene.lod_progress_log.split('\n')
+    if len(log_lines) > 20:
+        scene.lod_progress_log = '\n'.join(log_lines[-20:])
+
+    # Force immediate UI redraw for all windows
+    for window in context.window_manager.windows:
+        for area in window.screen.areas:
+            if area.type == 'VIEW_3D':
+                area.tag_redraw()
+
+    # Force immediate update with redraw timer
+    try:
+        bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
+    except:
+        pass
+
 class OBJECT_OT_LOD(bpy.types.Operator):
     """Creates the desired LODs and export them as obj(s) in LOD(x) subfolders"""
     bl_idname = "lod.creation"
@@ -99,21 +179,37 @@ class OBJECT_OT_LOD(bpy.types.Operator):
         LODnum = context.scene.LODnum
         i_lodbake_counter = 1
 
+        # Initialize progress tracking
+        context.scene.lod_progress_active = True
+        context.scene.lod_progress_log = ""
+        update_lod_progress(context, task="Initializing LOD generation...",
+                          current_obj=0, total_obj=ob_tot,
+                          current_lod=0, total_lod=LODnum)
+
         basedir = os.path.dirname(bpy.data.filepath)
         if not basedir:
+            context.scene.lod_progress_active = False
             raise Exception("Save the blend file")
+
         print("Number of LOD(s) to be created is: " + str(LODnum))
+        add_to_lod_log(context, f"Starting LOD generation: {LODnum} LOD(s) for {ob_tot} object(s)")
         last_margin_val = context.scene.render.bake.margin
         
         while i_lodbake_counter <= LODnum:
             currentLOD = 'LOD' + str(i_lodbake_counter)
             subfolder = currentLOD
 
+            # Update progress for current LOD level
+            update_lod_progress(context, task=f"Creating {currentLOD}...",
+                              current_lod=i_lodbake_counter, total_lod=LODnum)
+
             if not os.path.exists(os.path.join(basedir, subfolder)):
                 os.mkdir(os.path.join(basedir, subfolder))
                 print('There is no ' + subfolder + ' folder. Creating one...')
+                add_to_lod_log(context, f"Created folder: {subfolder}")
             else:
                 print('Found previously created ' + subfolder + ' folder. I will use it')
+                add_to_lod_log(context, f"Using existing folder: {subfolder}")
 
             ob_counter = 1
             print('<<<<<<<<<<<<<< CREATION OF ' + currentLOD + ' >>>>>>>>>>>>>>')
@@ -121,6 +217,14 @@ class OBJECT_OT_LOD(bpy.types.Operator):
 
             for obj_LOD0 in selected_objects:
                 start_time_ob = time.time()
+
+                # Update progress for current object
+                elapsed_total = time.time() - start_time
+                update_lod_progress(context, task=f"Processing {obj_LOD0.name} for {currentLOD}",
+                                  current_obj=ob_counter, total_obj=ob_tot,
+                                  current_lod=i_lodbake_counter, total_lod=LODnum,
+                                  elapsed=elapsed_total)
+
                 print('>>> ' + currentLOD + ' >>>')
                 print('>>>>>> processing the object "' + obj_LOD0.name + '" (' + str(ob_counter) + '/' + str(ob_tot) + ')')
                 bpy.ops.object.select_all(action='DESELECT')
@@ -135,6 +239,9 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                     obj_base_name = obj_LOD0_name.replace("_LOD0", "")
                 else:
                     obj_base_name = obj_LOD0_name
+
+                # Determine if object has OB_ prefix to maintain consistency
+                has_ob_prefix = obj_base_name.startswith('OB_')
 
                 print('Creating new LOD' + str(i_lodbake_counter) + ' object..')
                 bpy.ops.object.duplicate(linked=False, mode='TRANSLATION')
@@ -158,6 +265,12 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 obj_LODnew.select_set(True)
                 obj_LODnew.name = obj_base_name + "_" + currentLOD
                 obj_LODnew_name = obj_LODnew.name
+
+                # Get clean name without OB_ prefix for material and texture naming
+                if has_ob_prefix:
+                    obj_clean_name = obj_base_name[3:]  # Remove 'OB_' prefix
+                else:
+                    obj_clean_name = obj_base_name
 
                 for i in range(0, len(bpy.data.objects[obj_LODnew_name].material_slots)):
                     bpy.ops.object.material_slot_remove()
@@ -206,7 +319,7 @@ class OBJECT_OT_LOD(bpy.types.Operator):
 
                 print('Creating new texture atlas for ' + currentLOD + '....')
                 tex_res = tex_res_for_current_lod(i_lodbake_counter, context)
-                tex_LODnew_name = "T_" + obj_LODnew_name
+                tex_LODnew_name = "T_" + obj_clean_name + "_" + currentLOD
                 if context.scene.texture_format == 'PNG':
                     tempimage = bpy.data.images.new(name=tex_LODnew_name, width=tex_res, height=tex_res, alpha=context.scene.use_alpha)
                     tempimage.filepath_raw = "//" + subfolder + '/' + tex_LODnew_name + ".png"
@@ -246,7 +359,8 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 bpy.ops.object.select_all(action='DESELECT')
                 obj_LODnew.select_set(True)
                 context.view_layer.objects.active = obj_LODnew
-                mat, texImage, bsdf = create_material_from_image(context, tempimage, obj_LODnew, False)
+                # Pass clean name for material to avoid OB_ prefix in material name
+                mat, texImage, bsdf = create_material_from_image(context, tempimage, obj_LODnew, False, obj_clean_name + "_" + currentLOD)
 
                 print('Passing color data from LOD0 to ' + currentLOD + '...')
                 bpy.ops.object.select_all(action='DESELECT')
@@ -263,11 +377,9 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 context.scene.render.engine = to_be_restored_render_engine
 
                 mat.node_tree.links.new(bsdf.inputs['Base Color'], texImage.outputs['Color'])
-                
-                if obj_LODnew.name.startswith('OB_'):
-                    obj_LODnew.name = rimuovi_prefisso_ob(obj_LODnew.name)
 
-                obj_LODnew.data.name = 'ME_' + obj_LODnew.name
+                # Set proper mesh data name using clean name (without OB_ prefix)
+                obj_LODnew.data.name = 'ME_' + obj_clean_name + "_" + currentLOD
 
                 bpy.ops.object.select_all(action='DESELECT')
                 obj_LODnew.select_set(True)
@@ -276,15 +388,37 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 print('Saving on obj/mtl file for ' + currentLOD + '...')
                 activename = bpy.path.clean_name(obj_LODnew.name)
                 fn = os.path.join(basedir, subfolder, activename)
-                bpy.ops.wm.obj_export(filepath=fn + ".obj", check_existing=True, filter_blender=False, filter_backup=False, filter_image=False, filter_movie=False, filter_python=False, filter_font=False, filter_sound=False, filter_text=False, filter_archive=False, filter_btx=False, filter_collada=False, filter_alembic=False, filter_usd=False, filter_obj=False, filter_volume=False, filter_folder=True, filter_blenlib=False, filemode=8, display_type='DEFAULT', sort_method='DEFAULT', export_animation=False, start_frame=-2147483648, end_frame=2147483647, forward_axis='Y', up_axis='Z', global_scale=1.0, apply_modifiers=True, export_eval_mode='DAG_EVAL_VIEWPORT', export_selected_objects=True, export_uv=True, export_normals=True,  export_materials=True, export_pbr_extensions=False, path_mode='RELATIVE', export_triangulated_mesh=False, export_curves_as_nurbs=False, export_object_groups=False, export_material_groups=False, export_vertex_groups=False, export_smooth_groups=False, smooth_group_bitflags=False, filter_glob='*.obj;*.mtl')
-                print('>>> "' + obj_LODnew.name + '" (' + str(ob_counter) + '/' + str(ob_tot) + ') object baked in ' + str(time.time() - start_time_ob) + ' seconds')
+                bpy.ops.wm.obj_export(filepath=fn + ".obj", export_animation=False, forward_axis='Y', up_axis='Z', global_scale=1.0, apply_modifiers=True, export_eval_mode='DAG_EVAL_VIEWPORT', export_selected_objects=True, export_uv=True, export_normals=True, export_materials=True, export_pbr_extensions=False, path_mode='RELATIVE', export_triangulated_mesh=False, export_curves_as_nurbs=False, export_object_groups=False, export_material_groups=False, export_vertex_groups=False, export_smooth_groups=False, smooth_group_bitflags=False)
+
+                obj_time = time.time() - start_time_ob
+                print('>>> "' + obj_LODnew.name + '" (' + str(ob_counter) + '/' + str(ob_tot) + ') object baked in ' + str(obj_time) + ' seconds')
+                add_to_lod_log(context, f"✓ {obj_LODnew.name} completed in {obj_time:.1f}s")
                 ob_counter += 1
 
             i_lodbake_counter += 1
+
+        # Finalize progress tracking
         end_time = time.time() - start_time
         context.scene.render.bake.margin = last_margin_val
+
+        # Final log entry
         print('<<<<<<< Process done >>>>>>')
         print('>>>' + str(ob_tot) + ' objects processed in ' + str(end_time) + ' seconds')
+
+        minutes = int(end_time // 60)
+        seconds = int(end_time % 60)
+        add_to_lod_log(context, f"=== Process completed ===")
+        add_to_lod_log(context, f"Total: {ob_tot} objects in {minutes}m {seconds}s")
+
+        # Update final progress
+        update_lod_progress(context, task="Completed!",
+                          current_obj=ob_tot, total_obj=ob_tot,
+                          current_lod=LODnum, total_lod=LODnum,
+                          elapsed=end_time)
+
+        # Keep progress visible for review but mark as inactive
+        context.scene.lod_progress_active = False
+
         return {'FINISHED'}
 
 def rimuovi_prefisso_ob(stringa):
@@ -570,6 +704,45 @@ class ToolsPanelLODgenerator:
         layout = self.layout
         scene = context.scene
 
+        # Progress information box
+        if scene.lod_progress_active:
+            box = layout.box()
+            box.label(text="LOD Generation Progress", icon='TIME')
+
+            col = box.column(align=True)
+
+            # Current task
+            if scene.lod_progress_current_task:
+                col.label(text=f"Task: {scene.lod_progress_current_task}")
+
+            # LOD progress
+            if scene.lod_progress_total_lods > 0:
+                col.label(text=f"LOD: {scene.lod_progress_current_lod}/{scene.lod_progress_total_lods}")
+
+            # Object progress
+            if scene.lod_progress_total_objects > 0:
+                col.label(text=f"Object: {scene.lod_progress_current_object}/{scene.lod_progress_total_objects}")
+
+            # Elapsed time
+            if scene.lod_progress_elapsed_time > 0:
+                elapsed_minutes = int(scene.lod_progress_elapsed_time // 60)
+                elapsed_seconds = int(scene.lod_progress_elapsed_time % 60)
+                col.label(text=f"Elapsed: {elapsed_minutes}m {elapsed_seconds}s")
+
+            col.separator()
+
+        # Recent operations log box (collapsible)
+        if scene.lod_progress_log:
+            box = layout.box()
+            row = box.row()
+            row.label(text="Recent Operations", icon='TEXT')
+
+            log_lines = scene.lod_progress_log.split('\n')
+            # Show last 5 log entries
+            for line in log_lines[-5:]:
+                if line.strip():
+                    box.label(text=line)
+
         if context.object:
             self.layout.operator("lod0.creation", icon="MESH_UVSPHERE", text='LOD 0 (set as)')
             row = layout.row()
@@ -730,11 +903,52 @@ def register():
         description="If enabled, PNG textures will include an alpha channel"
     )
     bpy.types.Scene.decimate_borders = bpy.props.BoolProperty(
-        name="Preserve borders", 
+        name="Preserve borders",
         default=False,
         description="If disabled it will not preserve the borders of the mesh"
     )
-    
+
+    # Progress tracking properties
+    bpy.types.Scene.lod_progress_active = bpy.props.BoolProperty(
+        name="LOD Generation Active",
+        default=False,
+        description="Indicates if LOD generation is currently running"
+    )
+    bpy.types.Scene.lod_progress_current_task = bpy.props.StringProperty(
+        name="Current Task",
+        default="",
+        description="Description of current task being executed"
+    )
+    bpy.types.Scene.lod_progress_current_object = bpy.props.IntProperty(
+        name="Current Object",
+        default=0,
+        description="Index of current object being processed"
+    )
+    bpy.types.Scene.lod_progress_total_objects = bpy.props.IntProperty(
+        name="Total Objects",
+        default=0,
+        description="Total number of objects to process"
+    )
+    bpy.types.Scene.lod_progress_current_lod = bpy.props.IntProperty(
+        name="Current LOD",
+        default=0,
+        description="Current LOD level being generated"
+    )
+    bpy.types.Scene.lod_progress_total_lods = bpy.props.IntProperty(
+        name="Total LODs",
+        default=0,
+        description="Total number of LOD levels to generate"
+    )
+    bpy.types.Scene.lod_progress_elapsed_time = bpy.props.FloatProperty(
+        name="Elapsed Time",
+        default=0.0,
+        description="Time elapsed since start of LOD generation"
+    )
+    bpy.types.Scene.lod_progress_log = bpy.props.StringProperty(
+        name="Progress Log",
+        default="",
+        description="Log of completed operations"
+    )
 
 def unregister():
     for cls in classes:
@@ -754,6 +968,15 @@ def unregister():
     del bpy.types.Scene.texture_format
     del bpy.types.Scene.use_alpha
     del bpy.types.Scene.decimate_borders
+    # Progress tracking properties
+    del bpy.types.Scene.lod_progress_active
+    del bpy.types.Scene.lod_progress_current_task
+    del bpy.types.Scene.lod_progress_current_object
+    del bpy.types.Scene.lod_progress_total_objects
+    del bpy.types.Scene.lod_progress_current_lod
+    del bpy.types.Scene.lod_progress_total_lods
+    del bpy.types.Scene.lod_progress_elapsed_time
+    del bpy.types.Scene.lod_progress_log
 
 if __name__ == "__main__":
     register()
