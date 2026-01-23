@@ -379,30 +379,64 @@ class RENDER_OT_create_orthogonal_svg(Operator):
 
     # Dinamicamente popolare la lista dei template disponibili
     def get_available_templates(self, context):
+        import re
         templates = []
-        
+        templates_dict = {}  # Per evitare duplicati
+
         # Percorsi possibili in cui cercare i template
         possible_paths = [
             # Percorso standard all'interno dell'addon
-            os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "svg_templates"),
+            os.path.join(get_addon_path(), "svg_templates"),
             # Percorso relativo al blend file
-            os.path.join(os.path.dirname(bpy.data.filepath), "svg_templates"),
+            os.path.join(os.path.dirname(bpy.data.filepath), "svg_templates") if bpy.data.filepath else None,
             # Percorso alternativo per sviluppo/test
-            os.path.join(os.path.dirname(bpy.data.filepath), "3DSC", "svg_templates")
+            os.path.join(os.path.dirname(bpy.data.filepath), "3DSC", "svg_templates") if bpy.data.filepath else None
         ]
-        
+
+        # Filtra None values
+        possible_paths = [p for p in possible_paths if p]
+
         # Cerca in tutti i percorsi possibili
         for path in possible_paths:
             if os.path.exists(path):
                 for file in os.listdir(path):
                     if file.endswith(".svg"):
                         name = os.path.splitext(file)[0]
-                        templates.append((name, name, f"Use template {name}"))
-        
+
+                        # Estrai il fattore di scala dal nome usando regex
+                        # Cerca pattern come "1m", "50cm", "2m", "5m" alla fine del nome
+                        scale_match = re.search(r'(\d+(?:\.\d+)?)(m|cm|mm)$', name, re.IGNORECASE)
+
+                        if scale_match:
+                            scale_value = float(scale_match.group(1))
+                            scale_unit = scale_match.group(2).lower()
+
+                            # Converti tutto in metri per confronto
+                            if scale_unit == 'cm':
+                                scale_meters = scale_value / 100
+                            elif scale_unit == 'mm':
+                                scale_meters = scale_value / 1000
+                            else:  # metri
+                                scale_meters = scale_value
+
+                            description = f"Template with scale 1:{scale_match.group(1)}{scale_unit}"
+                        else:
+                            scale_meters = 1.0  # Default
+                            description = f"Template: {name}"
+
+                        # Usa il nome come chiave per evitare duplicati
+                        if name not in templates_dict:
+                            templates_dict[name] = (name, name, description, scale_meters)
+
+        # Converti dizionario in lista e ordina per scala
+        templates = sorted(templates_dict.values(), key=lambda x: x[3])
+        # Rimuovi il valore di scala dalla tupla finale (serve solo per ordinare)
+        templates = [(t[0], t[1], t[2]) for t in templates]
+
         # Aggiungi un template di fallback per evitare lista vuota
         if not templates:
-            templates.append(("MASTER_1m", "MASTER_1m", "Default template"))
-        
+            templates.append(("MASTER_1m", "MASTER_1m", "Default template (1:1m)"))
+
         return templates
     
     template_select: EnumProperty(
@@ -418,10 +452,22 @@ class RENDER_OT_create_orthogonal_svg(Operator):
     )
     
     open_file: BoolProperty(
-        name="Open After Export",
+        name="Open SVG After Export",
         description="Open the SVG file with the default application after export",
+        default=False
+    ) # type: ignore
+
+    open_folder: BoolProperty(
+        name="Open Folder After Export",
+        description="Open the folder containing the exported file",
         default=True
-    )
+    ) # type: ignore
+
+    create_pdf: BoolProperty(
+        name="Create PDF",
+        description="Also create a PDF version of the SVG (requires Inkscape or similar)",
+        default=False
+    ) # type: ignore
     
     @classmethod
     def poll(cls, context):
@@ -528,7 +574,10 @@ class RENDER_OT_create_orthogonal_svg(Operator):
             box.label(text=f"Selected template: {self.template_select}")
         
         box = layout.box()
+        box.label(text="Post-Export Options")
         box.prop(self, "open_file")
+        box.prop(self, "open_folder")
+        box.prop(self, "create_pdf")
         
         # Mostra avvisi per problemi comuni
         if not bpy.data.filepath:
@@ -660,6 +709,14 @@ class RENDER_OT_create_orthogonal_svg(Operator):
             self.report({'ERROR'}, f"Error writing modified SVG: {e}")
             return {'CANCELLED'}
         
+        # Create PDF if requested
+        pdf_output_path = None
+        if self.create_pdf:
+            pdf_output_path = os.path.join(output_path, f"{self.document_name}.pdf")
+            pdf_created = self.create_pdf_from_svg(svg_output_path, pdf_output_path)
+            if not pdf_created:
+                self.report({'WARNING'}, "Could not create PDF. Inkscape may not be installed.")
+
         # Open the file if requested
         if self.open_file:
             try:
@@ -667,11 +724,35 @@ class RENDER_OT_create_orthogonal_svg(Operator):
                 if os.name == 'nt':  # Windows
                     os.startfile(svg_output_path)
                 elif os.name == 'posix':  # Linux or Mac
-                    subprocess.Popen(['xdg-open', svg_output_path])
+                    # macOS uses 'open', Linux uses 'xdg-open'
+                    import platform
+                    if platform.system() == 'Darwin':  # macOS
+                        subprocess.Popen(['open', svg_output_path])
+                    else:  # Linux
+                        subprocess.Popen(['xdg-open', svg_output_path])
             except Exception as e:
                 self.report({'WARNING'}, f"Could not open file: {e}")
-        
-        self.report({'INFO'}, f"SVG created successfully at {svg_output_path}")
+
+        # Open folder if requested
+        if self.open_folder:
+            try:
+                import subprocess
+                if os.name == 'nt':  # Windows
+                    os.startfile(output_path)
+                elif os.name == 'posix':  # Linux or Mac
+                    import platform
+                    if platform.system() == 'Darwin':  # macOS
+                        subprocess.Popen(['open', output_path])
+                    else:  # Linux
+                        subprocess.Popen(['xdg-open', output_path])
+            except Exception as e:
+                self.report({'WARNING'}, f"Could not open folder: {e}")
+
+        success_msg = f"SVG created successfully at {svg_output_path}"
+        if pdf_output_path and os.path.exists(pdf_output_path):
+            success_msg += f" and PDF at {pdf_output_path}"
+
+        self.report({'INFO'}, success_msg)
         return {'FINISHED'}
     
     def get_object_dimensions(self, obj):
@@ -710,6 +791,50 @@ class RENDER_OT_create_orthogonal_svg(Operator):
         
         return formatted
     
+    def create_pdf_from_svg(self, svg_path, pdf_path):
+        """Create a PDF from SVG using available tools"""
+        try:
+            import subprocess
+            import platform
+
+            # Try different conversion methods
+            converters = []
+
+            if platform.system() == 'Darwin':  # macOS
+                # Try Inkscape (common installation paths on macOS)
+                converters.extend([
+                    ['/Applications/Inkscape.app/Contents/MacOS/inkscape', svg_path, '--export-filename=' + pdf_path],
+                    ['/usr/local/bin/inkscape', svg_path, '--export-filename=' + pdf_path],
+                    ['inkscape', svg_path, '--export-filename=' + pdf_path],
+                ])
+            elif platform.system() == 'Windows':
+                converters.extend([
+                    ['inkscape', svg_path, '--export-filename=' + pdf_path],
+                    ['C:\\Program Files\\Inkscape\\bin\\inkscape.exe', svg_path, '--export-filename=' + pdf_path],
+                ])
+            else:  # Linux
+                converters.extend([
+                    ['inkscape', svg_path, '--export-filename=' + pdf_path],
+                    ['rsvg-convert', '-f', 'pdf', '-o', pdf_path, svg_path],
+                    ['cairosvg', svg_path, '-o', pdf_path],
+                ])
+
+            # Try each converter
+            for converter in converters:
+                try:
+                    result = subprocess.run(converter, capture_output=True, timeout=30)
+                    if result.returncode == 0 and os.path.exists(pdf_path):
+                        print(f"PDF created successfully using {converter[0]}")
+                        return True
+                except (subprocess.TimeoutExpired, FileNotFoundError):
+                    continue
+
+            return False
+
+        except Exception as e:
+            print(f"Error creating PDF: {e}")
+            return False
+
     def create_placeholder_image(self, placeholder_path):
         """Create a placeholder image at the specified path"""
         try:
@@ -808,6 +933,47 @@ def get_addon_path():
         addon_path = os.path.dirname(os.path.dirname(current_path))
     
     return addon_path
+
+class RENDER_OT_open_templates_folder(Operator):
+    """Open the SVG templates folder"""
+    bl_idname = "render.open_templates_folder"
+    bl_label = "Open Templates Folder"
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        # Get addon directory
+        addon_dir = get_addon_path()
+        templates_path = os.path.join(addon_dir, "svg_templates")
+
+        # Create folder if it doesn't exist
+        if not os.path.exists(templates_path):
+            try:
+                os.makedirs(templates_path, exist_ok=True)
+                self.report({'INFO'}, f"Created templates folder at {templates_path}")
+            except Exception as e:
+                self.report({'ERROR'}, f"Could not create templates folder: {e}")
+                return {'CANCELLED'}
+
+        # Open the folder
+        try:
+            import subprocess
+            import platform
+
+            if os.name == 'nt':  # Windows
+                os.startfile(templates_path)
+            elif os.name == 'posix':  # Linux or Mac
+                if platform.system() == 'Darwin':  # macOS
+                    subprocess.Popen(['open', templates_path])
+                else:  # Linux
+                    subprocess.Popen(['xdg-open', templates_path])
+
+            self.report({'INFO'}, f"Opened templates folder: {templates_path}")
+        except Exception as e:
+            self.report({'ERROR'}, f"Could not open folder: {e}")
+            return {'CANCELLED'}
+
+        return {'FINISHED'}
+
 
 class VIEW3D_PT_orthogonal_render(Panel):
     """Panel for orthogonal rendering setup"""
@@ -924,6 +1090,12 @@ class VIEW3D_PT_orthogonal_render(Panel):
         row.enabled = template_exists and bpy.data.filepath and has_renders
         row.operator("render.create_orthogonal_svg", icon='OUTLINER_OB_FONT')
 
+        # Templates management
+        box = layout.box()
+        box.label(text="Templates Management", icon='FILEBROWSER')
+        row = box.row(align=True)
+        row.operator("render.open_templates_folder", icon='FOLDER_REDIRECT', text="Open Templates Folder")
+
 
 # Function to make sure the SVG template folder exists and create it if not
 def ensure_svg_templates_folder():
@@ -980,6 +1152,7 @@ def register():
     bpy.utils.register_class(OBJECT_OT_setup_orthogonal_render)
     bpy.utils.register_class(RENDER_OT_orthogonal_views)
     bpy.utils.register_class(RENDER_OT_create_orthogonal_svg)
+    bpy.utils.register_class(RENDER_OT_open_templates_folder)
     bpy.utils.register_class(VIEW3D_PT_orthogonal_render)
     
     # Register properties
@@ -1060,6 +1233,7 @@ def register():
 
 def unregister():
     bpy.utils.unregister_class(VIEW3D_PT_orthogonal_render)
+    bpy.utils.unregister_class(RENDER_OT_open_templates_folder)
     bpy.utils.unregister_class(RENDER_OT_create_orthogonal_svg)
     bpy.utils.unregister_class(RENDER_OT_orthogonal_views)
     bpy.utils.unregister_class(OBJECT_OT_setup_orthogonal_render)

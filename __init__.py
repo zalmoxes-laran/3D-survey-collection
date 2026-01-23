@@ -77,7 +77,7 @@ else:
             realitycapture,
             cesium_preprocessing,
             orthogonal_render,
-            mets_exporter,
+            #mets_exporter,
             camera_unreal_exporter,
             lod_shortcuts
             )
@@ -187,6 +187,15 @@ class DemPreferences(bpy.types.AddonPreferences):
         op = row.operator("install_3dsc_missing.modules", icon="STICKY_UVS_DISABLE", text='Uninstall Py3dtiles modules (waiting some minutes is normal)')
         op.is_install = False
         op.list_modules_to_install = "py3dtiles"
+
+        # SVG Templates Management
+        layout = self.layout
+        box = layout.box()
+        box.label(text="Orthogonal Render Templates", icon='FILEBROWSER')
+        row = box.row()
+        row.operator("render.open_templates_folder", icon='FOLDER_REDIRECT', text='Open SVG Templates Folder')
+        row = box.row()
+        row.label(text="Add custom SVG templates to this folder. Templates should end with scale info (e.g., MASTER_1m, MASTER_50cm)")
 
 class RES_list(PropertyGroup):
     """ List of resolutions """
@@ -455,7 +464,7 @@ def register():
     import_linked_lod.register()
     orthogonal_render.register()
     alignment_orientation_tool.register()
-    mets_exporter.register()
+    #mets_exporter.register()
     TSM.register()
     
 
@@ -616,7 +625,7 @@ def unregister():
     import_linked_lod.unregister()
     orthogonal_render.unregister()
     alignment_orientation_tool.unregister()
-    mets_exporter.unregister()
+    #mets_exporter.unregister()
 
 
 
