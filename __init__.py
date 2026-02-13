@@ -105,6 +105,76 @@ from . import TSM
 @addon_updater_ops.make_annotations
 
 
+class LODPresetItem(PropertyGroup):
+    """Persistent named LOD preset stored in addon preferences."""
+
+    name: StringProperty(
+        name="Preset Name",
+        default="Base"
+    ) # type: ignore
+    lod_num: IntProperty(
+        name="Number of LODs",
+        default=3, min=1, max=5
+    ) # type: ignore
+    lod1_dec_ratio: FloatProperty(
+        name="LOD1 Decimation Ratio",
+        default=0.5, min=0.0, max=1.0
+    ) # type: ignore
+    lod2_dec_ratio: FloatProperty(
+        name="LOD2 Decimation Ratio",
+        default=0.25, min=0.0, max=1.0
+    ) # type: ignore
+    lod3_dec_ratio: FloatProperty(
+        name="LOD3 Decimation Ratio",
+        default=0.125, min=0.0, max=1.0
+    ) # type: ignore
+    lod1_tex_res: IntProperty(
+        name="LOD1 Texture Resolution",
+        default=2048, min=64, max=8192
+    ) # type: ignore
+    lod2_tex_res: IntProperty(
+        name="LOD2 Texture Resolution",
+        default=512, min=64, max=8192
+    ) # type: ignore
+    lod3_tex_res: IntProperty(
+        name="LOD3 Texture Resolution",
+        default=128, min=64, max=8192
+    ) # type: ignore
+    lod_texture_format: EnumProperty(
+        name="Texture Format",
+        items=[('JPG', 'JPEG', 'JPEG format'), ('PNG', 'PNG', 'PNG format')],
+        default='JPG'
+    ) # type: ignore
+    lod_use_alpha: BoolProperty(
+        name="Use Alpha",
+        default=False
+    ) # type: ignore
+    lod_pad_on: BoolProperty(
+        name="Padding On",
+        default=True
+    ) # type: ignore
+    lod_use_scene_settings: BoolProperty(
+        name="Use Scene Settings",
+        default=False
+    ) # type: ignore
+    lod_decimate_borders: BoolProperty(
+        name="Decimate Borders",
+        default=False
+    ) # type: ignore
+    lod_atlas_uv_recalc: BoolProperty(
+        name="Atlas UV Recalculate",
+        default=True
+    ) # type: ignore
+    lod_atlas_uv_algorithm: EnumProperty(
+        name="UV Algorithm",
+        items=[('SMART', 'Smart UV', 'Smart UV projection'),
+               ('ANGLE', 'Angle Based', 'Angle based unwrapping'),
+               ('CONFORMAL', 'Conformal', 'Conformal mapping'),
+               ('MINIMUM', 'Minimum Stretch', 'Minimize stretch')],
+        default='SMART'
+    ) # type: ignore
+
+
 class DemPreferences(bpy.types.AddonPreferences):
     bl_idname = __package__
     # addon updater preferences
@@ -228,6 +298,13 @@ class DemPreferences(bpy.types.AddonPreferences):
                ('CONFORMAL', 'Conformal', 'Conformal mapping'),
                ('MINIMUM', 'Minimum Stretch', 'Minimize stretch')],
         default='SMART'
+    ) # type: ignore
+    lod_presets : bpy.props.CollectionProperty(
+        type=LODPresetItem
+    ) # type: ignore
+    lod_active_preset : bpy.props.StringProperty(
+        name="Active LOD Preset",
+        default="Base"
     ) # type: ignore
     show_lod_defaults : bpy.props.BoolProperty(
         name="Show LOD Defaults",
@@ -537,6 +614,7 @@ classes = (
     CAMTypeList,
     RES_list,
     LODitemListItem,
+    LODPresetItem,
     DemPreferences,
     AnalysisListItem,
     StatisticsListItem,

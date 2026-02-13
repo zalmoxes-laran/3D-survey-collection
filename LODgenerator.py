@@ -3,7 +3,7 @@ import os
 import time
 from .functions import *
 from mathutils import Vector
-from bpy.types import Panel
+from bpy.types import Menu, Operator, Panel
 import subprocess
 
 # Funzione ricorsiva per impostare come attiva la layer_collection che contiene l'oggetto
@@ -164,6 +164,116 @@ def add_to_lod_log(context, message):
         bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
     except:
         pass
+
+
+def _get_addon_preferences(context):
+    addon_key = (__package__ or "").split(".")[0]
+    addon = context.preferences.addons.get(addon_key)
+    if addon is None:
+        return None
+    return addon.preferences
+
+
+LOD_BASE_PRESET_NAME = "Base"
+
+
+def _copy_scene_to_preset(scene, preset):
+    preset.lod_num = scene.LODnum
+    preset.lod1_dec_ratio = scene.LOD1_dec_ratio
+    preset.lod2_dec_ratio = scene.LOD2_dec_ratio
+    preset.lod3_dec_ratio = scene.LOD3_dec_ratio
+    preset.lod1_tex_res = scene.LOD1_tex_res
+    preset.lod2_tex_res = scene.LOD2_tex_res
+    preset.lod3_tex_res = scene.LOD3_tex_res
+    preset.lod_pad_on = scene.LOD_pad_on
+    preset.lod_use_scene_settings = scene.LOD_use_scene_settings
+    preset.lod_atlas_uv_recalc = scene.atlas_uv_recalc
+    preset.lod_atlas_uv_algorithm = scene.atlas_uv_algorithm
+    preset.lod_texture_format = scene.texture_format
+    preset.lod_use_alpha = scene.use_alpha
+    preset.lod_decimate_borders = scene.decimate_borders
+
+
+def _copy_preset_to_scene(scene, preset):
+    scene.LODnum = preset.lod_num
+    scene.LOD1_dec_ratio = preset.lod1_dec_ratio
+    scene.LOD2_dec_ratio = preset.lod2_dec_ratio
+    scene.LOD3_dec_ratio = preset.lod3_dec_ratio
+    scene.LOD1_tex_res = preset.lod1_tex_res
+    scene.LOD2_tex_res = preset.lod2_tex_res
+    scene.LOD3_tex_res = preset.lod3_tex_res
+    scene.LOD_pad_on = preset.lod_pad_on
+    scene.LOD_use_scene_settings = preset.lod_use_scene_settings
+    scene.atlas_uv_recalc = preset.lod_atlas_uv_recalc
+    scene.atlas_uv_algorithm = preset.lod_atlas_uv_algorithm
+    scene.texture_format = preset.lod_texture_format
+    scene.use_alpha = preset.lod_use_alpha
+    scene.decimate_borders = preset.lod_decimate_borders
+
+
+def _copy_legacy_defaults_to_preset(prefs, preset):
+    preset.lod_num = prefs.lod_num
+    preset.lod1_dec_ratio = prefs.lod1_dec_ratio
+    preset.lod2_dec_ratio = prefs.lod2_dec_ratio
+    preset.lod3_dec_ratio = prefs.lod3_dec_ratio
+    preset.lod1_tex_res = prefs.lod1_tex_res
+    preset.lod2_tex_res = prefs.lod2_tex_res
+    preset.lod3_tex_res = prefs.lod3_tex_res
+    preset.lod_pad_on = prefs.lod_pad_on
+    preset.lod_use_scene_settings = prefs.lod_use_scene_settings
+    preset.lod_atlas_uv_recalc = prefs.lod_atlas_uv_recalc
+    preset.lod_atlas_uv_algorithm = prefs.lod_atlas_uv_algorithm
+    preset.lod_texture_format = prefs.lod_texture_format
+    preset.lod_use_alpha = prefs.lod_use_alpha
+    preset.lod_decimate_borders = prefs.lod_decimate_borders
+
+
+def _find_preset_by_name(prefs, preset_name):
+    for preset in prefs.lod_presets:
+        if preset.name == preset_name:
+            return preset
+    return None
+
+
+def _existing_preset_names(prefs):
+    return {preset.name for preset in prefs.lod_presets}
+
+
+def _make_unique_preset_name(prefs, requested_name):
+    clean_name = (requested_name or "").strip()
+    if not clean_name:
+        clean_name = "Preset"
+    existing_names = _existing_preset_names(prefs)
+    if clean_name not in existing_names:
+        return clean_name
+
+    idx = 1
+    while True:
+        candidate = f"{clean_name}_{idx:02d}"
+        if candidate not in existing_names:
+            return candidate
+        idx += 1
+
+
+def _ensure_base_preset(prefs):
+    base_preset = _find_preset_by_name(prefs, LOD_BASE_PRESET_NAME)
+    if base_preset is not None:
+        return base_preset
+
+    base_preset = prefs.lod_presets.add()
+    base_preset.name = LOD_BASE_PRESET_NAME
+    _copy_legacy_defaults_to_preset(prefs, base_preset)
+    return base_preset
+
+
+def _get_active_preset(prefs):
+    _ensure_base_preset(prefs)
+    active_name = (prefs.lod_active_preset or "").strip()
+    active_preset = _find_preset_by_name(prefs, active_name)
+    if active_preset is None:
+        prefs.lod_active_preset = LOD_BASE_PRESET_NAME
+        active_preset = _find_preset_by_name(prefs, LOD_BASE_PRESET_NAME)
+    return active_preset
 
 class OBJECT_OT_LOD(bpy.types.Operator):
     """Creates the desired LODs and export them as obj(s) in LOD(x) subfolders"""
@@ -817,75 +927,256 @@ class ToolsPanelLODgenerator:
 
             layout.separator()
             row = layout.row(align=True)
-            row.operator("lod.save_to_preferences", text="Save as Default", icon='FILE_TICK')
-            row.operator("lod.load_from_preferences", text="Load Defaults", icon='IMPORT')
+            prefs = _get_addon_preferences(context)
+            if prefs is None:
+                row.label(text="Preset: unavailable", icon='ERROR')
+            else:
+                active_preset = _get_active_preset(prefs)
+                active_name = active_preset.name if active_preset else LOD_BASE_PRESET_NAME
+                row.menu("LOD_MT_presets_menu", text=f"Preset: {active_name}", icon='DOWNARROW_HLT')
 
-class OBJECT_OT_save_lod_prefs(Operator):
-    bl_idname = "lod.save_to_preferences"
-    bl_label = "Save as Default"
-    bl_description = "Save current LOD settings as default for all new files"
+
+class LOD_MT_presets_menu(Menu):
+    bl_idname = "LOD_MT_presets_menu"
+    bl_label = "LOD Presets"
+
+    def draw(self, context):
+        layout = self.layout
+        prefs = _get_addon_preferences(context)
+        if prefs is None:
+            layout.label(text="Addon preferences unavailable", icon='ERROR')
+            return
+
+        active_preset = _get_active_preset(prefs)
+        active_name = active_preset.name if active_preset else LOD_BASE_PRESET_NAME
+
+        layout.label(text="Select Preset", icon='PRESET')
+        for preset in prefs.lod_presets:
+            icon = 'CHECKMARK' if preset.name == active_name else 'BLANK1'
+            op = layout.operator("lod.preset_set_active", text=preset.name, icon=icon)
+            op.preset_name = preset.name
+
+        layout.separator()
+        layout.label(text="Actions", icon='PREFERENCES')
+        layout.operator("lod.preset_apply", icon='IMPORT')
+        layout.operator("lod.preset_save_current_as_new", icon='ADD')
+        layout.operator("lod.preset_overwrite_active", icon='FILE_TICK')
+        layout.operator("lod.preset_rename_active", icon='GREASEPENCIL')
+        layout.operator("lod.preset_duplicate_active", icon='DUPLICATE')
+
+        delete_row = layout.row()
+        delete_row.enabled = active_name != LOD_BASE_PRESET_NAME
+        delete_row.operator("lod.preset_delete_active", icon='TRASH')
+
+
+class OBJECT_OT_lod_preset_set_active(Operator):
+    bl_idname = "lod.preset_set_active"
+    bl_label = "Set Active LOD Preset"
+    bl_options = {"INTERNAL"}
+
+    preset_name: bpy.props.StringProperty(name="Preset") # type: ignore
 
     def execute(self, context):
-        scene = context.scene
-        try:
-            prefs = context.preferences.addons[__package__].preferences
-        except KeyError:
+        prefs = _get_addon_preferences(context)
+        if prefs is None:
             self.report({'ERROR'}, "Cannot access addon preferences")
             return {'CANCELLED'}
-
-        # Copy Scene properties → AddonPreferences
-        prefs.lod_num = scene.LODnum
-        prefs.lod1_dec_ratio = scene.LOD1_dec_ratio
-        prefs.lod2_dec_ratio = scene.LOD2_dec_ratio
-        prefs.lod3_dec_ratio = scene.LOD3_dec_ratio
-        prefs.lod1_tex_res = scene.LOD1_tex_res
-        prefs.lod2_tex_res = scene.LOD2_tex_res
-        prefs.lod3_tex_res = scene.LOD3_tex_res
-        prefs.lod_pad_on = scene.LOD_pad_on
-        prefs.lod_use_scene_settings = scene.LOD_use_scene_settings
-        prefs.lod_atlas_uv_recalc = scene.atlas_uv_recalc
-        prefs.lod_atlas_uv_algorithm = scene.atlas_uv_algorithm
-        prefs.lod_texture_format = scene.texture_format
-        prefs.lod_use_alpha = scene.use_alpha
-        prefs.lod_decimate_borders = scene.decimate_borders
-
-        # Save user preferences to disk
+        preset = _find_preset_by_name(prefs, self.preset_name)
+        if preset is None:
+            self.report({'ERROR'}, f'Preset "{self.preset_name}" not found')
+            return {'CANCELLED'}
+        prefs.lod_active_preset = preset.name
         bpy.ops.wm.save_userpref()
-
-        self.report({'INFO'}, "LOD settings saved as defaults")
+        self.report({'INFO'}, f'Active preset: {preset.name}')
         return {'FINISHED'}
 
 
-class OBJECT_OT_load_lod_prefs(Operator):
-    bl_idname = "lod.load_from_preferences"
-    bl_label = "Load Defaults"
-    bl_description = "Load LOD settings from saved defaults"
+class OBJECT_OT_lod_preset_apply(Operator):
+    bl_idname = "lod.preset_apply"
+    bl_label = "Apply Active to Scene"
+    bl_description = "Apply active LOD preset to current scene"
 
     def execute(self, context):
-        scene = context.scene
-        try:
-            prefs = context.preferences.addons[__package__].preferences
-        except KeyError:
+        prefs = _get_addon_preferences(context)
+        if prefs is None:
+            self.report({'ERROR'}, "Cannot access addon preferences")
+            return {'CANCELLED'}
+        preset = _get_active_preset(prefs)
+        if preset is None:
+            self.report({'ERROR'}, "No active preset available")
+            return {'CANCELLED'}
+        _copy_preset_to_scene(context.scene, preset)
+        self.report({'INFO'}, f'Preset "{preset.name}" applied')
+        return {'FINISHED'}
+
+
+class OBJECT_OT_lod_preset_save_current_as_new(Operator):
+    bl_idname = "lod.preset_save_current_as_new"
+    bl_label = "Save Current as New..."
+    bl_description = "Create a new named LOD preset from current scene settings"
+
+    preset_name: bpy.props.StringProperty(name="Preset Name", default="Preset") # type: ignore
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
+
+    def draw(self, context):
+        self.layout.prop(self, "preset_name")
+
+    def execute(self, context):
+        prefs = _get_addon_preferences(context)
+        if prefs is None:
             self.report({'ERROR'}, "Cannot access addon preferences")
             return {'CANCELLED'}
 
-        # Copy AddonPreferences → Scene properties
-        scene.LODnum = prefs.lod_num
-        scene.LOD1_dec_ratio = prefs.lod1_dec_ratio
-        scene.LOD2_dec_ratio = prefs.lod2_dec_ratio
-        scene.LOD3_dec_ratio = prefs.lod3_dec_ratio
-        scene.LOD1_tex_res = prefs.lod1_tex_res
-        scene.LOD2_tex_res = prefs.lod2_tex_res
-        scene.LOD3_tex_res = prefs.lod3_tex_res
-        scene.LOD_pad_on = prefs.lod_pad_on
-        scene.LOD_use_scene_settings = prefs.lod_use_scene_settings
-        scene.atlas_uv_recalc = prefs.lod_atlas_uv_recalc
-        scene.atlas_uv_algorithm = prefs.lod_atlas_uv_algorithm
-        scene.texture_format = prefs.lod_texture_format
-        scene.use_alpha = prefs.lod_use_alpha
-        scene.decimate_borders = prefs.lod_decimate_borders
+        unique_name = _make_unique_preset_name(prefs, self.preset_name)
+        new_preset = prefs.lod_presets.add()
+        new_preset.name = unique_name
+        _copy_scene_to_preset(context.scene, new_preset)
+        prefs.lod_active_preset = new_preset.name
+        bpy.ops.wm.save_userpref()
+        self.report({'INFO'}, f'Preset "{new_preset.name}" created')
+        return {'FINISHED'}
 
-        self.report({'INFO'}, "LOD defaults loaded")
+
+class OBJECT_OT_lod_preset_overwrite_active(Operator):
+    bl_idname = "lod.preset_overwrite_active"
+    bl_label = "Overwrite Active"
+    bl_description = "Overwrite active preset with current scene settings"
+
+    def execute(self, context):
+        prefs = _get_addon_preferences(context)
+        if prefs is None:
+            self.report({'ERROR'}, "Cannot access addon preferences")
+            return {'CANCELLED'}
+        preset = _get_active_preset(prefs)
+        if preset is None:
+            self.report({'ERROR'}, "No active preset available")
+            return {'CANCELLED'}
+        _copy_scene_to_preset(context.scene, preset)
+        bpy.ops.wm.save_userpref()
+        self.report({'INFO'}, f'Preset "{preset.name}" updated')
+        return {'FINISHED'}
+
+
+class OBJECT_OT_lod_preset_rename_active(Operator):
+    bl_idname = "lod.preset_rename_active"
+    bl_label = "Rename Active..."
+    bl_description = "Rename active LOD preset"
+
+    new_name: bpy.props.StringProperty(name="New Name", default="Preset") # type: ignore
+
+    def invoke(self, context, event):
+        prefs = _get_addon_preferences(context)
+        if prefs is None:
+            return {'CANCELLED'}
+        preset = _get_active_preset(prefs)
+        if preset is not None:
+            self.new_name = preset.name
+        return context.window_manager.invoke_props_dialog(self)
+
+    def draw(self, context):
+        self.layout.prop(self, "new_name")
+
+    def execute(self, context):
+        prefs = _get_addon_preferences(context)
+        if prefs is None:
+            self.report({'ERROR'}, "Cannot access addon preferences")
+            return {'CANCELLED'}
+        preset = _get_active_preset(prefs)
+        if preset is None:
+            self.report({'ERROR'}, "No active preset available")
+            return {'CANCELLED'}
+        if preset.name == LOD_BASE_PRESET_NAME:
+            self.report({'WARNING'}, 'Preset "Base" cannot be renamed')
+            return {'CANCELLED'}
+
+        unique_name = _make_unique_preset_name(prefs, self.new_name)
+        old_name = preset.name
+        preset.name = unique_name
+        prefs.lod_active_preset = unique_name
+        bpy.ops.wm.save_userpref()
+        self.report({'INFO'}, f'Preset "{old_name}" renamed to "{unique_name}"')
+        return {'FINISHED'}
+
+
+class OBJECT_OT_lod_preset_duplicate_active(Operator):
+    bl_idname = "lod.preset_duplicate_active"
+    bl_label = "Duplicate Active"
+    bl_description = "Duplicate active LOD preset"
+
+    def execute(self, context):
+        prefs = _get_addon_preferences(context)
+        if prefs is None:
+            self.report({'ERROR'}, "Cannot access addon preferences")
+            return {'CANCELLED'}
+        preset = _get_active_preset(prefs)
+        if preset is None:
+            self.report({'ERROR'}, "No active preset available")
+            return {'CANCELLED'}
+
+        new_name = _make_unique_preset_name(prefs, preset.name)
+        new_preset = prefs.lod_presets.add()
+        new_preset.name = new_name
+
+        new_preset.lod_num = preset.lod_num
+        new_preset.lod1_dec_ratio = preset.lod1_dec_ratio
+        new_preset.lod2_dec_ratio = preset.lod2_dec_ratio
+        new_preset.lod3_dec_ratio = preset.lod3_dec_ratio
+        new_preset.lod1_tex_res = preset.lod1_tex_res
+        new_preset.lod2_tex_res = preset.lod2_tex_res
+        new_preset.lod3_tex_res = preset.lod3_tex_res
+        new_preset.lod_pad_on = preset.lod_pad_on
+        new_preset.lod_use_scene_settings = preset.lod_use_scene_settings
+        new_preset.lod_atlas_uv_recalc = preset.lod_atlas_uv_recalc
+        new_preset.lod_atlas_uv_algorithm = preset.lod_atlas_uv_algorithm
+        new_preset.lod_texture_format = preset.lod_texture_format
+        new_preset.lod_use_alpha = preset.lod_use_alpha
+        new_preset.lod_decimate_borders = preset.lod_decimate_borders
+
+        prefs.lod_active_preset = new_preset.name
+        bpy.ops.wm.save_userpref()
+        self.report({'INFO'}, f'Preset duplicated as "{new_preset.name}"')
+        return {'FINISHED'}
+
+
+class OBJECT_OT_lod_preset_delete_active(Operator):
+    bl_idname = "lod.preset_delete_active"
+    bl_label = "Delete Active"
+    bl_description = "Delete active LOD preset"
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_confirm(self, event)
+
+    def execute(self, context):
+        prefs = _get_addon_preferences(context)
+        if prefs is None:
+            self.report({'ERROR'}, "Cannot access addon preferences")
+            return {'CANCELLED'}
+        preset = _get_active_preset(prefs)
+        if preset is None:
+            self.report({'ERROR'}, "No active preset available")
+            return {'CANCELLED'}
+        if preset.name == LOD_BASE_PRESET_NAME:
+            self.report({'WARNING'}, 'Preset "Base" cannot be deleted')
+            return {'CANCELLED'}
+
+        idx_to_remove = None
+        for idx, item in enumerate(prefs.lod_presets):
+            if item.name == preset.name:
+                idx_to_remove = idx
+                break
+
+        if idx_to_remove is None:
+            self.report({'ERROR'}, "Preset index not found")
+            return {'CANCELLED'}
+
+        removed_name = preset.name
+        prefs.lod_presets.remove(idx_to_remove)
+        _ensure_base_preset(prefs)
+        prefs.lod_active_preset = LOD_BASE_PRESET_NAME
+        bpy.ops.wm.save_userpref()
+        self.report({'INFO'}, f'Preset "{removed_name}" deleted')
         return {'FINISHED'}
 
 
@@ -893,24 +1184,16 @@ class OBJECT_OT_load_lod_prefs(Operator):
 def load_lod_defaults(dummy):
     """Auto-load LOD defaults from AddonPreferences when opening a new file."""
     try:
-        prefs = bpy.context.preferences.addons[__package__].preferences
-        scene = bpy.context.scene
-
-        # Copy AddonPreferences → Scene properties
-        scene.LODnum = prefs.lod_num
-        scene.LOD1_dec_ratio = prefs.lod1_dec_ratio
-        scene.LOD2_dec_ratio = prefs.lod2_dec_ratio
-        scene.LOD3_dec_ratio = prefs.lod3_dec_ratio
-        scene.LOD1_tex_res = prefs.lod1_tex_res
-        scene.LOD2_tex_res = prefs.lod2_tex_res
-        scene.LOD3_tex_res = prefs.lod3_tex_res
-        scene.LOD_pad_on = prefs.lod_pad_on
-        scene.LOD_use_scene_settings = prefs.lod_use_scene_settings
-        scene.atlas_uv_recalc = prefs.lod_atlas_uv_recalc
-        scene.atlas_uv_algorithm = prefs.lod_atlas_uv_algorithm
-        scene.texture_format = prefs.lod_texture_format
-        scene.use_alpha = prefs.lod_use_alpha
-        scene.decimate_borders = prefs.lod_decimate_borders
+        context = bpy.context
+        scene = context.scene
+        if scene is None:
+            return
+        prefs = _get_addon_preferences(context)
+        if prefs is None:
+            return
+        preset = _get_active_preset(prefs)
+        if preset is not None:
+            _copy_preset_to_scene(scene, preset)
     except Exception:
         pass
 
@@ -933,8 +1216,14 @@ classes = [
     OBJECT_OT_ExportGroupsLOD,
     OBJECT_OT_LOD,
     OBJECT_OT_LOD0,
-    OBJECT_OT_save_lod_prefs,
-    OBJECT_OT_load_lod_prefs,
+    LOD_MT_presets_menu,
+    OBJECT_OT_lod_preset_set_active,
+    OBJECT_OT_lod_preset_apply,
+    OBJECT_OT_lod_preset_save_current_as_new,
+    OBJECT_OT_lod_preset_overwrite_active,
+    OBJECT_OT_lod_preset_rename_active,
+    OBJECT_OT_lod_preset_duplicate_active,
+    OBJECT_OT_lod_preset_delete_active,
     VIEW3D_PT_LODgenerator,
     VIEW3D_PT_LODmanager,
     OBJECT_OT_open_linked_file
@@ -1055,6 +1344,9 @@ def register():
         default="",
         description="Log of completed operations"
     )
+
+    # Apply saved defaults immediately after enabling the addon.
+    load_lod_defaults(None)
 
 def unregister():
     # Remove auto-load handler
