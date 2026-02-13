@@ -152,6 +152,89 @@ class DemPreferences(bpy.types.AddonPreferences):
         min=0,
         max=59
                 ) # type: ignore
+
+    # LOD Generator defaults (persistent across .blend files)
+    lod_num : bpy.props.IntProperty(
+        name="Number of LODs",
+        description="Default number of LOD levels to generate",
+        default=3, min=1, max=5
+    ) # type: ignore
+    lod1_dec_ratio : bpy.props.FloatProperty(
+        name="LOD1 Decimation Ratio",
+        description="Default decimation ratio for LOD1",
+        default=0.5, min=0.0, max=1.0
+    ) # type: ignore
+    lod2_dec_ratio : bpy.props.FloatProperty(
+        name="LOD2 Decimation Ratio",
+        description="Default decimation ratio for LOD2",
+        default=0.25, min=0.0, max=1.0
+    ) # type: ignore
+    lod3_dec_ratio : bpy.props.FloatProperty(
+        name="LOD3 Decimation Ratio",
+        description="Default decimation ratio for LOD3",
+        default=0.125, min=0.0, max=1.0
+    ) # type: ignore
+    lod1_tex_res : bpy.props.IntProperty(
+        name="LOD1 Texture Resolution",
+        description="Default texture resolution for LOD1",
+        default=2048, min=64, max=8192
+    ) # type: ignore
+    lod2_tex_res : bpy.props.IntProperty(
+        name="LOD2 Texture Resolution",
+        description="Default texture resolution for LOD2",
+        default=512, min=64, max=8192
+    ) # type: ignore
+    lod3_tex_res : bpy.props.IntProperty(
+        name="LOD3 Texture Resolution",
+        description="Default texture resolution for LOD3",
+        default=128, min=64, max=8192
+    ) # type: ignore
+    lod_texture_format : bpy.props.EnumProperty(
+        name="Texture Format",
+        description="Default texture format for LOD generation",
+        items=[('JPG', 'JPEG', 'JPEG format'), ('PNG', 'PNG', 'PNG format')],
+        default='JPG'
+    ) # type: ignore
+    lod_use_alpha : bpy.props.BoolProperty(
+        name="Use Alpha",
+        description="Default use alpha channel",
+        default=False
+    ) # type: ignore
+    lod_pad_on : bpy.props.BoolProperty(
+        name="Padding On",
+        description="Default padding for UV islands",
+        default=True
+    ) # type: ignore
+    lod_use_scene_settings : bpy.props.BoolProperty(
+        name="Use Scene Settings",
+        description="Default use scene render settings for baking",
+        default=False
+    ) # type: ignore
+    lod_decimate_borders : bpy.props.BoolProperty(
+        name="Decimate Borders",
+        description="Default decimate border edges",
+        default=False
+    ) # type: ignore
+    lod_atlas_uv_recalc : bpy.props.BoolProperty(
+        name="Atlas UV Recalculate",
+        description="Default recalculate UV atlas",
+        default=True
+    ) # type: ignore
+    lod_atlas_uv_algorithm : bpy.props.EnumProperty(
+        name="UV Algorithm",
+        description="Default UV unwrap algorithm for atlas",
+        items=[('SMART', 'Smart UV', 'Smart UV projection'),
+               ('ANGLE', 'Angle Based', 'Angle based unwrapping'),
+               ('CONFORMAL', 'Conformal', 'Conformal mapping'),
+               ('MINIMUM', 'Minimum Stretch', 'Minimize stretch')],
+        default='SMART'
+    ) # type: ignore
+    show_lod_defaults : bpy.props.BoolProperty(
+        name="Show LOD Defaults",
+        description="Show or hide LOD generator default settings",
+        default=False
+    ) # type: ignore
+
     def draw(self, context):
         layout = self.layout
         # col = layout.column() # works best if a column, or even just self.layout
@@ -196,6 +279,41 @@ class DemPreferences(bpy.types.AddonPreferences):
         row.operator("render.open_templates_folder", icon='FOLDER_REDIRECT', text='Open SVG Templates Folder')
         row = box.row()
         row.label(text="Add custom SVG templates to this folder. Templates should end with scale info (e.g., MASTER_1m, MASTER_50cm)")
+
+        # LOD Generator Defaults
+        layout = self.layout
+        box = layout.box()
+        row = box.row()
+        row.prop(self, "show_lod_defaults",
+                icon="TRIA_DOWN" if self.show_lod_defaults else "TRIA_RIGHT",
+                text="LOD Generator Defaults",
+                emboss=False)
+
+        if self.show_lod_defaults:
+            col = box.column(align=True)
+            col.prop(self, "lod_num")
+            col.separator()
+
+            col.label(text="Decimation Ratios:")
+            col.prop(self, "lod1_dec_ratio", text="LOD1")
+            col.prop(self, "lod2_dec_ratio", text="LOD2")
+            col.prop(self, "lod3_dec_ratio", text="LOD3")
+            col.separator()
+
+            col.label(text="Texture Resolutions:")
+            col.prop(self, "lod1_tex_res", text="LOD1")
+            col.prop(self, "lod2_tex_res", text="LOD2")
+            col.prop(self, "lod3_tex_res", text="LOD3")
+            col.separator()
+
+            col.label(text="Options:")
+            col.prop(self, "lod_texture_format")
+            col.prop(self, "lod_use_alpha")
+            col.prop(self, "lod_pad_on")
+            col.prop(self, "lod_use_scene_settings")
+            col.prop(self, "lod_decimate_borders")
+            col.prop(self, "lod_atlas_uv_recalc")
+            col.prop(self, "lod_atlas_uv_algorithm")
 
 class RES_list(PropertyGroup):
     """ List of resolutions """

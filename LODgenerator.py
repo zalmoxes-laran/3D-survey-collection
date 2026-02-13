@@ -815,6 +815,106 @@ class ToolsPanelLODgenerator:
             row.prop(context.scene, 'model_export_dir', toggle=True, text='folder')
             self.layout.operator("exportfbx.grouplod", icon="MESH_GRID", text='FBX')
 
+            layout.separator()
+            row = layout.row(align=True)
+            row.operator("lod.save_to_preferences", text="Save as Default", icon='FILE_TICK')
+            row.operator("lod.load_from_preferences", text="Load Defaults", icon='IMPORT')
+
+class OBJECT_OT_save_lod_prefs(Operator):
+    bl_idname = "lod.save_to_preferences"
+    bl_label = "Save as Default"
+    bl_description = "Save current LOD settings as default for all new files"
+
+    def execute(self, context):
+        scene = context.scene
+        try:
+            prefs = context.preferences.addons[__package__].preferences
+        except KeyError:
+            self.report({'ERROR'}, "Cannot access addon preferences")
+            return {'CANCELLED'}
+
+        # Copy Scene properties → AddonPreferences
+        prefs.lod_num = scene.LODnum
+        prefs.lod1_dec_ratio = scene.LOD1_dec_ratio
+        prefs.lod2_dec_ratio = scene.LOD2_dec_ratio
+        prefs.lod3_dec_ratio = scene.LOD3_dec_ratio
+        prefs.lod1_tex_res = scene.LOD1_tex_res
+        prefs.lod2_tex_res = scene.LOD2_tex_res
+        prefs.lod3_tex_res = scene.LOD3_tex_res
+        prefs.lod_pad_on = scene.LOD_pad_on
+        prefs.lod_use_scene_settings = scene.LOD_use_scene_settings
+        prefs.lod_atlas_uv_recalc = scene.atlas_uv_recalc
+        prefs.lod_atlas_uv_algorithm = scene.atlas_uv_algorithm
+        prefs.lod_texture_format = scene.texture_format
+        prefs.lod_use_alpha = scene.use_alpha
+        prefs.lod_decimate_borders = scene.decimate_borders
+
+        # Save user preferences to disk
+        bpy.ops.wm.save_userpref()
+
+        self.report({'INFO'}, "LOD settings saved as defaults")
+        return {'FINISHED'}
+
+
+class OBJECT_OT_load_lod_prefs(Operator):
+    bl_idname = "lod.load_from_preferences"
+    bl_label = "Load Defaults"
+    bl_description = "Load LOD settings from saved defaults"
+
+    def execute(self, context):
+        scene = context.scene
+        try:
+            prefs = context.preferences.addons[__package__].preferences
+        except KeyError:
+            self.report({'ERROR'}, "Cannot access addon preferences")
+            return {'CANCELLED'}
+
+        # Copy AddonPreferences → Scene properties
+        scene.LODnum = prefs.lod_num
+        scene.LOD1_dec_ratio = prefs.lod1_dec_ratio
+        scene.LOD2_dec_ratio = prefs.lod2_dec_ratio
+        scene.LOD3_dec_ratio = prefs.lod3_dec_ratio
+        scene.LOD1_tex_res = prefs.lod1_tex_res
+        scene.LOD2_tex_res = prefs.lod2_tex_res
+        scene.LOD3_tex_res = prefs.lod3_tex_res
+        scene.LOD_pad_on = prefs.lod_pad_on
+        scene.LOD_use_scene_settings = prefs.lod_use_scene_settings
+        scene.atlas_uv_recalc = prefs.lod_atlas_uv_recalc
+        scene.atlas_uv_algorithm = prefs.lod_atlas_uv_algorithm
+        scene.texture_format = prefs.lod_texture_format
+        scene.use_alpha = prefs.lod_use_alpha
+        scene.decimate_borders = prefs.lod_decimate_borders
+
+        self.report({'INFO'}, "LOD defaults loaded")
+        return {'FINISHED'}
+
+
+@bpy.app.handlers.persistent
+def load_lod_defaults(dummy):
+    """Auto-load LOD defaults from AddonPreferences when opening a new file."""
+    try:
+        prefs = bpy.context.preferences.addons[__package__].preferences
+        scene = bpy.context.scene
+
+        # Copy AddonPreferences → Scene properties
+        scene.LODnum = prefs.lod_num
+        scene.LOD1_dec_ratio = prefs.lod1_dec_ratio
+        scene.LOD2_dec_ratio = prefs.lod2_dec_ratio
+        scene.LOD3_dec_ratio = prefs.lod3_dec_ratio
+        scene.LOD1_tex_res = prefs.lod1_tex_res
+        scene.LOD2_tex_res = prefs.lod2_tex_res
+        scene.LOD3_tex_res = prefs.lod3_tex_res
+        scene.LOD_pad_on = prefs.lod_pad_on
+        scene.LOD_use_scene_settings = prefs.lod_use_scene_settings
+        scene.atlas_uv_recalc = prefs.lod_atlas_uv_recalc
+        scene.atlas_uv_algorithm = prefs.lod_atlas_uv_algorithm
+        scene.texture_format = prefs.lod_texture_format
+        scene.use_alpha = prefs.lod_use_alpha
+        scene.decimate_borders = prefs.lod_decimate_borders
+    except Exception:
+        pass
+
+
 class VIEW3D_PT_LODgenerator(Panel, ToolsPanelLODgenerator):
     bl_category = "3DSC"
     bl_idname = "VIEW3D_PT_LODgenerator"
@@ -833,6 +933,8 @@ classes = [
     OBJECT_OT_ExportGroupsLOD,
     OBJECT_OT_LOD,
     OBJECT_OT_LOD0,
+    OBJECT_OT_save_lod_prefs,
+    OBJECT_OT_load_lod_prefs,
     VIEW3D_PT_LODgenerator,
     VIEW3D_PT_LODmanager,
     OBJECT_OT_open_linked_file
@@ -841,6 +943,10 @@ classes = [
 def register():
     for cls in classes:
         bpy.utils.register_class(cls)
+
+    # Register auto-load handler for LOD defaults
+    if load_lod_defaults not in bpy.app.handlers.load_post:
+        bpy.app.handlers.load_post.append(load_lod_defaults)
 
     bpy.types.Scene.setLODnum = bpy.props.IntProperty(name="LOD Level", default=0, min=0, max=5)
     bpy.types.Scene.LODnum = bpy.props.IntProperty(
@@ -951,6 +1057,10 @@ def register():
     )
 
 def unregister():
+    # Remove auto-load handler
+    if load_lod_defaults in bpy.app.handlers.load_post:
+        bpy.app.handlers.load_post.remove(load_lod_defaults)
+
     for cls in classes:
         bpy.utils.unregister_class(cls)
     del bpy.types.Scene.setLODnum
