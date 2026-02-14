@@ -1062,16 +1062,17 @@ class VIEW3D_PT_orthogonal_render(Panel):
         box.label(text="SVG Layout Export", icon='FILE_IMAGE')
         
         # Check if SVG template exists
-        template_exists = ensure_svg_templates_folder()
+        template_exists = bool(ensure_svg_templates_folder())
+        has_saved_blend = bool(bpy.data.filepath)
+        has_renders = False
         
         if not template_exists:
             box.label(text="SVG template not found", icon='ERROR')
             box.label(text="Please install the template files")
-        elif not bpy.data.filepath:
+        elif not has_saved_blend:
             box.label(text="Save file before exporting SVG", icon='ERROR')
         else:
             # Check if we have renders available
-            has_renders = False
             output_path = bpy.path.abspath(context.scene.ortho_render_output_path)
             if os.path.exists(output_path):
                 # Check for at least one rendered view
@@ -1087,7 +1088,7 @@ class VIEW3D_PT_orthogonal_render(Panel):
         # Create SVG button
         row = box.row(align=True)
         row.scale_y = 1.2
-        row.enabled = template_exists and bpy.data.filepath and has_renders
+        row.enabled = bool(template_exists and has_saved_blend and has_renders)
         row.operator("render.create_orthogonal_svg", icon='OUTLINER_OB_FONT')
 
         # Templates management
