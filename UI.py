@@ -76,17 +76,50 @@ class VIEW3D_PT_segmentation_pan(Panel, View3DSegmentationPanel):
     def draw(self, context):
         layout = self.layout
         scene = context.scene
-        layout.label(text="Set up cutter")
+        cutter_col = bpy.data.collections.get("_cutter")
+        cutter_count = len([o for o in cutter_col.objects if o.type == 'MESH']) if cutter_col else 0
+
+        # Cutter setup
         row = layout.row(align=True)
-        row.operator("set.cutter",
-                     icon="SCULPTMODE_HLT", text='Cutter set')
+        row.operator("set.cutter", icon="SCULPTMODE_HLT", text='Cutter set')
         row.prop(scene, 'TILE_square_meters', icon='BLENDER', toggle=True, text="m2:")
+        op = row.operator("e3dsc.help_popup", text="", icon='QUESTION')
+        op.title = "Segmentation - Cutter Set"
+        op.text = (
+            "Create a cutter grid from the active mesh extent and store cutters in the _cutter collection. "
+            "If active object scale is not 1,1,1, the tool asks to apply scale before running."
+        )
+        op.url = "3DSCstructure.html#segmentation-cutter-set"
+
         row = layout.row(align=True)
-        row.operator("project.segmentation",icon="SCULPTMODE_HLT", text='Mono-cutter')
-        #row = layout.row()
-        row.operator("project.segmentationinv",
-                     icon="SCULPTMODE_HLT", text='Multi-cutter')
-        #row = layout.row()
+        row.label(text=f"Cutters available: {cutter_count}")
+        row.operator("set.clear_cutters", icon='TRASH', text='Delete all cutters')
+
+        row = layout.row(align=True)
+        row.prop(scene, "e3dsc_segmentation_preclean", text="Topology pre-clean before cut")
+        op = row.operator("e3dsc.help_popup", text="", icon='QUESTION')
+        op.title = "Segmentation - Topology Pre-clean"
+        op.text = (
+            "When enabled, target meshes are cleaned before each cut by merging doubled vertices. "
+            "Disable it for faster runs if topology is already clean."
+        )
+        op.url = "3DSCstructure.html#segmentation-cut-modes"
+
+        row = layout.row(align=True)
+        row.enabled = cutter_count > 0
+        row.operator("project.segmentationinv", icon="SCULPTMODE_HLT", text='Multi-cutter')
+        row.operator("project.segmentation", icon="SCULPTMODE_HLT", text='Mono-cutter')
+        op = row.operator("e3dsc.help_popup", text="", icon='QUESTION')
+        op.title = "Segmentation - Mono/Multi Cutter"
+        op.text = (
+            "Multi-cutter (main workflow): active target mesh is cut using selected cutters; "
+            "if none are selected, all cutters in _cutter are used automatically.\n"
+            "Mono-cutter (advanced/rare): active cutter mesh cuts selected non-cutter meshes."
+        )
+        op.url = "3DSCstructure.html#segmentation-cut-modes"
+
+        if cutter_count == 0:
+            layout.label(text="Create a Cutter set first to enable segmentation.", icon='INFO')
 
 class ToolsPanelExport:
     bl_label = "Exporters"

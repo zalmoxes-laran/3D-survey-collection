@@ -563,6 +563,7 @@ classes = (
     segmentation.OBJECT_OT_projectsegmentation,
     segmentation.OBJECT_OT_projectsegmentationinversed,
     segmentation.OBJECT_OT_setcutter,
+    segmentation.OBJECT_OT_clearcutters,
     QuickUtils.OBJECT_OT_activatematerial,
     #QuickUtils.OBJECT_OT_CenterMass,
     QuickUtils.OBJECT_OT_CorrectMaterial,
@@ -779,6 +780,12 @@ def register():
     description="Define the area of the tiles",
     )
 
+    bpy.types.Scene.e3dsc_segmentation_preclean = BoolProperty(
+    name="Topology pre-clean before cut",
+    default=True,
+    description="Run a basic topology cleanup on target meshes before segmentation cuts",
+    )
+
     bpy.types.Scene.gltf_export_quality = IntProperty(
     name="export quality",
     default=100,
@@ -882,6 +889,7 @@ def unregister():
     del bpy.types.Scene.statistics_list
     del bpy.types.Scene.model_export_dir
     del bpy.types.Scene.TILE_square_meters
+    del bpy.types.Scene.e3dsc_segmentation_preclean
     del bpy.types.Scene.SHIFT_OBJ_on
     del bpy.types.Scene.author_sign_model
     del bpy.types.Scene.gltf_export_quality

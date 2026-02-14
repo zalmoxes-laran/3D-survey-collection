@@ -86,11 +86,13 @@ class E3DSC_OT_help_popup(Operator):
     url: StringProperty(name="Documentation Path", default="")  # type: ignore
 
     def invoke(self, context, event):
-        return context.window_manager.invoke_popup(self, width=460)
+        self._popup_width = 460
+        return context.window_manager.invoke_popup(self, width=self._popup_width)
 
     def _wrapped_lines(self, context):
-        region_width = getattr(context.region, "width", 420)
-        wrap_width = max(34, int(region_width / 8.0))
+        region_width = getattr(context.region, "width", self._popup_width if hasattr(self, "_popup_width") else 420)
+        usable_width = min(region_width, self._popup_width if hasattr(self, "_popup_width") else 460)
+        wrap_width = max(32, min(58, int(usable_width / 7.4)))
 
         raw_text = (self.text or "").replace("\r\n", "\n").replace("\r", "\n")
         paragraphs = raw_text.split("\n")
@@ -124,16 +126,7 @@ class E3DSC_OT_help_popup(Operator):
         docs_url = build_docs_url(self.url)
         row = layout.row(align=True)
         row.operator("wm.url_open", text="Open Documentation", icon='URL').url = docs_url
-        row.operator("e3dsc.close_help_popup", text="Close Panel", icon='PANEL_CLOSE')
-
-    def execute(self, context):
-        return {'FINISHED'}
-
-
-class E3DSC_OT_close_help_popup(Operator):
-    bl_idname = "e3dsc.close_help_popup"
-    bl_label = "Close Panel"
-    bl_description = "Close this help popup"
+        layout.label(text="Click outside this panel to close.", icon='INFO')
 
     def execute(self, context):
         return {'FINISHED'}
@@ -141,7 +134,6 @@ class E3DSC_OT_close_help_popup(Operator):
 
 classes = (
     E3DSC_OT_help_popup,
-    E3DSC_OT_close_help_popup,
 )
 
 
