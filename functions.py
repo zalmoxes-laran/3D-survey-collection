@@ -356,14 +356,9 @@ def recurLayerCollection(layerColl, collName):
             return found
 
 def check_children_plane(cam_ob):
-    check = False
-    for obj in cam_ob.children:
-        if obj.name.startswith("objplane_"):
-            check = True
-            pass
-        else:
-            check = False
-    return check
+    if cam_ob is None:
+        return False
+    return any(obj.name.startswith("objplane_") for obj in cam_ob.children)
 
 def decimate_mesh(context,obj,ratio,lod,decimate_border):
     selected_obs = context.selected_objects

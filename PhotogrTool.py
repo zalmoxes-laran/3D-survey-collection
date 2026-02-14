@@ -1,8 +1,129 @@
 import bpy
 import os
+import json
 from .functions import *
 import xml.etree.ElementTree as ET
 from bpy.types import Panel
+from bpy_extras.io_utils import ExportHelper, ImportHelper
+
+
+SUPPORTED_IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".tiff", ".tif")
+
+
+def _clean_undistorted_path(path):
+    if not path:
+        return ""
+    return bpy.path.abspath(path).strip()
+
+
+def resolve_undistorted_image_path(scene, camera_name):
+    root_path = _clean_undistorted_path(scene.BL_undistorted_path)
+    if not root_path:
+        return None
+
+    base_name, ext = os.path.splitext(camera_name)
+    candidates = []
+
+    # If camera name already has extension, try it first.
+    if ext.lower() in SUPPORTED_IMAGE_EXTENSIONS:
+        candidates.append(camera_name)
+    else:
+        chosen_ext = scene.my_image_format.lower()
+        candidates.append(f"{camera_name}.{chosen_ext}")
+
+    # Try known extensions as fallback.
+    for fallback_ext in SUPPORTED_IMAGE_EXTENSIONS:
+        candidates.append(f"{base_name}{fallback_ext}")
+        candidates.append(f"{camera_name}{fallback_ext}")
+
+    seen = set()
+    for candidate in candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        full_path = os.path.join(root_path, candidate)
+        if os.path.isfile(full_path):
+            return full_path
+    return None
+
+
+def _find_project_camera_index(collection, camera_name):
+    for idx, item in enumerate(collection):
+        if item.object_name == camera_name:
+            return idx
+    return -1
+
+
+def _camera_to_dict(item):
+    return {
+        "object_name": item.object_name,
+        "image_name": item.image_name,
+        "lens": item.lens,
+        "sensor_width": item.sensor_width,
+        "sensor_height": item.sensor_height,
+        "clip_start": item.clip_start,
+        "clip_end": item.clip_end,
+        "location": list(item.location),
+        "rotation_mode": item.rotation_mode,
+        "rotation_euler": list(item.rotation_euler),
+        "scale": list(item.scale),
+    }
+
+
+def _camera_payload_to_scene_item(payload, item):
+    item.object_name = payload.get("object_name", "Camera")
+    item.image_name = payload.get("image_name", "")
+    item.lens = float(payload.get("lens", 35.0))
+    item.sensor_width = float(payload.get("sensor_width", 36.0))
+    item.sensor_height = float(payload.get("sensor_height", 24.0))
+    item.clip_start = float(payload.get("clip_start", 0.1))
+    item.clip_end = float(payload.get("clip_end", 1000.0))
+    item.rotation_mode = payload.get("rotation_mode", "XYZ")
+
+    location = payload.get("location", [0.0, 0.0, 0.0])
+    rotation_euler = payload.get("rotation_euler", [0.0, 0.0, 0.0])
+    scale = payload.get("scale", [1.0, 1.0, 1.0])
+    if len(location) != 3:
+        location = [0.0, 0.0, 0.0]
+    if len(rotation_euler) != 3:
+        rotation_euler = [0.0, 0.0, 0.0]
+    if len(scale) != 3:
+        scale = [1.0, 1.0, 1.0]
+    item.location = location
+    item.rotation_euler = rotation_euler
+    item.scale = scale
+
+
+def _store_camera_in_item(camera_object, item):
+    item.object_name = camera_object.name
+    item.image_name = camera_object.name
+    item.lens = float(camera_object.data.lens)
+    item.sensor_width = float(camera_object.data.sensor_width)
+    item.sensor_height = float(camera_object.data.sensor_height)
+    item.clip_start = float(camera_object.data.clip_start)
+    item.clip_end = float(camera_object.data.clip_end)
+    item.location = camera_object.location
+    item.rotation_mode = camera_object.rotation_mode
+    item.rotation_euler = camera_object.rotation_euler
+    item.scale = camera_object.scale
+
+
+def _apply_item_to_camera_object(item, camera_object):
+    camera_object.data.lens = item.lens
+    camera_object.data.sensor_width = item.sensor_width
+    camera_object.data.sensor_height = item.sensor_height
+    camera_object.data.clip_start = item.clip_start
+    camera_object.data.clip_end = item.clip_end
+    camera_object.location = item.location
+    camera_object.rotation_mode = item.rotation_mode
+    camera_object.rotation_euler = item.rotation_euler
+    camera_object.scale = item.scale
+
+
+def _camera_matches_add_filter(scene, camera_object):
+    if not scene.photogr_add_only_with_image:
+        return True
+    return resolve_undistorted_image_path(scene, camera_object.name) is not None
 
 class OGGETTO_OT_pick(bpy.types.Operator):
     """Select a canvas object"""
@@ -53,6 +174,244 @@ class CameraDetails(bpy.types.PropertyGroup):
     x: bpy.props.IntProperty(name="Resolution X") # type: ignore
     y: bpy.props.IntProperty(name="Resolution Y") # type: ignore
 
+
+class ProjectCameraItem(bpy.types.PropertyGroup):
+    object_name: bpy.props.StringProperty(name="Camera Name") # type: ignore
+    image_name: bpy.props.StringProperty(name="Image Name") # type: ignore
+    lens: bpy.props.FloatProperty(name="Lens", default=35.0) # type: ignore
+    sensor_width: bpy.props.FloatProperty(name="Sensor Width", default=36.0) # type: ignore
+    sensor_height: bpy.props.FloatProperty(name="Sensor Height", default=24.0) # type: ignore
+    clip_start: bpy.props.FloatProperty(name="Clip Start", default=0.1) # type: ignore
+    clip_end: bpy.props.FloatProperty(name="Clip End", default=1000.0) # type: ignore
+    location: bpy.props.FloatVectorProperty(name="Location", size=3, default=(0.0, 0.0, 0.0)) # type: ignore
+    rotation_mode: bpy.props.StringProperty(name="Rotation Mode", default="XYZ") # type: ignore
+    rotation_euler: bpy.props.FloatVectorProperty(name="Rotation", size=3, default=(0.0, 0.0, 0.0)) # type: ignore
+    scale: bpy.props.FloatVectorProperty(name="Scale", size=3, default=(1.0, 1.0, 1.0)) # type: ignore
+
+
+class OBJECT_UL_project_cameras(bpy.types.UIList):
+    bl_idname = "OBJECT_UL_project_cameras"
+
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+        if self.layout_type in {"DEFAULT", "COMPACT"}:
+            layout.label(text=item.object_name, icon='CAMERA_DATA')
+        elif self.layout_type == "GRID":
+            layout.alignment = 'CENTER'
+            layout.label(text="", icon='CAMERA_DATA')
+
+
+class OBJECT_OT_project_camera_add_selected(bpy.types.Operator):
+    bl_idname = "project_camera.add_selected"
+    bl_label = "Add Selected Cameras"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return any(ob.type == 'CAMERA' for ob in context.selected_objects)
+
+    def execute(self, context):
+        scene = context.scene
+        added = 0
+        updated = 0
+        skipped = 0
+        for camera_object in context.selected_objects:
+            if camera_object.type != 'CAMERA':
+                continue
+            if not _camera_matches_add_filter(scene, camera_object):
+                skipped += 1
+                continue
+            idx = _find_project_camera_index(scene.photogr_project_cameras, camera_object.name)
+            if idx == -1:
+                item = scene.photogr_project_cameras.add()
+                added += 1
+            else:
+                item = scene.photogr_project_cameras[idx]
+                updated += 1
+            _store_camera_in_item(camera_object, item)
+        if len(scene.photogr_project_cameras) > 0:
+            scene.photogr_project_cameras_index = len(scene.photogr_project_cameras) - 1
+        self.report({'INFO'}, f"Project cameras updated. Added: {added}, Updated: {updated}, Skipped: {skipped}")
+        return {'FINISHED'}
+
+
+class OBJECT_OT_project_camera_add_all_scene(bpy.types.Operator):
+    bl_idname = "project_camera.add_all_scene"
+    bl_label = "Add All Scene Cameras"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return any(ob.type == 'CAMERA' for ob in context.scene.objects)
+
+    def execute(self, context):
+        scene = context.scene
+        added = 0
+        updated = 0
+        skipped = 0
+
+        for camera_object in scene.objects:
+            if camera_object.type != 'CAMERA':
+                continue
+            if not _camera_matches_add_filter(scene, camera_object):
+                skipped += 1
+                continue
+            idx = _find_project_camera_index(scene.photogr_project_cameras, camera_object.name)
+            if idx == -1:
+                item = scene.photogr_project_cameras.add()
+                added += 1
+            else:
+                item = scene.photogr_project_cameras[idx]
+                updated += 1
+            _store_camera_in_item(camera_object, item)
+
+        if len(scene.photogr_project_cameras) > 0:
+            scene.photogr_project_cameras_index = len(scene.photogr_project_cameras) - 1
+        self.report({'INFO'}, f"Project cameras updated. Added: {added}, Updated: {updated}, Skipped: {skipped}")
+        return {'FINISHED'}
+
+
+class OBJECT_OT_project_camera_remove(bpy.types.Operator):
+    bl_idname = "project_camera.remove"
+    bl_label = "Remove Active Camera"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return len(context.scene.photogr_project_cameras) > 0
+
+    def execute(self, context):
+        scene = context.scene
+        idx = scene.photogr_project_cameras_index
+        if idx < 0 or idx >= len(scene.photogr_project_cameras):
+            return {'CANCELLED'}
+        scene.photogr_project_cameras.remove(idx)
+        scene.photogr_project_cameras_index = min(idx, len(scene.photogr_project_cameras) - 1)
+        return {'FINISHED'}
+
+
+class OBJECT_OT_project_camera_clear(bpy.types.Operator):
+    bl_idname = "project_camera.clear"
+    bl_label = "Clear Camera List"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return len(context.scene.photogr_project_cameras) > 0
+
+    def execute(self, context):
+        scene = context.scene
+        scene.photogr_project_cameras.clear()
+        scene.photogr_project_cameras_index = 0
+        self.report({'INFO'}, "Project camera list cleared")
+        return {'FINISHED'}
+
+
+class OBJECT_OT_project_camera_export_active(bpy.types.Operator, ExportHelper):
+    bl_idname = "project_camera.export_active"
+    bl_label = "Export Active Camera"
+
+    filename_ext = ".json"
+    filter_glob: bpy.props.StringProperty(default="*.json", options={'HIDDEN'}) # type: ignore
+
+    @classmethod
+    def poll(cls, context):
+        scene = context.scene
+        idx = scene.photogr_project_cameras_index
+        return len(scene.photogr_project_cameras) > 0 and 0 <= idx < len(scene.photogr_project_cameras)
+
+    def execute(self, context):
+        scene = context.scene
+        item = scene.photogr_project_cameras[scene.photogr_project_cameras_index]
+        payload = {"version": 1, "cameras": [_camera_to_dict(item)]}
+        with open(self.filepath, "w", encoding="utf-8") as fp:
+            json.dump(payload, fp, indent=2)
+        self.report({'INFO'}, f"Camera exported to {self.filepath}")
+        return {'FINISHED'}
+
+
+class OBJECT_OT_project_camera_export_all(bpy.types.Operator, ExportHelper):
+    bl_idname = "project_camera.export_all"
+    bl_label = "Export All Cameras"
+
+    filename_ext = ".json"
+    filter_glob: bpy.props.StringProperty(default="*.json", options={'HIDDEN'}) # type: ignore
+
+    @classmethod
+    def poll(cls, context):
+        return len(context.scene.photogr_project_cameras) > 0
+
+    def execute(self, context):
+        scene = context.scene
+        payload = {
+            "version": 1,
+            "cameras": [_camera_to_dict(item) for item in scene.photogr_project_cameras],
+        }
+        with open(self.filepath, "w", encoding="utf-8") as fp:
+            json.dump(payload, fp, indent=2)
+        self.report({'INFO'}, f"{len(payload['cameras'])} cameras exported to {self.filepath}")
+        return {'FINISHED'}
+
+
+class OBJECT_OT_project_camera_import(bpy.types.Operator, ImportHelper):
+    bl_idname = "project_camera.import"
+    bl_label = "Import Camera File"
+
+    filename_ext = ".json"
+    filter_glob: bpy.props.StringProperty(default="*.json", options={'HIDDEN'}) # type: ignore
+    create_missing_cameras: bpy.props.BoolProperty( # type: ignore
+        name="Create Missing Cameras in Scene",
+        default=True,
+        description="If enabled, imported cameras that do not exist will be created in the scene",
+    )
+
+    def execute(self, context):
+        scene = context.scene
+        try:
+            with open(self.filepath, "r", encoding="utf-8") as fp:
+                payload = json.load(fp)
+        except Exception as exc:
+            self.report({'ERROR'}, f"Cannot read camera file: {exc}")
+            return {'CANCELLED'}
+
+        imported = payload.get("cameras")
+        if imported is None and "object_name" in payload:
+            imported = [payload]
+        if not isinstance(imported, list):
+            self.report({'ERROR'}, "Invalid camera file format")
+            return {'CANCELLED'}
+
+        added = 0
+        updated = 0
+        created = 0
+        for cam_payload in imported:
+            camera_name = cam_payload.get("object_name", "Camera")
+            idx = _find_project_camera_index(scene.photogr_project_cameras, camera_name)
+            if idx == -1:
+                item = scene.photogr_project_cameras.add()
+                added += 1
+            else:
+                item = scene.photogr_project_cameras[idx]
+                updated += 1
+            _camera_payload_to_scene_item(cam_payload, item)
+
+            if self.create_missing_cameras:
+                camera_obj = bpy.data.objects.get(item.object_name)
+                if camera_obj is None:
+                    cam_data = bpy.data.cameras.new(item.object_name)
+                    camera_obj = bpy.data.objects.new(item.object_name, cam_data)
+                    scene.collection.objects.link(camera_obj)
+                    created += 1
+                if camera_obj.type == 'CAMERA':
+                    _apply_item_to_camera_object(item, camera_obj)
+
+        if len(scene.photogr_project_cameras) > 0:
+            scene.photogr_project_cameras_index = len(scene.photogr_project_cameras) - 1
+        self.report(
+            {'INFO'},
+            f"Imported cameras. Added: {added}, Updated: {updated}, Created in scene: {created}",
+        )
+        return {'FINISHED'}
+
 class set_camera_type(bpy.types.Operator):
     bl_idname = "set_camera.type"
     bl_label = "Set Camera Type"
@@ -65,12 +424,16 @@ class set_camera_type(bpy.types.Operator):
         context.scene.camera_type = self.name_cam
         selected_objects = context.selected_objects
         selected_camera_id = bpy.context.scene.camera_enum
+        selected_profile = scene.camera_details.get(selected_camera_id)
+        if not selected_camera_id or selected_profile is None:
+            self.report({'ERROR'}, "No camera profile selected")
+            return {'CANCELLED'}
         lens = context.scene.camera_lens
         for ob in selected_objects:
             #selected_camera_id = ob.name
             if ob.type in ['CAMERA']:
-                set_up_lens(ob, float(scene.camera_details[selected_camera_id].s_width), float(scene.camera_details[selected_camera_id].s_height), lens)
-        set_up_scene(int(scene.camera_details[selected_camera_id].x),int(scene.camera_details[selected_camera_id].y),True)
+                set_up_lens(ob, float(selected_profile.s_width), float(selected_profile.s_height), lens)
+        set_up_scene(int(selected_profile.x), int(selected_profile.y), True)
         return {'FINISHED'} 
 
 class OBJECT_OT_BetterCameras(bpy.types.Operator):
@@ -130,6 +493,11 @@ class OBJECT_OT_CreateCameraImagePlane(bpy.types.Operator):
     bl_idname= "object.createcameraimageplane"
     bl_label="Camera Image Plane"
     bl_options={'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        scene = context.scene
+        return scene.camera is not None and bool(_clean_undistorted_path(scene.BL_undistorted_path))
 
     def SetupDriverVariables(self, driver, imageplane):
         camAngle = driver.variables.new()
@@ -203,17 +571,18 @@ class OBJECT_OT_CreateCameraImagePlane(bpy.types.Operator):
 
     def createImagePlaneForCamera(self, camera):
         imageplane = None
-        if not bpy.context.scene.BL_undistorted_path:
-            raise Exception("Hey Buddy, you have to set the undistorted images path !")
+        scene = bpy.context.scene
+        if not _clean_undistorted_path(scene.BL_undistorted_path):
+            self.report({'ERROR'}, "Set the undistorted images path first")
+            return {'CANCELLED'}
         try:
             depth = 2
 
             #create imageplane
             bpy.ops.mesh.primitive_plane_add()#radius = 0.5)
             imageplane = bpy.context.active_object
-            cameraname = correctcameraname(camera.name)
+            cameraname = self.correctcameraname(camera.name)
             imageplane.name = ("objplane_"+cameraname)
-            bpy.ops.object.parent_set(type='OBJECT', keep_transform=False)
             bpy.ops.object.editmode_toggle()
             bpy.ops.mesh.select_all(action='TOGGLE')
             bpy.ops.transform.resize( value=(0.5,0.5,0.5))
@@ -232,35 +601,44 @@ class OBJECT_OT_CreateCameraImagePlane(bpy.types.Operator):
 
             #setup material
             activename = bpy.path.clean_name(bpy.context.view_layer.objects.active.name)
-            undistortedpath = bpy.context.scene.BL_undistorted_path
-            image_cam = bpy.data.images.load(undistortedpath+cameraname)
+            image_path = resolve_undistorted_image_path(scene, camera.name)
+            if image_path is None:
+                self.report({'ERROR'}, f"Image not found for camera '{camera.name}' in Undistorted path")
+                return {'CANCELLED'}
+            image_cam = bpy.data.images.load(image_path, check_existing=True)
             self.mat_from_image(image_cam,imageplane,True)
 
             #bpy.context.object.data.uv_layers.active.data[0].image = 
             #bpy.ops.view3d.tex_to_material()
 
         except Exception as e:
-            imageplane.select_set(False)
+            if imageplane is not None:
+                imageplane.select_set(False)
             camera.select_set(True)
-            raise e
+            self.report({'ERROR'}, str(e))
+            return {'CANCELLED'}
         return {'FINISHED'}
 
     def execute(self, context):
 #        camera = bpy.context.active_object #bpy.data.objects['Camera']
         scene = context.scene
-        undistortedpath = scene.BL_undistorted_path
+        undistortedpath = _clean_undistorted_path(scene.BL_undistorted_path)
         cam_ob = scene.camera
 
         if not undistortedpath:
-            raise Exception("Set the Undistort path before to activate this command")
+            self.report({'ERROR'}, "Set the Undistort path before activating this command")
+            return {'CANCELLED'}
+        if cam_ob is None:
+            self.report({'ERROR'}, "No active scene camera")
+            return {'CANCELLED'}
         else:
             obj_exists = False
             for obj in cam_ob.children:
                 if obj.name.startswith("objplane_"):
-                    obj.hide = False
+                    obj.hide_viewport = False
                     obj_exists = True
                     bpy.ops.object.select_all(action='DESELECT')
-                    scene.objects.active = obj
+                    context.view_layer.objects.active = obj
                     obj.select_set(True)
                     return {'FINISHED'}
             if obj_exists is False:
@@ -294,17 +672,22 @@ class OBJECT_OT_paintcam(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
             scene = context.scene
-            return check_children_plane(scene.camera) and context.preferences.filepaths.image_editor
+            return (
+                scene.camera is not None
+                and bool(_clean_undistorted_path(scene.BL_undistorted_path))
+                and check_children_plane(scene.camera)
+                and context.preferences.filepaths.image_editor
+            )
 
     def execute(self, context):
 
         scene = context.scene
-        undistortedpath = scene.BL_undistorted_path
+        undistortedpath = _clean_undistorted_path(scene.BL_undistorted_path)
         cam_ob = scene.camera
 
         if not undistortedpath:
-
-            raise Exception("Set the Undistort path before to activate this command")
+            self.report({'ERROR'}, "Set the Undistort path before activating this command")
+            return {'CANCELLED'}
         else:
             for obj in cam_ob.children:
                 if obj.name.startswith("objplane_"):
@@ -317,8 +700,11 @@ class OBJECT_OT_paintcam(bpy.types.Operator):
             bpy.ops.image.project_edit()
             obj_camera = bpy.context.scene.camera
     
-            undistortedphoto = undistortedpath+self.correctcameraname(obj_camera.name)
-            cleanpath = bpy.path.abspath(undistortedphoto)
+            image_path = resolve_undistorted_image_path(scene, obj_camera.name)
+            if image_path is None:
+                self.report({'ERROR'}, f"Image not found for camera '{obj_camera.name}'")
+                return {'CANCELLED'}
+            cleanpath = bpy.path.abspath(image_path)
             bpy.ops.image.external_edit(filepath=cleanpath)
 
             bpy.types.View3DOverlay.show_overlays = True
@@ -331,10 +717,7 @@ class OBJECT_OT_paintcam(bpy.types.Operator):
         for extension in extensions:
             if cameraname.upper().endswith(extension):
                 return cameraname
-                pass
-            else:
-                cameranamecor = cameraname + '.' + bpy.context.scene.my_image_format
-            return cameranamecor
+        return cameraname + '.' + bpy.context.scene.my_image_format
 
 class OBJECT_OT_applypaintcam(bpy.types.Operator):
     bl_idname = "applypaint.cam"
@@ -468,10 +851,14 @@ class ToolsPanelPhotogrTool:
                 row = layout.row()
 
                 row.label(text="Active Cam: " + cam_ob.name, icon="CAMERA_DATA")
-                row = layout.row()
-
+                has_undistorted_path = bool(_clean_undistorted_path(scene.BL_undistorted_path))
+                row = layout.row(align=True)
+                row.enabled = has_undistorted_path
                 row.operator("object.createcameraimageplane", icon="PLUS", text='Load undistorted photo')
-                row.operator("object.toggle_obj_visibility", icon='HIDE_OFF', text="")
+                row = layout.row(align=True)
+                row.operator("object.toggle_obj_visibility", icon='HIDE_OFF', text="Show/Hide loaded photo")
+                if not has_undistorted_path:
+                    layout.label(text="Set Undistorted Path to enable photo loading", icon='INFO')
 
                 row = layout.row()
                 row.prop(cam_cam, "lens")
@@ -515,12 +902,54 @@ class ToolsPanelPhotogrTool:
                 row = layout.row()
                 row.label(text="Set an image editor executable:")
                 layout.prop(filepaths, "image_editor", text="")
-
-                self.layout.operator("paint.cam", icon="PLUS", text='Paint active from cam')
+                row = layout.row()
+                row.enabled = has_undistorted_path
+                row.operator("paint.cam", icon="PLUS", text='Paint active from cam')
 
                 self.layout.operator("applypaint.cam", icon="PLUS", text='Apply paint')
                 self.layout.operator("savepaint.cam", icon="PLUS", text='Save modified texs')
                 row = layout.row()
+
+                project_box = layout.box()
+                project_box.label(text="Project Cameras", icon='OUTLINER_OB_CAMERA')
+                project_box.template_list(
+                    "OBJECT_UL_project_cameras",
+                    "",
+                    scene,
+                    "photogr_project_cameras",
+                    scene,
+                    "photogr_project_cameras_index",
+                    rows=4,
+                )
+                row = project_box.row(align=True)
+                row.operator("project_camera.add_selected", text="Add Selected", icon='ADD')
+                row.operator("project_camera.add_all_scene", text="Add All Scene", icon='OUTLINER_OB_CAMERA')
+                row = project_box.row()
+                row.prop(scene, "photogr_add_only_with_image", text="Only cameras with undistorted image")
+                scene_cameras = [ob for ob in scene.objects if ob.type == 'CAMERA']
+                total_scene_cameras = len(scene_cameras)
+                if scene.photogr_add_only_with_image:
+                    matching_scene_cameras = sum(
+                        1 for cam in scene_cameras if resolve_undistorted_image_path(scene, cam.name) is not None
+                    )
+                    project_box.label(
+                        text=f"Scene cameras with image: {matching_scene_cameras}/{total_scene_cameras}",
+                        icon='INFO',
+                    )
+                else:
+                    project_box.label(
+                        text=f"Scene cameras available: {total_scene_cameras}",
+                        icon='INFO',
+                    )
+                row = project_box.row(align=True)
+                row.operator("project_camera.remove", text="", icon='REMOVE')
+                row.operator("project_camera.clear", text="", icon='TRASH')
+
+                row = project_box.row(align=True)
+                row.operator("project_camera.export_active", text="Export Active", icon='EXPORT')
+                row.operator("project_camera.export_all", text="Export All", icon='EXPORT')
+                row = project_box.row()
+                row.operator("project_camera.import", text="Import Camera File", icon='IMPORT')
             else:
                 row.label(text="!!! Import some cams to start !!!")
 
@@ -556,6 +985,15 @@ class Camera_menu(bpy.types.Menu):
 
 classes = [
     CameraDetails,
+    ProjectCameraItem,
+    OBJECT_UL_project_cameras,
+    OBJECT_OT_project_camera_add_selected,
+    OBJECT_OT_project_camera_add_all_scene,
+    OBJECT_OT_project_camera_remove,
+    OBJECT_OT_project_camera_clear,
+    OBJECT_OT_project_camera_export_active,
+    OBJECT_OT_project_camera_export_all,
+    OBJECT_OT_project_camera_import,
     OBJECT_OT_parse_cams,
     OBJECT_OT_applypaintcam,
     OBJECT_OT_BetterCameras,
@@ -575,6 +1013,13 @@ def register():
         bpy.utils.register_class(cls)
 
     bpy.types.Scene.camera_details = bpy.props.CollectionProperty(type=CameraDetails)
+    bpy.types.Scene.photogr_project_cameras = bpy.props.CollectionProperty(type=ProjectCameraItem)
+    bpy.types.Scene.photogr_project_cameras_index = bpy.props.IntProperty(default=0)
+    bpy.types.Scene.photogr_add_only_with_image = bpy.props.BoolProperty(
+        name="Only cameras with undistorted image",
+        default=False,
+        description="When enabled, Add Selected/Add All Scene include only cameras with a matching image in Undistorted Path",
+    )
     bpy.types.Scene.selected_camera = bpy.props.StringProperty(name="Selected Camera", update=update_camera_details)
 
     # Aggiungi questa property alla registrazione
@@ -598,5 +1043,10 @@ def unregister():
     for cls in classes:
         bpy.utils.unregister_class(cls)
     del bpy.types.Scene.camera_details
+    del bpy.types.Scene.photogr_project_cameras
+    del bpy.types.Scene.photogr_project_cameras_index
+    del bpy.types.Scene.photogr_add_only_with_image
     del bpy.types.Scene.selected_camera
+    del bpy.types.Scene.camera_enum
+    del bpy.types.Scene.canvas_obj
     del bpy.types.Scene.my_image_format
