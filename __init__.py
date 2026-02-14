@@ -791,6 +791,35 @@ def register():
     description="Define the resolution of the output images",
     )
 
+    bpy.types.Scene.e3dsc_export_mode = EnumProperty(
+        name="Export Mode",
+        items=[
+            ('SINGLE', 'Single file', 'Export one file from the active object'),
+            ('MULTI', 'Multiple files', 'Export one file per selected object'),
+        ],
+        default='MULTI',
+    )
+
+    bpy.types.Scene.e3dsc_export_single_format = EnumProperty(
+        name="Single File Format",
+        items=[
+            ('OBJ', 'OBJ', 'Export single object as OBJ'),
+            ('FBX', 'FBX', 'Export single object as FBX'),
+        ],
+        default='OBJ',
+    )
+
+    bpy.types.Scene.e3dsc_export_multi_format = EnumProperty(
+        name="Multiple Files Format",
+        items=[
+            ('OBJ', 'OBJ', 'Export selected objects as OBJ files'),
+            ('FBX', 'FBX', 'Export selected objects as FBX files'),
+            ('GLTF', 'glTF', 'Export selected objects as glTF files'),
+            ('GLB', 'GLB', 'Export selected objects as GLB files'),
+        ],
+        default='OBJ',
+    )
+
     bpy.types.Scene.e3dsc_enable_experimental = BoolProperty(
         name="Enable Experimental Features",
         default=False,
@@ -857,6 +886,9 @@ def unregister():
     del bpy.types.Scene.author_sign_model
     del bpy.types.Scene.gltf_export_quality
     del bpy.types.Scene.gltf_export_maxres
+    del bpy.types.Scene.e3dsc_export_mode
+    del bpy.types.Scene.e3dsc_export_single_format
+    del bpy.types.Scene.e3dsc_export_multi_format
     del bpy.types.Scene.instanced_export
     del bpy.types.Scene.collgerarchy_to_foldtree
     del bpy.types.Scene.e3dsc_enable_experimental

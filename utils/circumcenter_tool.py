@@ -291,8 +291,8 @@ class PANEL_PT_CircumcenterPanel(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "3DSC"
-    bl_parent_id = "VIEW3D_PT_QuickUtils_ToolBar"  # Collegato al pannello QuickUtils
     bl_options = {'DEFAULT_CLOSED'}
+    bl_order = 32
     
     @classmethod
     def poll(cls, context):

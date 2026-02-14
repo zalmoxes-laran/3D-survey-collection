@@ -190,8 +190,8 @@ class VIEW3D_PT_alignment_orientation(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "3DSC"
-    bl_parent_id = "VIEW3D_PT_QuickUtils_ToolBar"  # Attached to QuickUtils
     bl_options = {'DEFAULT_CLOSED'}
+    bl_order = 33
     
     def draw(self, context):
         layout = self.layout

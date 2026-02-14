@@ -420,14 +420,13 @@ class VIEW3D_PT_3DSC_Instructions(Panel):
 
         box = layout.box()
         box.label(text="End-to-end toolkit for georeferenced 3D survey workflows in Blender.")
-        box.label(text="From import and QA to LOD, optimization, and export, with contextual help per tool.")
 
         docs_row = box.row(align=True)
         docs_row.operator(
             "wm.url_open",
-            text="Open Importers Documentation",
+            text="Open Full Documentation",
             icon='URL'
-        ).url = "https://docs.extendedmatrix.org/projects/3DSC/en/1.7.0/3DSCstructure.html#importers"
+        ).url = "https://docs.extendedmatrix.org/projects/3DSC/en/1.7.0/"
 
         exp_row = box.row(align=True)
         exp_row.prop(scene, "e3dsc_enable_experimental", toggle=True, icon='EXPERIMENTAL')

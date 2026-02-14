@@ -400,8 +400,8 @@ class VIEW3D_PT_TSM_ToolBar(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "3DSC"
-    bl_parent_id = "VIEW3D_PT_QuickUtils_ToolBar"
     bl_options = {'DEFAULT_CLOSED'}
+    bl_order = 34
 
     def draw(self, context):
         layout = self.layout

@@ -154,8 +154,8 @@ class PANEL_PT_RotationConstrainedPanel(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "3DSC"
-    bl_parent_id = "VIEW3D_PT_QuickUtils_ToolBar"  # Collegato direttamente al pannello QuickUtils
     bl_options = {'DEFAULT_CLOSED'}
+    bl_order = 31
     
     @classmethod
     def poll(cls, context):

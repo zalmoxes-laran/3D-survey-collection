@@ -96,68 +96,118 @@ class ToolsPanelExport:
 
     def draw(self, context):
         layout = self.layout
-        obj = context.object
         scene = context.scene
-        row = layout.row()
-        if obj is not None:
-            self.layout.operator("export.coordname", icon="STICKY_UVS_DISABLE", text='Coordinates')
-            row = layout.row()
+        active_obj = context.active_object
 
-            box = layout.box()
+        row = layout.row(align=True)
+        row.scale_y = 0.9
+        row.operator("export.coordname", icon="STICKY_UVS_DISABLE", text='Coordinates')
+        op = row.operator("e3dsc.help_popup", text="", icon='QUESTION')
+        op.title = "Coordinates Export"
+        op.text = (
+            "Export selected object coordinates to TXT. "
+            "Use operator options to include names, rotation/scale, camera-only mode and world shift."
+        )
+        op.url = "3DSCstructure.html#exporters"
 
-            
-            row = box.row()
-            row.label(text= "Export object(s) in one file:")
-            row = box.row()
-            row.operator("export.object", icon="OBJECT_DATA", text='obj')
-            #row = box.row()
-            row.operator("fbx.exp", icon="OBJECT_DATA", text='fbx')
-            row = box.row()
-            row.label(text= "-> "+obj.name + ".obj/.fbx")
-            
-            box = layout.box()
-            row = box.row()
-            row.label(text= "Export objects in several files:")
-            row = box.row()
-            row.operator("obj.exportbatch", icon="DUPLICATE", text='obj')
-            op = row.operator("model.exportbatch", icon="DUPLICATE", text='fbx')
-            op.export_format = "fbx"
-            #op = layout.operator("set_camera.type", text=camera_type_list[idx].name_cam, emboss=False, icon="RIGHTARROW")
-            #op.name_cam = camera_type_list[idx].name_cam
+        box = layout.box()
 
-            row = box.row()
-            op = row.operator("model.exportbatch", icon="DUPLICATE", text='gltf')
-            op.export_format = "gltf"
+        # Mode buttons (state)
+        row = box.row(align=True)
+        row.prop(scene, "e3dsc_export_mode", expand=True)
 
-            row.operator("glb.exportbatch", icon="DUPLICATE", text='glb')
-
-            #row = box.row()
-            #row.operator("object.export_convert_3dtiles", icon="DUPLICATE", text='cesium')
-
-            row = box.row()
-            row.prop(context.scene, 'author_sign_model', toggle = True, text='Author')
-            row = box.row()
-            row.prop(context.scene, 'gltf_export_maxres', toggle = True, text='Max resolution of jpg images')
-            row.prop(context.scene, 'gltf_export_quality', toggle = True, text='Quality of jpg images')
-            row = box.row()
-            if not bpy.context.scene.model_export_dir:
-                row.label(text= "-> /objectname.obj")
-                row = box.row()
-                row.label(text= "-> /[fileformat]/objectname.fbx")
-            row = box.row()
-            row.prop(context.scene, 'model_export_dir', toggle = True, text='Export to')
-            row = box.row()
-            row.prop(scene, 'instanced_export', text="Enable instanced_export (only FBX)")
-            row = box.row()
-            row.prop(scene, 'SHIFT_OBJ_on',
-                     text="Use Shift (slower, only obj)")
-            row = box.row()
-            row.prop(scene, 'collgerarchy_to_foldtree', text="Use collection gerarchy")
-
-        
+        # Format buttons (state), dependent on mode
+        row = box.row(align=True)
+        if scene.e3dsc_export_mode == 'SINGLE':
+            row.prop(scene, "e3dsc_export_single_format", expand=True)
         else:
-            row.label(text="Select object(s) to see tools here.")
-            row = layout.row() 
+            row.prop(scene, "e3dsc_export_multi_format", expand=True)
+
+        # Dynamic action + params
+        format_id = scene.e3dsc_export_single_format if scene.e3dsc_export_mode == 'SINGLE' else scene.e3dsc_export_multi_format
+        row = box.row(align=True)
+        row.scale_y = 0.95
+
+        if scene.e3dsc_export_mode == 'SINGLE':
+            if format_id == 'OBJ':
+                row.operator("export.object", icon="OBJECT_DATA", text='Export OBJ')
+                op = row.operator("e3dsc.help_popup", text="", icon='QUESTION')
+                op.title = "Single OBJ Export"
+                op.text = "Export the active object as a single OBJ file."
+                op.url = "3DSCstructure.html#exporters"
+                #row = box.row()
+                #row.prop(scene, 'SHIFT_OBJ_on', text="Use Shift (slower, only obj)")
+            elif format_id == 'FBX':
+                row.operator("fbx.exp", icon="OBJECT_DATA", text='Export FBX')
+                op = row.operator("e3dsc.help_popup", text="", icon='QUESTION')
+                op.title = "Single FBX Export"
+                op.text = "Export the active object as a single FBX file."
+                op.url = "3DSCstructure.html#exporters"
+            if active_obj is not None:
+                box.label(text=f"-> {active_obj.name}.{format_id.lower()}")
+            else:
+                box.label(text="Select an active object for single-file export.")
+
+        else:
+            # Shared batch destination
+            row.prop(scene, 'model_export_dir', toggle=True, text='Export to')
+            if not scene.model_export_dir:
+                box.label(text="-> /[fileformat]/objectname")
+
+            row = box.row(align=True)
+            row.scale_y = 0.95
+            if format_id == 'OBJ':
+                row.operator("obj.exportbatch", icon="DUPLICATE", text='Export OBJ Batch')
+                op = row.operator("e3dsc.help_popup", text="", icon='QUESTION')
+                op.title = "OBJ Batch Export"
+                op.text = (
+                    "Export selected objects as individual OBJ files. "
+                    #"Use Shift applies world shift only to OBJ workflows."
+                )
+                op.url = "3DSCstructure.html#exporters"
+                #row = box.row()
+                #row.prop(scene, 'SHIFT_OBJ_on', text="Use Shift (slower, only obj)")
+
+            elif format_id == 'FBX':
+                op_fbx = row.operator("model.exportbatch", icon="DUPLICATE", text='Export FBX Batch')
+                op_fbx.export_format = "fbx"
+                op = row.operator("e3dsc.help_popup", text="", icon='QUESTION')
+                op.title = "FBX Batch Export"
+                op.text = (
+                    "Export selected objects as FBX files. "
+                    "Supports instanced export and collection hierarchy output."
+                )
+                op.url = "3DSCstructure.html#exporters"
+                row = box.row()
+                row.prop(scene, 'instanced_export', text="Enable instanced_export (only FBX)")
+                row = box.row()
+                row.prop(scene, 'collgerarchy_to_foldtree', text="Use collection gerarchy")
+
+            elif format_id == 'GLTF':
+                op_gltf = row.operator("model.exportbatch", icon="DUPLICATE", text='Export glTF Batch')
+                op_gltf.export_format = "gltf"
+                op = row.operator("e3dsc.help_popup", text="", icon='QUESTION')
+                op.title = "glTF Batch Export"
+                op.text = (
+                    "Export selected objects as glTF files with author metadata and texture compression options."
+                )
+                op.url = "3DSCstructure.html#exporters"
+                row = box.row()
+                row.prop(scene, 'author_sign_model', toggle=True, text='Author')
+                row = box.row(align=True)
+                row.prop(scene, 'gltf_export_maxres', toggle=True, text='Max resolution of jpg images')
+                row.prop(scene, 'gltf_export_quality', toggle=True, text='Quality of jpg images')
+                row = box.row()
+                row.prop(scene, 'collgerarchy_to_foldtree', text="Use collection gerarchy")
+
+            elif format_id == 'GLB':
+                row.operator("glb.exportbatch", icon="DUPLICATE", text='Export GLB Batch')
+                op = row.operator("e3dsc.help_popup", text="", icon='QUESTION')
+                op.title = "GLB Batch Export"
+                op.text = "Export selected objects as GLB files with author metadata."
+                op.url = "3DSCstructure.html#exporters"
+                row = box.row()
+                row.prop(scene, 'author_sign_model', toggle=True, text='Author')
 
 class ToolsPanelQuickUtils:
     bl_label = "Quick Utils"
@@ -167,48 +217,48 @@ class ToolsPanelQuickUtils:
 
     def draw(self, context):
         layout = self.layout
-        obj = context.object
-        scene = context.scene
-
-        # row = layout.row()
-        # self.layout.operator("center.mass", icon="DOT", text='Center of Mass')
-        # row = layout.row()
-        # self.layout.operator("correct.material", icon="NODE", text='Correct Photoscan mats')
-        # row = layout.row()
-        # self.layout.operator("local.texture", icon="TEXTURE", text='Local texture mode ON')
-        # row = layout.row()
-        # self.layout.operator("create.personalgroups", icon="GROUP", text='Create per-object groups')
-        # row = layout.row()
-        # self.layout.operator("remove.alluvexcept1", icon="GROUP", text='Only UV0 will survive')
-        # row = layout.row()
-        # self.layout.operator("remove.fromallgroups", icon="LIBRARY_DATA_BROKEN", text='Remove from all groups')
-        # row = layout.row()
-        # self.layout.operator("multimaterial.layout", icon="IMGDISPLAY", text='Multimaterial layout')
-        # row = layout.row()
-        # self.layout.operator("lod0poly.reducer", icon="IMGDISPLAY", text='LOD0 mesh decimator')
-        row = layout.row()
-
-        self.layout.operator("mesh.merge_by_distance_custom", icon="PROP_OFF", text='Vertex Merge by Distance')
-
-        row = layout.row()
-
-        # self.layout.operator("tiff2png.relink", icon="META_DATA", text='Relink images from tiff to png')
-        # row = layout.row()
-        self.layout.operator("rename.ge", icon="FILE_TEXT", text='Rename 4 GameEngines')
-        # self.layout.operator("obname.ffn", icon="META_DATA", text='Ren active from namefile')
+        # Quick Utils (miscellanea) tools at root level
         box = layout.box()
+        row = box.row(align=True)
+        row.operator("mesh.merge_by_distance_custom", icon="PROP_OFF", text='Vertex Merge by Distance')
+        op = row.operator("e3dsc.help_popup", text="", icon='QUESTION')
+        op.title = "Quick Utils - Vertex Merge by Distance"
+        op.text = "Merge vertices that are closer than a threshold to clean selected meshes."
+        op.url = "3DSCstructure.html#quick-utils"
+
+        row = box.row(align=True)
+        row.operator("rename.ge", icon="FILE_TEXT", text='Rename 4 GameEngines')
+        op = row.operator("e3dsc.help_popup", text="", icon='QUESTION')
+        op.title = "Quick Utils - Rename 4 GameEngines"
+        op.text = "Apply a game-engine oriented naming convention to selected objects."
+        op.url = "3DSCstructure.html#quick-utils"
+
+        row = box.row(align=True)
+        row.operator("invert.coordinates", icon="DECORATE_DRIVER", text='Invert x and y')
+        op = row.operator("e3dsc.help_popup", text="", icon='QUESTION')
+        op.title = "Quick Utils - Invert x and y"
+        op.text = (
+            "Swap X and Y coordinates of selected objects, preserving Z. "
+            "Useful when total-station points are imported with swapped XY axes."
+        )
+        op.url = "3DSCstructure.html#quick-utils"
+        box.label(text="Useful for total-station points imported with swapped XY.", icon='INFO')
+
+        box.separator()
         row = box.row()
-        #row = layout.row()
         row.label(text="Remove selected suffix (if any):")
-        row = box.row()
+        row = box.row(align=True)
         op = row.operator("remove.suffixnumber", icon="CANCEL", text='')
         op.suffix = context.window_manager.suffix_num.suffixnum
-        #row = layout.row()
         row.prop(context.window_manager.suffix_num, 'suffixnum', expand=True)
-        box = layout.box()
-        row = box.row()
-        row.label(text="Batch material settings")
-        row = box.row()
+        help_row = box.row(align=True)
+        op = help_row.operator("e3dsc.help_popup", text="", icon='QUESTION')
+        op.title = "Quick Utils - Remove Selected Suffix"
+        op.text = "Remove selected suffixes (.001/.002/.003) from object names in batch."
+        op.url = "3DSCstructure.html#quick-utils"
+
+        box.separator()
+        row = box.row(align=True)
         op = row.operator("setmaterial.blend", icon="MESH_CUBE", text='opaque')
         op.blendmode = "OPAQUE"
         op = row.operator("setmaterial.blend", icon="CUBE", text='transparent')
@@ -217,13 +267,22 @@ class ToolsPanelQuickUtils:
         row.operator("set.roughness", icon="DECORATE_DRIVER", text='Roughness 1')
         row = box.row()
         row.operator("set.metalness", icon="DECORATE_DRIVER", text='Metalness 0')
-        box = layout.box()
-        row = box.row()
-        row.label(text="Batch legacy material conversion")
-        row = box.row()
+        help_row = box.row(align=True)
+        op = help_row.operator("e3dsc.help_popup", text="", icon='QUESTION')
+        op.title = "Quick Utils - Batch Material Settings"
+        op.text = (
+            "Batch update blend mode and PBR values (roughness/metalness) "
+            "for materials on selected meshes."
+        )
+        op.url = "3DSCstructure.html#quick-utils"
+
+        box.separator()
+        row = box.row(align=True)
         row.operator("diffuse.principled", icon="DECORATE_DRIVER", text='Diffuse 2 Principled')
-        row = box.row()
-        row.operator("invert.coordinates", icon="DECORATE_DRIVER", text='Invert x and y')
+        op = row.operator("e3dsc.help_popup", text="", icon='QUESTION')
+        op.title = "Quick Utils - Legacy Material Conversion"
+        op.text = "Convert legacy diffuse-like materials into Principled BSDF in batch."
+        op.url = "3DSCstructure.html#quick-utils"
 
 
 class ToolsPanel_ccTool:
@@ -363,6 +422,7 @@ class VIEW3D_PT_QuickUtils_ToolBar(Panel, ToolsPanelQuickUtils):
     bl_category = "3DSC"
     bl_idname = "VIEW3D_PT_QuickUtils_ToolBar"
     bl_options = {'DEFAULT_CLOSED'}
+    bl_order = 30
 
 class VIEW3D_PT_ccTool(Panel, ToolsPanel_ccTool):
     bl_category = "3DSC"
