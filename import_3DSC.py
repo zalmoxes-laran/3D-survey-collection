@@ -266,7 +266,7 @@ class ImportMultipleObjs(Operator, ImportHelper):
     enable_shift_coordinates: BoolProperty(
             name="shifting coordinates",
             description="Option to shift large coordinates",
-            default=True,
+            default=False,
             ) # type: ignore
 
     def draw(self, context):
@@ -297,7 +297,7 @@ class ImportMultipleObjs(Operator, ImportHelper):
         layout.prop(self, "axis_up_setting")
 
         layout.prop(self, "image_search_setting")
-        layout.prop(self, "enable_shift_coordinates")
+        layout.label(text="Shift is not available for Multipolo OBJ", icon='INFO')
         
 
     def execute(self, context):
@@ -311,15 +311,6 @@ class ImportMultipleObjs(Operator, ImportHelper):
         # get the folder
         folder = (os.path.dirname(self.filepath))
 
-        if self.enable_shift_coordinates:
-                x_shift = context.scene.BL_x_shift
-                y_shift = context.scene.BL_y_shift
-                z_shift = context.scene.BL_z_shift
-        else:
-                x_shift = 0.0
-                y_shift = 0.0
-                z_shift = 0.0               
-
         # iterate through the selected files
         for i in self.files:
         
@@ -329,7 +320,7 @@ class ImportMultipleObjs(Operator, ImportHelper):
                 if major >= 4:
                         # Codice per Blender 4.0 e versioni successive
                         #print("Stai eseguendo Blender versione 4.0 o successiva.")
-                        bpy.ops.wm.obj_import(filepath= path_to_file,filter_glob='*.obj;*.mtl', forward_axis = self.axis_forward_setting, up_axis = self.axis_up_setting)#, global_shift_x = x_shift, global_shift_y = y_shift, global_shift_z = z_shift)
+                        bpy.ops.wm.obj_import(filepath= path_to_file,filter_glob='*.obj;*.mtl', forward_axis = self.axis_forward_setting, up_axis = self.axis_up_setting)
                 elif major == 3 and minor >= 6:
                         # Codice specifico per Blender 3.6
                         bpy.ops.import_scene.obj(filepath= path_to_file,filter_glob='*.obj;*.mtl', axis_forward = self.axis_forward_setting, axis_up = self.axis_up_setting, use_edges = self.edges_setting, use_smooth_groups = self.smooth_groups_setting, use_split_objects = self.split_objects_setting, use_split_groups = self.split_groups_setting, use_groups_as_vgroups = self.groups_as_vgroups_setting, use_image_search = self.image_search_setting, split_mode = self.split_mode_setting)
@@ -403,34 +394,100 @@ class ImportCamAgiXML(Operator, ImportHelper):
                 
                 return {'FINISHED'}
 
-class ToolsPanelImport:
+class VIEW3D_PT_3DSC_Instructions(Panel):
     from .__init__ import get_3dsc_bl_info
 
     bl_3dsc_info = get_3dsc_bl_info()
-    devel_version = bl_3dsc_info.get('devel_version', 'Unknown version')
+    version_tuple = bl_3dsc_info.get("version", (0, 0, 0))
+    version_label = ".".join(str(v) for v in version_tuple)
+    devel_version = bl_3dsc_info.get("devel_version", "").strip()
+    devel_tag = devel_version.replace(f"3DSC {version_label}", "").strip()
+    if not devel_tag:
+        devel_tag = "dev?"
 
-    bl_label = "Importers " +  devel_version
+    bl_label = f"3D Survey Collection {version_label} {devel_tag}"
+    bl_category = "3DSC"
+    bl_idname = "VIEW3D_PT_3DSC_Instructions"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
+    bl_context = "objectmode"
+    bl_options = {'DEFAULT_CLOSED'}
+    bl_order = 0
 
     def draw(self, context):
         layout = self.layout
-        obj = context.object
+        scene = context.scene
 
-        row = layout.row()
-        self.layout.operator("import_points.txt", icon="STICKY_UVS_DISABLE", text='Coordinates')
-        row = layout.row()
-        self.layout.operator("import_scene.multiple_objs", icon="DUPLICATE", text='Multiple objs')
-        row = layout.row()
-        self.layout.operator("import_cam.agixml", icon="DUPLICATE", text='Agisoft xml cams')
-        
-class VIEW3D_PT_Import_ToolBar(Panel, ToolsPanelImport):
+        box = layout.box()
+        box.label(text="End-to-end toolkit for georeferenced 3D survey workflows in Blender.")
+        box.label(text="From import and QA to LOD, optimization, and export, with contextual help per tool.")
+
+        docs_row = box.row(align=True)
+        docs_row.operator(
+            "wm.url_open",
+            text="Open Importers Documentation",
+            icon='URL'
+        ).url = "https://docs.extendedmatrix.org/projects/3DSC/en/1.7.0/3DSCstructure.html#importers"
+
+        exp_row = box.row(align=True)
+        exp_row.prop(scene, "e3dsc_enable_experimental", toggle=True, icon='EXPERIMENTAL')
+        if scene.e3dsc_enable_experimental:
+            warn = box.row()
+            warn.alert = True
+            warn.label(text="Experimental features enabled", icon='ERROR')
+
+
+class VIEW3D_PT_Import_ToolBar(Panel):
+    bl_label = "Importers"
     bl_category = "3DSC"
     bl_idname = "VIEW3D_PT_Import_ToolBar"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
     bl_context = "objectmode"
     bl_options = {'DEFAULT_CLOSED'}
+    bl_order = 1
+
+    def draw(self, context):
+        layout = self.layout
+        scene = context.scene
+
+        row = layout.row(align=True)
+        row.scale_y = 0.9
+        row.operator("import_points.txt", icon="STICKY_UVS_DISABLE", text='Points as Empty Objects')
+        op = row.operator("e3dsc.help_popup", text="", icon='QUESTION')
+        op.title = "Points as Empty Objects"
+        op.text = (
+            "Import named points from TXT as Empty objects. "
+            "This importer supports coordinate shifting via the Shift coordinates option."
+        )
+        op.url = "3DSCstructure.html#shifting"
+
+        row = layout.row(align=True)
+        row.scale_y = 0.9
+        row.operator("import_scene.multiple_objs", icon="DUPLICATE", text='Multiple objs')
+        op = row.operator("e3dsc.help_popup", text="", icon='QUESTION')
+        op.title = "Multiple OBJ Import"
+        op.text = (
+            "Batch import multiple OBJ files into the current scene. "
+            "Coordinate shift is intentionally not available for this importer."
+        )
+        op.url = "3DSCstructure.html#importers"
+
+        if scene.e3dsc_enable_experimental:
+            row = layout.row(align=True)
+            row.alert = True
+            row.scale_y = 0.9
+            row.operator("import_cam.agixml", icon="DUPLICATE", text='Agisoft XML CAMS')
+            op = row.operator("e3dsc.help_popup", text="", icon='QUESTION')
+            op.title = "Agisoft XML CAMS (Experimental)"
+            op.text = (
+                "Experimental camera import from Agisoft XML files. "
+                "Use it for validation workflows and verify results before production."
+            )
+            op.url = "3DSCstructure.html#importers"
     
 classes = [
+    VIEW3D_PT_3DSC_Instructions,
     VIEW3D_PT_Import_ToolBar,
     OBJECT_OT_IMPORTPOINTS,
     ImportCoorPoints,

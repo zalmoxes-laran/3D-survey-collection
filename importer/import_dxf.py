@@ -989,6 +989,13 @@ class DXF_PT_ImportPanel(Panel):
         if is_installed:
             row = layout.row(align=True)
             row.operator("import_dxf.button", icon="IMPORT", text="Import DXF File")
+            op = row.operator("e3dsc.help_popup", text="", icon='QUESTION')
+            op.title = "DXF Import"
+            op.text = (
+                "Import DXF geometry into Blender. "
+                "Use the SHIFT panel values to handle large world coordinates."
+            )
+            op.url = "3DSCstructure.html#importers"
             row = layout.row()
             row.label(text=f"ezdxf version: {version_info}")
             
@@ -1010,6 +1017,13 @@ class DXF_PT_ImportPanel(Panel):
             # Aggiungi un pulsante di ricarica per rigenerare i path dopo l'installazione
             row = layout.row(align=True)
             row.operator("import_dxf.reload_modules", icon="FILE_REFRESH", text="Reload Python Paths")
+            op = row.operator("e3dsc.help_popup", text="", icon='QUESTION')
+            op.title = "DXF Import Dependency"
+            op.text = (
+                "DXF import requires the Python module 'ezdxf'. "
+                "Install it, reload Python paths, then restart Blender if needed."
+            )
+            op.url = "3DSCstructure.html#importers"
             
             # Bottone per installare
             row = layout.row(align=True)

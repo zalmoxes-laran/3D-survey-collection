@@ -390,6 +390,13 @@ class DXF_PT_ImportLinkedLODPanel(Panel):
         # Main import button
         row = layout.row(align=True)
         row.operator("import_linked.lod", icon="IMPORT", text="Import Linked LOD Meshes")
+        op = row.operator("e3dsc.help_popup", text="", icon='QUESTION')
+        op.title = "Linked LOD Import"
+        op.text = (
+            "Import linked meshes with LOD suffix from .blend files. "
+            "Use this to assemble scenes efficiently from external LOD libraries."
+        )
+        op.url = "3DSCstructure.html#importers"
         
         # Brief explanation
         box = layout.box()

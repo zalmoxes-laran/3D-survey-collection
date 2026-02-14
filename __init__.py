@@ -19,13 +19,13 @@
 bl_info = {
     "name": "3D Survey Collection",
     "author": "Emanuel Demetrescu",
-    "version": (1,6,2),
+    "version": (1,7,0),
     "blender": (4, 2, 0),
     "location": "3D View > Toolbox",
     "description": "A collection of tools for 3D Survey activities",
     "warning": "Beta version of 1.6.2 3DSC dev1",
     "wiki_url": "",
-    "devel_version": " 3DSC 1.6.2 dev20",  # Aggiunto campo devel_version
+    "devel_version": " 3DSC 1.7.0 dev01",  # Aggiunto campo devel_version
     "category": "Tools",
     }
 
@@ -59,6 +59,7 @@ else:
             UI,
             import_3DSC,
             import_Agisoft_xml,
+            operators,
             export_3DSC,
             functions,
             shift,
@@ -623,6 +624,7 @@ classes = (
 def register():
 
     addon_updater_ops.register(bl_info)
+    operators.help_popup.register()
     import_3DSC.register()
     for cls in classes:
         bpy.utils.register_class(cls)
@@ -789,6 +791,12 @@ def register():
     description="Define the resolution of the output images",
     )
 
+    bpy.types.Scene.e3dsc_enable_experimental = BoolProperty(
+        name="Enable Experimental Features",
+        default=False,
+        description="Show experimental tools in 3D Survey Collection panels",
+    )
+
     
 def unregister():
 
@@ -821,6 +829,7 @@ def unregister():
     import_linked_lod.unregister()
     orthogonal_render.unregister()
     alignment_orientation_tool.unregister()
+    operators.help_popup.unregister()
     #mets_exporter.unregister()
 
 
@@ -850,3 +859,4 @@ def unregister():
     del bpy.types.Scene.gltf_export_maxres
     del bpy.types.Scene.instanced_export
     del bpy.types.Scene.collgerarchy_to_foldtree
+    del bpy.types.Scene.e3dsc_enable_experimental
