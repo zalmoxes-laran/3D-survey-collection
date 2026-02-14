@@ -21,9 +21,12 @@ class MESH_OT_info_area(Operator):
     #     return obj is not None and obj.type == 'MESH' #and obj.mode in {'OBJECT', 'EDIT'}
 
     def execute(self, context):
-        #scene = context.scene
-        context.active_object.select_set(True) 
-        selected = context.selected_objects
+        selected = [obj for obj in context.selected_objects if obj.type == 'MESH']
+        if not selected and context.active_object and context.active_object.type == 'MESH':
+            selected = [context.active_object]
+        if not selected:
+            self.report({'ERROR'}, "Select at least one mesh object")
+            return {'CANCELLED'}
         info = []
         total_area = 0.0
         tot_polynum = 0.0
@@ -89,54 +92,92 @@ class MESH_OT_info_texs(Operator):
     bl_description = "report the texture area of the selected meshes"
 
     def execute(self, context):
-        context.active_object.select_set(True) 
-        selected = context.selected_objects
+        selected = [obj for obj in context.selected_objects if obj.type == 'MESH']
+        if not selected and context.active_object and context.active_object.type == 'MESH':
+            selected = [context.active_object]
+        if not selected:
+            self.report({'ERROR'}, "Select at least one mesh object")
+            return {'CANCELLED'}
         scene = context.scene
+        strict = bool(getattr(scene, "e3dsc_stats_strict", False))
 
         scene.analysis_list.clear()
-        self.res_count = 0
-        self.material_count = 0
+        resolution_map = {}
+        material_count = 0
+        missing_materials = 0
+        missing_textures = 0
 
         for ob in selected:
-            res_tex, res_count = info_textures(self, context, ob)
+            tex_stats = info_textures(context, ob)
+            material_count += tex_stats["material_count"]
+            missing_materials += tex_stats["missing_materials"]
+            missing_textures += tex_stats["materials_without_textures"]
+            for res_tex, count in tex_stats["res_map"].items():
+                resolution_map[res_tex] = resolution_map.get(res_tex, 0) + count
+
+        if strict and (missing_materials > 0 or missing_textures > 0):
+            self.report(
+                {'ERROR'},
+                f"Strict mode: missing materials={missing_materials}, materials without textures={missing_textures}"
+            )
+            return {'CANCELLED'}
+
+        for res_tex in sorted(resolution_map.keys()):
+            scene.analysis_list.add()
+            idx = len(scene.analysis_list) - 1
+            scene.analysis_list[idx].res_tex = int(res_tex)
+            scene.analysis_list[idx].res_counter = int(resolution_map[res_tex])
 
         info = []
-        #print("Ci sono "+ str(len(selected))+ " oggetti, con "+ str(material_count) +" materiali, di cui " +str(tex_list_512)+" con textures 512 px e "+str(tex_list_1024)+" con textures 1024 px e "+str(tex_list_2048)+" con textures 2048 px e "+ str(tex_list_4096)+" con textures 4096 px" )
-        info.append((f" "+str(len(selected))+" object(s); " + str(self.material_count) +" mats;",None))       
+        info.append((f" {len(selected)} object(s); {material_count} mats;", None))
         for res_out in range(len(scene.analysis_list)):
-            #print("Resolution "+str(scene.analysis_list[res_out].res_tex)+" has "+str(scene.analysis_list[res_out].res_counter)+" instances")
-            info.append((f"Tex. "+str(scene.analysis_list[res_out].res_tex)+": "+str(scene.analysis_list[res_out].res_counter), None))
+            info.append((f"Tex. {scene.analysis_list[res_out].res_tex}: {scene.analysis_list[res_out].res_counter}", None))
+        if missing_materials > 0 or missing_textures > 0:
+            info.append((f"Skipped: no material={missing_materials}, no texture={missing_textures}", None))
         report_data.update(*info)
-        #report_data.update((f" "+str(len(selected))+" ob; " + str(material_count) +" mats; 512: " +str(tex_list_512)+"; 1024: "+str(tex_list_1024)+"; 2048: "+str(tex_list_2048)+"; 4096: "+ str(tex_list_4096), None))
 
         return {'FINISHED'}
 
-def info_textures(self, context, ob):
-    #print(ob.name)
-    scene = context.scene
-    for mat in ob.material_slots:
-        self.material_count += 1
-        #print(mat.material.name)
-        for node in mat.material.node_tree.nodes:
-            # decisamente da rendere più robusto prendendo il codice dall'addon emtools
-            if node.type == 'TEX_IMAGE':
-                image_size = node.image.size[0]
-                #for current_res in range(len(scene.analysis_list)):
-                if self.res_count == 0:
-                    context.scene.analysis_list.add()
-                    context.scene.analysis_list[self.res_count].res_tex = image_size
-                    context.scene.analysis_list[self.res_count].res_counter += 1
-                    self.res_count +=1
-                else:
-                    for current_res in range(len(scene.analysis_list)):
-                        if scene.analysis_list[current_res].res_tex == image_size:
-                            context.scene.analysis_list[current_res].res_counter += 1
-                        else:
-                            context.scene.analysis_list.add()
-                            self.res_count = len(context.scene.analysis_list)-1
-                            context.scene.analysis_list[self.res_count].res_tex = image_size
-                            context.scene.analysis_list[self.res_count].res_counter += 1
-    return image_size , len(ob.material_slots)
+def info_textures(context, ob):
+    result = {
+        "material_count": 0,
+        "missing_materials": 0,
+        "materials_without_textures": 0,
+        "res_map": {},
+        "object_res_tex": 0,
+        "object_tex_count": 0,
+    }
+    if ob is None or ob.type != 'MESH':
+        return result
+
+    if len(ob.material_slots) == 0:
+        result["missing_materials"] += 1
+        return result
+
+    max_res = 0
+    tex_nodes_count = 0
+    for slot in ob.material_slots:
+        result["material_count"] += 1
+        mat = slot.material
+        if mat is None or not mat.use_nodes or mat.node_tree is None:
+            result["missing_materials"] += 1
+            continue
+
+        has_image_node = False
+        for node in mat.node_tree.nodes:
+            if node.type == 'TEX_IMAGE' and node.image is not None:
+                has_image_node = True
+                size = int(node.image.size[0]) if node.image.size else 0
+                if size > 0:
+                    result["res_map"][size] = result["res_map"].get(size, 0) + 1
+                    max_res = max(max_res, size)
+                    tex_nodes_count += 1
+        if not has_image_node:
+            result["materials_without_textures"] += 1
+
+    result["object_res_tex"] = max_res
+    result["object_tex_count"] = tex_nodes_count
+    return result
 
 class MESH_OT_info_texres(Operator):
     bl_idname = "mesh.info_texres"
@@ -144,10 +185,15 @@ class MESH_OT_info_texres(Operator):
     bl_description = "report the mean texture resolution of the selected meshes"
 
     def execute(self, context):
-
-        context.active_object.select_set(True) 
-        selected = context.selected_objects
+        selected = [obj for obj in context.selected_objects if obj.type == 'MESH']
+        if not selected and context.active_object and context.active_object.type == 'MESH':
+            selected = [context.active_object]
+        if not selected:
+            self.report({'ERROR'}, "Select at least one mesh object")
+            return {'CANCELLED'}
         scene = context.scene
+        strict = bool(getattr(scene, "e3dsc_stats_strict", False))
+        prompt_export = bool(getattr(scene, "e3dsc_stats_prompt_export", False))
         total_area = 0.0
         total_polynum = 0
         info = []
@@ -155,12 +201,14 @@ class MESH_OT_info_texres(Operator):
         #analyze textures setup
         scene.analysis_list.clear()
         scene.statistics_list.clear()
-        self.res_count = 0
-        self.material_count = 0
         self.ob_count = 0
 
         #extract statistics setup
         texture_area = 0.0
+        resolution_map = {}
+        material_count = 0
+        missing_materials = 0
+        missing_textures = 0
 
         #calculate area
         for obj in selected:
@@ -170,42 +218,64 @@ class MESH_OT_info_texres(Operator):
             total_polynum = total_polynum + polynum
             
             #analyze textures
-            res_tex, res_count = info_textures(self, context, obj)
-            #print(str(res_tex)+" ripetuta "+str(res_count)+" volte")
+            tex_stats = info_textures(context, obj)
+            material_count += tex_stats["material_count"]
+            missing_materials += tex_stats["missing_materials"]
+            missing_textures += tex_stats["materials_without_textures"]
+            for res_tex, count in tex_stats["res_map"].items():
+                resolution_map[res_tex] = resolution_map.get(res_tex, 0) + count
+
             context.scene.statistics_list.add()
             context.scene.statistics_list[self.ob_count].name = obj.name
-            #context.scene.statistics_list[self.ob_count].context_col =
-            #context.scene.statistics_list[self.ob_count].tiles_num = 
             context.scene.statistics_list[self.ob_count].area_mesh = area
             context.scene.statistics_list[self.ob_count].poly_num = polynum
-            context.scene.statistics_list[self.ob_count].poly_res = polynum/area
-            context.scene.statistics_list[self.ob_count].res_tex = res_tex
-            context.scene.statistics_list[self.ob_count].res_counter = res_count
+            context.scene.statistics_list[self.ob_count].poly_res = (polynum / area) if area > 0 else 0
+            context.scene.statistics_list[self.ob_count].res_tex = tex_stats["object_res_tex"]
+            context.scene.statistics_list[self.ob_count].res_counter = tex_stats["object_tex_count"]
             context.scene.statistics_list[self.ob_count].uv_ratio = 0.6
-            context.scene.statistics_list[self.ob_count].mean_res_tex = 1000/(math.sqrt((res_tex*res_tex*res_count*0.6)/area))
+            if area > 0 and tex_stats["object_res_tex"] > 0 and tex_stats["object_tex_count"] > 0:
+                context.scene.statistics_list[self.ob_count].mean_res_tex = 1000 / (
+                    math.sqrt((tex_stats["object_res_tex"] * tex_stats["object_res_tex"] * tex_stats["object_tex_count"] * 0.6) / area)
+                )
+            else:
+                context.scene.statistics_list[self.ob_count].mean_res_tex = 0
             
             self.ob_count +=1
 
+        if strict and (missing_materials > 0 or missing_textures > 0):
+            self.report(
+                {'ERROR'},
+                f"Strict mode: missing materials={missing_materials}, materials without textures={missing_textures}"
+            )
+            return {'CANCELLED'}
+
+        for res_tex in sorted(resolution_map.keys()):
+            scene.analysis_list.add()
+            idx = len(scene.analysis_list) - 1
+            scene.analysis_list[idx].res_tex = int(res_tex)
+            scene.analysis_list[idx].res_counter = int(resolution_map[res_tex])
 
         area_fmt = check_unit_system_area(total_area)          
         info.append((f"Area tot: {round(total_area,1)}²", None))
         info.append((f"Polygons tot: {total_polynum}", None))
             
-        info.append((f" "+str(len(selected))+" object(s); " + str(self.material_count) +" mats;",None))       
+        info.append((f" {len(selected)} object(s); {material_count} mats;",None))
         for res_out in range(len(scene.analysis_list)):
-            #print("Resolution "+str(scene.analysis_list[res_out].res_tex)+" has "+str(scene.analysis_list[res_out].res_counter)+" instances")
-            info.append((f"Tex. "+str(scene.analysis_list[res_out].res_tex)+": "+str(scene.analysis_list[res_out].res_counter), None))
+            info.append((f"Tex. {scene.analysis_list[res_out].res_tex}: {scene.analysis_list[res_out].res_counter}", None))
 
-        for unit in context.scene.analysis_list:
+        for unit in scene.analysis_list:
             res_unit_area = unit.res_tex * unit.res_tex * unit.res_counter * 0.6
             texture_area = texture_area + res_unit_area
-        texture_area = 1000/(math.sqrt(texture_area/total_area))
-        mean_poly = total_polynum/total_area
+        texture_area = 1000/(math.sqrt(texture_area/total_area)) if texture_area > 0 and total_area > 0 else 0
+        mean_poly = total_polynum/total_area if total_area > 0 else 0
         info.append((f"Mean resolution ", None))
         info.append((f"- Tex: "+str(round(texture_area,2))+" mm/pixel", None))
         info.append((f"- Poly: "+str(round(mean_poly,1))+" poly/m²", None))
+        if missing_materials > 0 or missing_textures > 0:
+            info.append((f"Skipped: no material={missing_materials}, no texture={missing_textures}", None))
         report_data.update(*info)
-        bpy.ops.export_stats.tofile('INVOKE_DEFAULT')
+        if prompt_export:
+            bpy.ops.export_stats.tofile('INVOKE_DEFAULT')
 
         return {'FINISHED'}
 
@@ -231,6 +301,10 @@ class ExportStatistics(Operator, ExportHelper):
             description="Add collection name from viewport (usefull to cluser grooups)",
             default=True,
             )
+
+    @classmethod
+    def poll(cls, context):
+        return hasattr(context.scene, "statistics_list") and len(context.scene.statistics_list) > 0
 
     def execute(self, context):
         return write_stats_on_disk(context, self.filepath, self.groups)

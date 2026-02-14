@@ -20,24 +20,46 @@ from bpy.props import (BoolProperty,
                        IntProperty
                        )
 
+def save_dirty_images_best_effort(images=None):
+    images_to_scan = images if images is not None else bpy.data.images
+    result = {
+        "saved_count": 0,
+        "failed_count": 0,
+        "unsavable_count": 0,
+        "messages": [],
+    }
+
+    for img in images_to_scan:
+        if not getattr(img, "is_dirty", False):
+            continue
+        filepath = getattr(img, "filepath_raw", "")
+        if not filepath:
+            result["unsavable_count"] += 1
+            result["messages"].append(f"{img.name}: missing filepath")
+            continue
+        try:
+            img.save()
+            result["saved_count"] += 1
+        except Exception as exc:
+            result["failed_count"] += 1
+            result["messages"].append(f"{img.name}: {exc}")
+
+    return result
+
+
 class OBJECT_OT_savepaintcam(bpy.types.Operator):
     bl_idname = "savepaint.cam"
     bl_label = "Save paint"
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
-        # previous methods used by 3dsc
-        #bpy.ops.image.save_dirty()
-        #bpy.ops.image.save_all_modified()
-        # Itera su tutte le immagini caricate in Blender
-        for img in bpy.data.images:
-            # Controlla se l'immagine è stata modificata e ha un percorso di file
-            if img.is_dirty and img.filepath_raw:
-                # Tenta di salvare l'immagine nel suo percorso corrente
-                try:
-                    img.save()
-                except Exception as e:
-                    print(f"Impossibile salvare l'immagine {img.name}: {e}")
+        save_result = save_dirty_images_best_effort()
+        self.report({'INFO'}, f"Saved {save_result['saved_count']} dirty image(s)")
+        if save_result["failed_count"] or save_result["unsavable_count"]:
+            self.report(
+                {'WARNING'},
+                f"Not saved: failed={save_result['failed_count']}, missing path={save_result['unsavable_count']}"
+            )
         return {'FINISHED'}
 
 class OBJECT_OT_createcyclesmat(bpy.types.Operator):
@@ -129,12 +151,19 @@ def rad(grad):
     return rad
 
 def get_nodegroupname_from_obj(obj):
-    if obj.material_slots[0].material.node_tree.nodes.find('cc_node') == -1 :
-        nodegroupname = None
-    else:
-        nodegroupname = obj.material_slots[0].material.node_tree.nodes['cc_node'].node_tree.name
-        #nodegroupname = obj.material_slots[0].material.node_tree.nodes['cc_node'].node_tree
-    return nodegroupname
+    if obj is None or not hasattr(obj, "material_slots"):
+        return None
+    for matslot in obj.material_slots:
+        mat = matslot.material
+        if mat is None or not mat.use_nodes or mat.node_tree is None:
+            continue
+        for node in mat.node_tree.nodes:
+            if node.type == 'GROUP' and (
+                node.get("e3dsc_cc_role") == "cc_node" or node.name == "cc_node"
+            ):
+                if node.node_tree is not None:
+                    return node.node_tree.name
+    return None
 
 def get_cc_node_pano(obj, current_pano):
     nodes = obj.material_slots[0].material.node_tree.nodes
@@ -408,16 +437,36 @@ def select_a_mesh(layout):
     row.label(text="Select a mesh to start")
 
 def select_a_node(mat, type):
+    if mat is None or not mat.use_nodes or mat.node_tree is None:
+        return False
     nodes = mat.node_tree.nodes
     for node in nodes:
-        if node.name == type:
+        node.select = False
+    nodes.active = None
+
+    if type == "cc_image":
+        node = _cc_find_cc_image_node(mat)
+        if node is not None:
             node.select = True
             nodes.active = node
-            is_node = True
-            pass
-        else:
-            is_node = False
-    return is_node
+            return True
+        return False
+    if type == "original":
+        bsdf = _cc_get_bsdf_node(mat)
+        base_input = _cc_get_basecolor_input(bsdf)
+        node = _cc_find_original_image_node(mat, base_input=base_input)
+        if node is not None:
+            node.select = True
+            nodes.active = node
+            return True
+        return False
+
+    node = nodes.get(type)
+    if node is not None:
+        node.select = True
+        nodes.active = node
+        return True
+    return False
 
 # potenzialmente una migliore scrittura del codice:
 # nodes = material_slot.material.node_tree.nodes
@@ -493,31 +542,63 @@ def bake_tex_set(type):
 
 
 def remove_cc_setup(mat):
+    if mat is None or not mat.use_nodes or mat.node_tree is None:
+        return False
     nodes = mat.node_tree.nodes
     links = mat.node_tree.links
-    diffusenode = node_retriever(mat, "diffuse")
-    ccnode = node_retriever(mat, "cc_node")
-    newimagenode = node_retriever(mat, "cc_image")
-    orimagenode = node_retriever(mat, "original")
+    bsdf = _cc_get_bsdf_node(mat)
+    base_input = _cc_get_basecolor_input(bsdf)
+    ccnode = _cc_find_node_by_role(mat, "cc_node") or _cc_find_legacy_node(mat, "cc_node")
+    newimagenode = _cc_find_cc_image_node(mat)
+    orimagenode = _cc_find_original_image_node(mat, base_input=base_input)
 
-    nodes.remove(newimagenode)
-    nodes.remove(ccnode)
+    if base_input is not None:
+        _cc_clear_input_links(links, base_input)
+        if orimagenode is not None:
+            links.new(orimagenode.outputs[0], base_input)
 
-    links.new(orimagenode.outputs[0], diffusenode.inputs[0])
+    if newimagenode is not None:
+        nodes.remove(newimagenode)
+    if ccnode is not None:
+        nodes.remove(ccnode)
+    return True
 
 def set_texset(mat, type):
-    nodes = mat.node_tree.nodes
+    if mat is None or not mat.use_nodes or mat.node_tree is None:
+        return False
     links = mat.node_tree.links
-    imagenode = node_retriever(mat, type)
-    diffusenode = node_retriever(mat, "diffuse")
-    links.new(imagenode.outputs[0], diffusenode.inputs[0])
+    bsdf = _cc_get_bsdf_node(mat)
+    base_input = _cc_get_basecolor_input(bsdf)
+    if base_input is None:
+        return False
+
+    if type == "cc_image":
+        imagenode = _cc_find_cc_image_node(mat)
+    elif type == "original":
+        imagenode = _cc_find_original_image_node(mat, base_input=base_input)
+    else:
+        imagenode = _cc_find_legacy_node(mat, type)
+
+    if imagenode is None:
+        return False
+
+    _cc_clear_input_links(links, base_input)
+    links.new(imagenode.outputs[0], base_input)
+    return True
 
 def substring_after(s, delim):
     return s.partition(delim)[2]
 
 def create_new_tex_set(mat, type):
     #retrieve image specs and position from material
-    o_image_node = node_retriever(mat, "original")
+    if mat is None or not mat.use_nodes or mat.node_tree is None:
+        return (False, "Nodes are disabled")
+
+    bsdf = _cc_get_bsdf_node(mat)
+    base_input = _cc_get_basecolor_input(bsdf)
+    o_image_node = _cc_find_original_image_node(mat, base_input=base_input)
+    if o_image_node is None or o_image_node.image is None:
+        return (False, "Original image node not found")
     o_image = o_image_node.image
     x_image = o_image.size[0]
     y_image = o_image.size[1]
@@ -528,6 +609,9 @@ def create_new_tex_set(mat, type):
     node_tree = mat.node_tree
     nodes = node_tree.nodes
     if type == "cc_image":
+        existing = _cc_find_cc_image_node(mat)
+        if existing is not None:
+            return (True, "already_exists")
         if o_filename_no_ext.startswith("cc_"):
             print(substring_after(o_filename, "cc_"))
             t_image_name = "cc_2_"+o_filename_no_ext
@@ -549,6 +633,10 @@ def create_new_tex_set(mat, type):
     tteximg.location = (-1100, -450)
     tteximg.image = t_image
     tteximg.name = type
+    if type == "cc_image":
+        _cc_set_role(tteximg, "cc_image")
+    if type == "source_paint_node":
+        _cc_set_role(tteximg, "source_paint")
 
     for currnode in nodes:
         currnode.select = False
@@ -557,6 +645,7 @@ def create_new_tex_set(mat, type):
     tteximg.select = True
     node_tree.nodes.active = tteximg
  #   mat.texture_slots[0].texture.image = t_image
+    return (True, "")
 
 # provide to thsi function a material and a node type and it will send you back the name of the node. With the option "all" you will get a dictionary of the nodes
 def node_retriever(mat, type):
@@ -661,6 +750,229 @@ def create_correction_nodegroup(name):
 
 
 
+CC_ROLE_KEY = "e3dsc_cc_role"
+
+
+def _cc_set_role(node, role):
+    if node is not None:
+        try:
+            node[CC_ROLE_KEY] = role
+            return True
+        except Exception:
+            return False
+
+
+def _cc_get_role(node):
+    if node is None:
+        return None
+    return node.get(CC_ROLE_KEY)
+
+
+def _cc_find_node_by_role(mat, role):
+    if mat is None or not mat.use_nodes or mat.node_tree is None:
+        return None
+    for node in mat.node_tree.nodes:
+        if _cc_get_role(node) == role:
+            return node
+    return None
+
+
+def _cc_find_legacy_node(mat, name_hint, type_hint=None):
+    if mat is None or not mat.use_nodes or mat.node_tree is None:
+        return None
+    node = mat.node_tree.nodes.get(name_hint)
+    if node and (type_hint is None or node.type == type_hint):
+        return node
+    return None
+
+
+def _cc_get_active_output_node(mat):
+    if mat is None or not mat.use_nodes or mat.node_tree is None:
+        return None
+    outputs = [n for n in mat.node_tree.nodes if n.type == 'OUTPUT_MATERIAL']
+    for out in outputs:
+        if getattr(out, "is_active_output", False):
+            return out
+    return outputs[0] if outputs else None
+
+
+def _cc_get_bsdf_node(mat):
+    if mat is None or not mat.use_nodes or mat.node_tree is None:
+        return None
+
+    out = _cc_get_active_output_node(mat)
+    if out and out.inputs.get("Surface") and out.inputs["Surface"].is_linked:
+        from_node = out.inputs["Surface"].links[0].from_node
+        if from_node and from_node.type in {'BSDF_PRINCIPLED', 'BSDF_DIFFUSE'}:
+            return from_node
+
+    for node in mat.node_tree.nodes:
+        if node.type == 'BSDF_PRINCIPLED':
+            return node
+    for node in mat.node_tree.nodes:
+        if node.type == 'BSDF_DIFFUSE':
+            return node
+    return None
+
+
+def _cc_get_basecolor_input(bsdf_node):
+    if bsdf_node is None:
+        return None
+    if bsdf_node.type == 'BSDF_PRINCIPLED':
+        return bsdf_node.inputs.get("Base Color")
+    if bsdf_node.type == 'BSDF_DIFFUSE':
+        return bsdf_node.inputs.get("Color")
+    return None
+
+
+def _cc_find_upstream_image_node(input_socket, max_depth=32):
+    if input_socket is None or not input_socket.is_linked:
+        return None
+
+    stack = [(link.from_node, 0) for link in input_socket.links]
+    visited = set()
+    while stack:
+        node, depth = stack.pop()
+        if node is None:
+            continue
+        key = node.as_pointer()
+        if key in visited:
+            continue
+        visited.add(key)
+
+        if node.type == 'TEX_IMAGE':
+            return node
+
+        if depth >= max_depth:
+            continue
+        for sock in node.inputs:
+            for link in sock.links:
+                stack.append((link.from_node, depth + 1))
+    return None
+
+
+def _cc_clear_input_links(links, input_socket):
+    if input_socket is None:
+        return
+    for link in list(input_socket.links):
+        links.remove(link)
+
+
+def _cc_find_original_image_node(mat, base_input=None, mark_role=False):
+    node = _cc_find_node_by_role(mat, "original")
+    if node and node.type == 'TEX_IMAGE':
+        return node
+
+    legacy = _cc_find_legacy_node(mat, "original", type_hint='TEX_IMAGE')
+    if legacy:
+        if mark_role:
+            _cc_set_role(legacy, "original")
+        return legacy
+
+    if base_input is not None:
+        upstream = _cc_find_upstream_image_node(base_input)
+        if upstream:
+            if mark_role:
+                _cc_set_role(upstream, "original")
+            return upstream
+    return None
+
+
+def _cc_find_cc_image_node(mat, mark_role=False):
+    node = _cc_find_node_by_role(mat, "cc_image")
+    if node and node.type == 'TEX_IMAGE':
+        return node
+    legacy = _cc_find_legacy_node(mat, "cc_image", type_hint='TEX_IMAGE')
+    if legacy:
+        if mark_role:
+            _cc_set_role(legacy, "cc_image")
+        return legacy
+    return None
+
+
+def _cc_get_or_create_cc_group_node(mat, cc_nodegroup):
+    if mat is None or not mat.use_nodes or mat.node_tree is None:
+        return None
+    nodes = mat.node_tree.nodes
+
+    node = _cc_find_node_by_role(mat, "cc_node")
+    if node is None:
+        legacy = _cc_find_legacy_node(mat, "cc_node")
+        if legacy and legacy.type == 'GROUP':
+            node = legacy
+    if node is None:
+        node = nodes.new(type="ShaderNodeGroup")
+    node.name = "cc_node"
+    node.label = "Color Correction"
+    node.node_tree = cc_nodegroup
+    _cc_set_role(node, "cc_node")
+    return node
+
+
+def _cc_report_material_issue(obj_name, mat_name, reason, collector):
+    collector.append(f"{obj_name} / {mat_name}: {reason}")
+
+
+def cc_collect_selected_materials(context):
+    unique = {}
+    for obj in context.selected_objects:
+        if obj.type != 'MESH':
+            continue
+        for matslot in obj.material_slots:
+            mat = matslot.material
+            if mat is None:
+                continue
+            key = mat.name_full
+            if key not in unique:
+                unique[key] = (obj.name, mat)
+    return list(unique.values())
+
+
+def cc_material_is_supported(mat):
+    if mat is None:
+        return (False, "Missing material")
+    if not mat.use_nodes or mat.node_tree is None:
+        return (False, "Nodes are disabled")
+    bsdf = _cc_get_bsdf_node(mat)
+    if bsdf is None:
+        return (False, "No Principled/Diffuse BSDF found")
+    base_input = _cc_get_basecolor_input(bsdf)
+    if base_input is None:
+        return (False, "BSDF has no color input")
+    source = _cc_find_original_image_node(mat, base_input=base_input)
+    if source is None:
+        return (False, "No upstream image node connected to base color")
+    return (True, "")
+
+
+def cc_scan_selected_materials(context):
+    summary = {"total": 0, "ready": 0, "unsupported": 0}
+    for _, mat in cc_collect_selected_materials(context):
+        summary["total"] += 1
+        ok, _ = cc_material_is_supported(mat)
+        if ok:
+            summary["ready"] += 1
+        else:
+            summary["unsupported"] += 1
+    return summary
+
+
+def cc_find_node_by_role(mat, role):
+    return _cc_find_node_by_role(mat, role)
+
+
+def cc_find_legacy_node(mat, name_hint, type_hint=None):
+    return _cc_find_legacy_node(mat, name_hint, type_hint=type_hint)
+
+
+def cc_find_cc_image_node(mat):
+    return _cc_find_cc_image_node(mat)
+
+
+def cc_report_material_issue(obj_name, mat_name, reason, collector):
+    _cc_report_material_issue(obj_name, mat_name, reason, collector)
+
+
 ############ QUESTA PARTE NON DOVREBBE PIU' SERVIRE NEL BLENDER 2.8 ############
 def bi2cycles():
     for obj in bpy.context.selected_objects:
@@ -692,29 +1004,83 @@ def bi2cycles():
 ####################################################################################
 
 def cc_node_to_mat(mat, cc_nodegroup):#(ob,context):
-    print("Voglio attaccare al materiale "+ mat.name + " il nodo gruppo: " + cc_nodegroup.name)
-    #cc_image_node, cc_node, original_node, diffuse_node, source_paint_node = node_retriever(mat, "all")
+    if mat is None:
+        return (False, "Missing material")
+    if not mat.use_nodes or mat.node_tree is None:
+        return (False, "Nodes are disabled")
+
+    print("Voglio attaccare al materiale " + mat.name + " il nodo gruppo: " + cc_nodegroup.name)
     links = mat.node_tree.links
-    nodes = mat.node_tree.nodes
-    mainNode = node_retriever(mat, "Principled BSDF")
-    mainNode.name = "diffuse"
+    bsdf_node = _cc_get_bsdf_node(mat)
+    if bsdf_node is None:
+        return (False, "No Principled/Diffuse BSDF found")
 
-    teximg = node_retriever(mat, "Image Texture")
-    teximg.name = "original"
+    base_input = _cc_get_basecolor_input(bsdf_node)
+    if base_input is None:
+        return (False, "BSDF has no color input")
 
-    print("Ho letto il materiale ed ho trovato una immagine di nome: " + teximg.image.name)
-    colcor = nodes.new(type="ShaderNodeGroup")
- #   colcor.node_tree = cc_nodegroup
-    print(cc_nodegroup)
-    colcor.node_tree = cc_nodegroup
-#    x_img = teximg.location[0]
-#    x_dif = mainNode.location[0]
-    x = (teximg.location[0]+mainNode.location[0])/2
-    y = (teximg.location[1]+mainNode.location[1])/2
+    teximg = _cc_find_original_image_node(mat, base_input=base_input, mark_role=True)
+    if teximg is None:
+        return (False, "No upstream image node connected to base color")
+    _cc_set_role(teximg, "original")
+
+    if teximg.image is not None:
+        print("Ho letto il materiale ed ho trovato una immagine di nome: " + teximg.image.name)
+
+    colcor = _cc_get_or_create_cc_group_node(mat, cc_nodegroup)
+    if colcor is None:
+        return (False, "Cannot create color correction group node")
+
+    x = (teximg.location[0] + bsdf_node.location[0]) / 2
+    y = (teximg.location[1] + bsdf_node.location[1]) / 2
     colcor.location = (x, y)
-    colcor.name = "cc_node"
+
+    if colcor.inputs and colcor.inputs[0]:
+        _cc_clear_input_links(links, colcor.inputs[0])
+    if colcor.outputs and colcor.outputs[0]:
+        for link in list(colcor.outputs[0].links):
+            links.remove(link)
+    _cc_clear_input_links(links, base_input)
+
     links.new(teximg.outputs[0], colcor.inputs[0])
-    links.new(colcor.outputs[0], mainNode.inputs[0])
+    links.new(colcor.outputs[0], base_input)
+    return (True, "")
+
+
+def cc_apply_setup(mat, keep_backup=True):
+    if mat is None or not mat.use_nodes or mat.node_tree is None:
+        return (False, "Nodes are disabled")
+    nodes = mat.node_tree.nodes
+    links = mat.node_tree.links
+    bsdf = _cc_get_bsdf_node(mat)
+    base_input = _cc_get_basecolor_input(bsdf)
+    if base_input is None:
+        return (False, "No valid BSDF base color input")
+
+    cc_image = _cc_find_cc_image_node(mat, mark_role=True)
+    if cc_image is None:
+        return (False, "cc_image node not found")
+
+    original = _cc_find_original_image_node(mat, base_input=base_input, mark_role=True)
+    if keep_backup and original and original.image:
+        backup = _cc_find_node_by_role(mat, "backup")
+        if backup is None:
+            backup = nodes.new('ShaderNodeTexImage')
+            backup.name = "original_backup"
+            backup.label = "Original Backup"
+        backup.image = original.image
+        backup.location = (original.location[0], original.location[1] - 260)
+        backup.hide = True
+        backup.mute = True
+        _cc_set_role(backup, "backup")
+
+    _cc_clear_input_links(links, base_input)
+    links.new(cc_image.outputs[0], base_input)
+
+    cc_node = _cc_find_node_by_role(mat, "cc_node") or _cc_find_legacy_node(mat, "cc_node")
+    if cc_node is not None:
+        nodes.remove(cc_node)
+    return (True, "")
 
 def remove_node(mat, node_to_remove):
     node = node_retriever(mat, node_to_remove)

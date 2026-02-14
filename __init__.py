@@ -833,6 +833,18 @@ def register():
         description="Show experimental tools in 3D Survey Collection panels",
     )
 
+    bpy.types.Scene.e3dsc_stats_strict = BoolProperty(
+        name="Strict statistics mode",
+        default=False,
+        description="Fail statistics commands if materials or textures are missing",
+    )
+
+    bpy.types.Scene.e3dsc_stats_prompt_export = BoolProperty(
+        name="Prompt export after MeanRes",
+        default=False,
+        description="Open Export Stats file dialog automatically after MeanRes",
+    )
+
     
 def unregister():
 
@@ -900,3 +912,5 @@ def unregister():
     del bpy.types.Scene.instanced_export
     del bpy.types.Scene.collgerarchy_to_foldtree
     del bpy.types.Scene.e3dsc_enable_experimental
+    del bpy.types.Scene.e3dsc_stats_strict
+    del bpy.types.Scene.e3dsc_stats_prompt_export

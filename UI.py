@@ -44,6 +44,7 @@ class VIEW3D_PT_mesh_analyze(Panel, View3DCheckPanel):
 
     def draw(self, context):
         layout = self.layout
+        scene = context.scene
 
         # TODO, presets
 
@@ -53,6 +54,11 @@ class VIEW3D_PT_mesh_analyze(Panel, View3DCheckPanel):
         row.operator("mesh.info_area", text="Geometry")
         row.operator("mesh.info_texs", text="Textures")
         row.operator("mesh.info_texres", text="MeanRes")
+        row = layout.row(align=True)
+        row.prop(scene, "e3dsc_stats_strict", text="Strict mode")
+        row.prop(scene, "e3dsc_stats_prompt_export", text="Prompt export after MeanRes")
+        row = layout.row(align=True)
+        row.operator("export_stats.tofile", text="Export Stats", icon='EXPORT')
 
         self.draw_report(context)
 
@@ -336,6 +342,21 @@ class ToolsPanel_ccTool:
             if obj.type not in ['MESH']:
                 select_a_mesh(layout)
             else:
+                diag = cc_scan_selected_materials(context)
+                box = layout.box()
+                row = box.row(align=True)
+                row.label(text="Shared CC node group across selected materials.", icon='LINKED')
+                op = row.operator("e3dsc.help_popup", text="", icon='QUESTION')
+                op.title = "Color Correction"
+                op.text = (
+                    "Create a non-destructive color correction setup shared across selected materials. "
+                    "Supports renamed nodes by tracing the Base Color graph instead of relying on node names.\n"
+                    "Bake writes corrected textures to cc_image targets. "
+                    "Apply keeps a backup of the original texture and promotes cc_image as active color input."
+                )
+                op.url = "3DSCstructure.html#color-correction"
+                box.label(text=f"Materials ready: {diag['ready']}  |  Skipped/unsupported: {diag['unsupported']}")
+
                 activeobj = context.active_object
                 if get_nodegroupname_from_obj(obj) is None:
                     layout.operator("create.ccsetup", icon="SEQ_HISTOGRAM", text='create cc setup')
@@ -400,6 +421,7 @@ class ToolsPanel_ccTool:
                     row = layout.row()
 
                     layout.operator("applyccsetup.material", icon="FILE_TICK", text='apply cc')
+                    layout.label(text="Apply keeps original texture backup.", icon='INFO')
                 row = layout.row()
         else:
             select_a_mesh(layout)
