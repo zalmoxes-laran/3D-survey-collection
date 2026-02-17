@@ -129,6 +129,10 @@ class LODPresetItem(PropertyGroup):
         name="LOD3 Decimation Ratio",
         default=0.125, min=0.0, max=1.0
     ) # type: ignore
+    lod4_dec_ratio: FloatProperty(
+        name="LOD4 Decimation Ratio",
+        default=0.0625, min=0.0, max=1.0
+    ) # type: ignore
     lod1_tex_res: IntProperty(
         name="LOD1 Texture Resolution",
         default=2048, min=64, max=8192
@@ -140,6 +144,10 @@ class LODPresetItem(PropertyGroup):
     lod3_tex_res: IntProperty(
         name="LOD3 Texture Resolution",
         default=128, min=64, max=8192
+    ) # type: ignore
+    lod4_tex_res: IntProperty(
+        name="LOD4 Texture Resolution",
+        default=64, min=64, max=8192
     ) # type: ignore
     lod_texture_format: EnumProperty(
         name="Texture Format",
@@ -245,6 +253,11 @@ class DemPreferences(bpy.types.AddonPreferences):
         description="Default decimation ratio for LOD3",
         default=0.125, min=0.0, max=1.0
     ) # type: ignore
+    lod4_dec_ratio : bpy.props.FloatProperty(
+        name="LOD4 Decimation Ratio",
+        description="Default decimation ratio for LOD4",
+        default=0.0625, min=0.0, max=1.0
+    ) # type: ignore
     lod1_tex_res : bpy.props.IntProperty(
         name="LOD1 Texture Resolution",
         description="Default texture resolution for LOD1",
@@ -259,6 +272,11 @@ class DemPreferences(bpy.types.AddonPreferences):
         name="LOD3 Texture Resolution",
         description="Default texture resolution for LOD3",
         default=128, min=64, max=8192
+    ) # type: ignore
+    lod4_tex_res : bpy.props.IntProperty(
+        name="LOD4 Texture Resolution",
+        description="Default texture resolution for LOD4",
+        default=64, min=64, max=8192
     ) # type: ignore
     lod_texture_format : bpy.props.EnumProperty(
         name="Texture Format",
@@ -376,12 +394,14 @@ class DemPreferences(bpy.types.AddonPreferences):
             col.prop(self, "lod1_dec_ratio", text="LOD1")
             col.prop(self, "lod2_dec_ratio", text="LOD2")
             col.prop(self, "lod3_dec_ratio", text="LOD3")
+            col.prop(self, "lod4_dec_ratio", text="LOD4")
             col.separator()
 
             col.label(text="Texture Resolutions:")
             col.prop(self, "lod1_tex_res", text="LOD1")
             col.prop(self, "lod2_tex_res", text="LOD2")
             col.prop(self, "lod3_tex_res", text="LOD3")
+            col.prop(self, "lod4_tex_res", text="LOD4")
             col.separator()
 
             col.label(text="Options:")
@@ -697,6 +717,11 @@ def register():
         name = "LOD3 decimation ratio",
         default = 0.035,
         description = "Define the decimation ratio of the LOD 3",
+        )
+    bpy.types.Scene.LOD4_dec_ratio = FloatProperty(
+        name = "LOD4 decimation ratio",
+        default = 0.02,
+        description = "Define the decimation ratio of the LOD 4",
         )
 
     bpy.types.Scene.BL_undistorted_path = StringProperty(

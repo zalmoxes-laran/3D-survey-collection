@@ -1,5 +1,6 @@
 import bpy
 import os
+import re
 from pathlib import Path
 import math
 from bpy.props import (StringProperty,
@@ -74,7 +75,7 @@ class ImportLinkedLOD(Operator, ImportHelper):
     use_cursor_location: BoolProperty(
         name="Place at Cursor",
         description="Place imported objects at 3D cursor location",
-        default=False,
+        default=True,
     )
     
     arrange_objects: BoolProperty(
@@ -106,6 +107,12 @@ class ImportLinkedLOD(Operator, ImportHelper):
     display_bounds: BoolProperty(
         name="Display as Bounds",
         description="Display objects as bounding boxes for better performance",
+        default=True,
+    )
+
+    remove_lod_suffix_from_object_name: BoolProperty(
+        name="Remove _LODx from Object Name",
+        description="If enabled, imported object names will have trailing _LODx removed (mesh names are unchanged)",
         default=True,
     )
     
@@ -150,21 +157,51 @@ class ImportLinkedLOD(Operator, ImportHelper):
         box.prop(self, "display_bounds")
         if self.display_bounds:
             box.prop(self, "bounds_threshold")
+
+        box = layout.box()
+        box.label(text="Naming:")
+        box.prop(self, "remove_lod_suffix_from_object_name")
     
     def execute(self, context):
-        # Get selected file(s) or directory
-        if self.files and len(self.files) > 0:
-            # Multiple files were selected
-            blend_files = [os.path.join(os.path.dirname(self.filepath), file.name) for file in self.files]
-        else:
-            # Directory or single file was selected
-            path = self.directory if self.directory else os.path.dirname(self.filepath)
-            if os.path.isdir(path):
-                # Directory selected
-                blend_files = self.find_blend_files(path)
+        def _is_blend_file(path):
+            return os.path.isfile(path) and path.lower().endswith('.blend')
+
+        def _normalize_selection_paths():
+            normalized_blend_files = []
+            skipped_inputs = []
+
+            if self.files and len(self.files) > 0:
+                base_dir = os.path.dirname(self.filepath)
+                for file_item in self.files:
+                    candidate_path = os.path.join(base_dir, file_item.name)
+                    if _is_blend_file(candidate_path):
+                        normalized_blend_files.append(candidate_path)
+                    elif os.path.isdir(candidate_path):
+                        normalized_blend_files.extend(self.find_blend_files(candidate_path))
+                    else:
+                        skipped_inputs.append(candidate_path)
             else:
-                # Single file selected
-                blend_files = [self.filepath]
+                path = self.directory if self.directory else self.filepath
+                if os.path.isdir(path):
+                    normalized_blend_files = self.find_blend_files(path)
+                elif _is_blend_file(path):
+                    normalized_blend_files = [path]
+                else:
+                    skipped_inputs.append(path)
+
+            return normalized_blend_files, skipped_inputs
+
+        # Get selected file(s) or directory
+        blend_files, skipped_inputs = _normalize_selection_paths()
+        if skipped_inputs:
+            self.report({'WARNING'}, f"Skipped {len(skipped_inputs)} invalid selection(s) (not .blend files).")
+            print("\n=== Linked LOD Skipped Inputs ===")
+            for skipped in skipped_inputs:
+                print(f"- {skipped}")
+
+        if not blend_files:
+            self.report({'WARNING'}, "No valid .blend files found in the selection.")
+            return {'CANCELLED'}
         
         # Check how many files will be imported and ask for confirmation if too many
         if len(blend_files) > 5:
@@ -182,7 +219,8 @@ class ImportLinkedLOD(Operator, ImportHelper):
                                                        arrangement_type=self.arrangement_type,
                                                        spacing=self.spacing,
                                                        display_bounds=self.display_bounds,
-                                                       bounds_threshold=self.bounds_threshold)
+                                                       bounds_threshold=self.bounds_threshold,
+                                                       remove_lod_suffix_from_object_name=self.remove_lod_suffix_from_object_name)
             return {'FINISHED'}
         
         # Proceed with import
@@ -208,12 +246,21 @@ class ImportLinkedLOD(Operator, ImportHelper):
         """Import linked meshes with LOD suffix from blend files"""
         # Store original cursor location if needed
         original_cursor_location = context.scene.cursor.location.copy()
+        lod_suffix = f"LOD{self.lod_level}"
         
         # Initialize variables for arranging objects
         imported_objects = []
+        failed_unreadable_files = []
+        failed_missing_lod_files = []
+        failed_other_errors = []
+        processed_files = 0
         
         # Process each blend file
         for file_idx, blend_file in enumerate(blend_files):
+            processed_files += 1
+            blend_file_label = os.path.basename(os.path.normpath(blend_file))
+            if not blend_file_label:
+                blend_file_label = blend_file
             try:
                 # Make path relative if requested
                 if self.relative_path:
@@ -221,25 +268,31 @@ class ImportLinkedLOD(Operator, ImportHelper):
                 else:
                     library_path = blend_file
                 
-                lod_suffix = f"LOD{self.lod_level}"
-                
                 # Link meshes with specific LOD suffix
-                with bpy.data.libraries.load(library_path, link=True) as (data_from, data_to):
-                    # Find meshes with the specified LOD suffix
-                    meshes_to_link = [name for name in data_from.meshes if name.endswith(lod_suffix)]
-                    
-                    if not meshes_to_link:
-                        self.report({'WARNING'}, f"No meshes with {lod_suffix} suffix found in {os.path.basename(blend_file)}")
-                        continue
-                    
-                    # Link the found meshes
-                    data_to.meshes = meshes_to_link
+                try:
+                    with bpy.data.libraries.load(library_path, link=True) as (data_from, data_to):
+                        # Find meshes with the specified LOD suffix
+                        meshes_to_link = [name for name in data_from.meshes if name.endswith(lod_suffix)]
+
+                        if not meshes_to_link:
+                            failed_missing_lod_files.append(blend_file_label)
+                            continue
+
+                        # Link the found meshes
+                        data_to.meshes = meshes_to_link
+                except Exception as e:
+                    failed_unreadable_files.append((blend_file_label, str(e)))
+                    continue
                 
                 # Create objects for linked meshes
                 for mesh in data_to.meshes:
                     if mesh is not None:
+                        object_name = mesh.name
+                        if self.remove_lod_suffix_from_object_name:
+                            object_name = re.sub(r"_LOD\d+$", "", object_name)
+
                         # Create a new object with the linked mesh
-                        obj = bpy.data.objects.new(mesh.name, mesh)
+                        obj = bpy.data.objects.new(object_name, mesh)
                         
                         # Link the object to the active collection
                         context.collection.objects.link(obj)
@@ -251,7 +304,7 @@ class ImportLinkedLOD(Operator, ImportHelper):
                         imported_objects.append(obj)
                 
             except Exception as e:
-                self.report({'ERROR'}, f"Error importing from {os.path.basename(blend_file)}: {str(e)}")
+                failed_other_errors.append((blend_file_label, str(e)))
         
         # Arrange objects if needed
         if self.arrange_objects and imported_objects:
@@ -272,6 +325,31 @@ class ImportLinkedLOD(Operator, ImportHelper):
             self.report({'INFO'}, f"Successfully imported {len(imported_objects)} objects with {lod_suffix} suffix")
         else:
             self.report({'WARNING'}, f"No objects with {lod_suffix} suffix were imported")
+
+        # Final issues summary for UI and console output
+        issues_total = len(failed_unreadable_files) + len(failed_missing_lod_files) + len(failed_other_errors)
+        if issues_total > 0:
+            self.report(
+                {'WARNING'},
+                f"Import completed with issues: {len(failed_unreadable_files)} unreadable files, "
+                f"{len(failed_missing_lod_files)} files without {lod_suffix}, "
+                f"{len(failed_other_errors)} other errors."
+            )
+
+            print("\n=== Linked LOD Import Issues ===")
+            print(f"Processed files: {processed_files}")
+
+            print(f"\nUnreadable files ({len(failed_unreadable_files)}):")
+            for filename, error_msg in failed_unreadable_files:
+                print(f"- {filename}: {error_msg}")
+
+            print(f"\nMissing {lod_suffix} ({len(failed_missing_lod_files)}):")
+            for filename in failed_missing_lod_files:
+                print(f"- {filename}")
+
+            print(f"\nOther errors ({len(failed_other_errors)}):")
+            for filename, error_msg in failed_other_errors:
+                print(f"- {filename}: {error_msg}")
         
         return {'FINISHED'}
     
@@ -320,6 +398,7 @@ class OBJECT_OT_ImportLinkedLODConfirmDialog(Operator):
     spacing: FloatProperty()
     display_bounds: BoolProperty()
     bounds_threshold: IntProperty()
+    remove_lod_suffix_from_object_name: BoolProperty()
     
     def execute(self, context):
         # Create an instance of ImportLinkedLOD to call its methods
@@ -356,6 +435,7 @@ class OBJECT_OT_ImportLinkedLODConfirmDialog(Operator):
             temp_op.spacing = self.spacing
             temp_op.display_bounds = self.display_bounds
             temp_op.bounds_threshold = self.bounds_threshold
+            temp_op.remove_lod_suffix_from_object_name = self.remove_lod_suffix_from_object_name
             
             temp_op.import_linked_lod(temp_op, context, blend_files)
             

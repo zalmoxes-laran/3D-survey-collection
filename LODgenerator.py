@@ -103,6 +103,8 @@ def ratio_for_current_lod(lod, context):
         ratio = context.scene.LOD2_dec_ratio
     if lod == 3:
         ratio = context.scene.LOD3_dec_ratio
+    if lod == 4:
+        ratio = context.scene.LOD4_dec_ratio
     return ratio
 
 def tex_res_for_current_lod(lod, context):
@@ -112,6 +114,8 @@ def tex_res_for_current_lod(lod, context):
         tex_res = context.scene.LOD2_tex_res
     if lod == 3:
         tex_res = context.scene.LOD3_tex_res
+    if lod == 4:
+        tex_res = context.scene.LOD4_tex_res
     return tex_res
 
 def update_lod_progress(context, task="", current_obj=0, total_obj=0, current_lod=0, total_lod=0, elapsed=0.0):
@@ -182,9 +186,11 @@ def _copy_scene_to_preset(scene, preset):
     preset.lod1_dec_ratio = scene.LOD1_dec_ratio
     preset.lod2_dec_ratio = scene.LOD2_dec_ratio
     preset.lod3_dec_ratio = scene.LOD3_dec_ratio
+    preset.lod4_dec_ratio = scene.LOD4_dec_ratio
     preset.lod1_tex_res = scene.LOD1_tex_res
     preset.lod2_tex_res = scene.LOD2_tex_res
     preset.lod3_tex_res = scene.LOD3_tex_res
+    preset.lod4_tex_res = scene.LOD4_tex_res
     preset.lod_pad_on = scene.LOD_pad_on
     preset.lod_use_scene_settings = scene.LOD_use_scene_settings
     preset.lod_atlas_uv_recalc = scene.atlas_uv_recalc
@@ -199,9 +205,11 @@ def _copy_preset_to_scene(scene, preset):
     scene.LOD1_dec_ratio = preset.lod1_dec_ratio
     scene.LOD2_dec_ratio = preset.lod2_dec_ratio
     scene.LOD3_dec_ratio = preset.lod3_dec_ratio
+    scene.LOD4_dec_ratio = preset.lod4_dec_ratio
     scene.LOD1_tex_res = preset.lod1_tex_res
     scene.LOD2_tex_res = preset.lod2_tex_res
     scene.LOD3_tex_res = preset.lod3_tex_res
+    scene.LOD4_tex_res = preset.lod4_tex_res
     scene.LOD_pad_on = preset.lod_pad_on
     scene.LOD_use_scene_settings = preset.lod_use_scene_settings
     scene.atlas_uv_recalc = preset.lod_atlas_uv_recalc
@@ -216,9 +224,11 @@ def _copy_legacy_defaults_to_preset(prefs, preset):
     preset.lod1_dec_ratio = prefs.lod1_dec_ratio
     preset.lod2_dec_ratio = prefs.lod2_dec_ratio
     preset.lod3_dec_ratio = prefs.lod3_dec_ratio
+    preset.lod4_dec_ratio = prefs.lod4_dec_ratio
     preset.lod1_tex_res = prefs.lod1_tex_res
     preset.lod2_tex_res = prefs.lod2_tex_res
     preset.lod3_tex_res = prefs.lod3_tex_res
+    preset.lod4_tex_res = prefs.lod4_tex_res
     preset.lod_pad_on = prefs.lod_pad_on
     preset.lod_use_scene_settings = prefs.lod_use_scene_settings
     preset.lod_atlas_uv_recalc = prefs.lod_atlas_uv_recalc
@@ -909,6 +919,14 @@ class ToolsPanelLODgenerator:
                         col.prop(scene, 'LOD3_dec_ratio', icon='BLENDER', toggle=True, text="")
                         col = split.column()
                         col.prop(scene, 'LOD3_tex_res', icon='BLENDER', toggle=True, text="")
+                        if scene.LODnum >= 4:
+                            split = layout.split()
+                            col = split.column()
+                            col.label(text="LOD 4")
+                            col = split.column()
+                            col.prop(scene, 'LOD4_dec_ratio', icon='BLENDER', toggle=True, text="")
+                            col = split.column()
+                            col.prop(scene, 'LOD4_tex_res', icon='BLENDER', toggle=True, text="")
             
             row = layout.row()            
             row.operator("lod.creation", text='-->    generate LODs    <--')
@@ -1123,9 +1141,11 @@ class OBJECT_OT_lod_preset_duplicate_active(Operator):
         new_preset.lod1_dec_ratio = preset.lod1_dec_ratio
         new_preset.lod2_dec_ratio = preset.lod2_dec_ratio
         new_preset.lod3_dec_ratio = preset.lod3_dec_ratio
+        new_preset.lod4_dec_ratio = preset.lod4_dec_ratio
         new_preset.lod1_tex_res = preset.lod1_tex_res
         new_preset.lod2_tex_res = preset.lod2_tex_res
         new_preset.lod3_tex_res = preset.lod3_tex_res
+        new_preset.lod4_tex_res = preset.lod4_tex_res
         new_preset.lod_pad_on = preset.lod_pad_on
         new_preset.lod_use_scene_settings = preset.lod_use_scene_settings
         new_preset.lod_atlas_uv_recalc = preset.lod_atlas_uv_recalc
@@ -1260,6 +1280,11 @@ def register():
         default=128,
         description="Enter the resolution for the texture of the LOD3"
     )
+    bpy.types.Scene.LOD4_tex_res = bpy.props.IntProperty(
+        name="Resolution Texture of the LOD4",
+        default=64,
+        description="Enter the resolution for the texture of the LOD4"
+    )
     bpy.types.Scene.LOD_pad_on = bpy.props.BoolProperty(
         name="Padding ratio of the LOD",
         default=True,
@@ -1360,9 +1385,11 @@ def unregister():
     del bpy.types.Scene.LOD1_tex_res
     del bpy.types.Scene.LOD2_tex_res
     del bpy.types.Scene.LOD3_tex_res
+    del bpy.types.Scene.LOD4_tex_res
     del bpy.types.Scene.LOD1_dec_ratio
     del bpy.types.Scene.LOD2_dec_ratio
     del bpy.types.Scene.LOD3_dec_ratio
+    del bpy.types.Scene.LOD4_dec_ratio
     del bpy.types.Scene.LOD_pad_on
     del bpy.types.Scene.LOD_use_scene_settings
     del bpy.types.Scene.atlas_uv_recalc
