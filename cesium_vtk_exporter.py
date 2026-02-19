@@ -9,6 +9,7 @@ import subprocess
 import shutil
 from contextlib import contextmanager
 import math
+import time
 
 import bpy
 import bmesh
@@ -202,6 +203,158 @@ def _resolve_work_dir(scene):
         return bpy.path.abspath(scene.cesium_vtk_work_dir).strip()
     path, _ = _get_default_temp_work_dir()
     return path
+
+
+def _redraw_3d_view(context):
+    try:
+        for window in context.window_manager.windows:
+            for area in window.screen.areas:
+                if area.type == 'VIEW_3D':
+                    area.tag_redraw()
+        bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
+    except Exception:
+        pass
+
+
+def _update_cesium_progress(context, task="", current_mesh=0, total_meshes=0, elapsed=0.0):
+    scene = context.scene
+    if task:
+        scene.cesium_vtk_progress_task = task
+    if total_meshes > 0:
+        scene.cesium_vtk_progress_current_mesh = current_mesh
+        scene.cesium_vtk_progress_total_meshes = total_meshes
+    if elapsed >= 0.0:
+        scene.cesium_vtk_progress_elapsed = elapsed
+    _redraw_3d_view(context)
+
+
+def _add_to_cesium_log(context, message, max_lines=30):
+    scene = context.scene
+    msg = (message or "").strip()
+    if not msg:
+        return
+    if scene.cesium_vtk_progress_log:
+        scene.cesium_vtk_progress_log += "\n" + msg
+    else:
+        scene.cesium_vtk_progress_log = msg
+    log_lines = scene.cesium_vtk_progress_log.split('\n')
+    if len(log_lines) > max_lines:
+        scene.cesium_vtk_progress_log = '\n'.join(log_lines[-max_lines:])
+    _redraw_3d_view(context)
+
+
+def _snapshot_output_files(root_dir):
+    files = set()
+    if not root_dir or not os.path.isdir(root_dir):
+        return files
+    for current_root, _, names in os.walk(root_dir):
+        for name in names:
+            abs_path = os.path.join(current_root, name)
+            rel = os.path.relpath(abs_path, root_dir).replace("\\", "/")
+            files.add(rel)
+    return files
+
+
+def _summarize_generated_files(file_rel_paths):
+    glb_count = 0
+    b3dm_count = 0
+    tileset_count = 0
+    subtree_dirs = set()
+    for rel in file_rel_paths:
+        low = rel.lower()
+        if low.endswith(".glb"):
+            glb_count += 1
+        elif low.endswith(".b3dm"):
+            b3dm_count += 1
+        elif low.endswith("tileset.json"):
+            tileset_count += 1
+            if low != "tileset.json":
+                subtree_dirs.add(rel.rsplit("/", 1)[0] if "/" in rel else "")
+    return {
+        "glb": glb_count,
+        "b3dm": b3dm_count,
+        "tiles": glb_count + b3dm_count,
+        "tilesets": tileset_count,
+        "subtrees": len([d for d in subtree_dirs if d]),
+    }
+
+
+def _count_texture_nodes_on_object(obj):
+    textures = set()
+    if obj is None:
+        return 0
+    for slot in obj.material_slots:
+        mat = slot.material
+        if not mat or not mat.use_nodes or not mat.node_tree:
+            continue
+        for node in mat.node_tree.nodes:
+            if node.type != 'TEX_IMAGE':
+                continue
+            image = getattr(node, "image", None)
+            if image is None:
+                continue
+            key = bpy.path.abspath(image.filepath) if image.filepath else image.name
+            textures.add(key)
+    return len(textures)
+
+
+def _count_texture_files_in_dir(path):
+    if not path or not os.path.isdir(path):
+        return 0
+    exts = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".webp", ".bmp", ".exr", ".hdr"}
+    count = 0
+    for name in os.listdir(path):
+        if os.path.splitext(name)[1].lower() in exts:
+            count += 1
+    return count
+
+
+def _collect_mesh_stats(context, scene, job):
+    stats = {
+        "faces": 0,
+        "vertices": 0,
+        "area_m2": 0.0,
+        "textures": 0,
+    }
+    if job["kind"] == "ACTIVE" and job.get("object") is not None:
+        obj = job["object"]
+        depsgraph = context.evaluated_depsgraph_get()
+        eval_obj = obj.evaluated_get(depsgraph)
+        mesh = eval_obj.to_mesh()
+        if mesh is None:
+            return stats
+        try:
+            stats["faces"] = len(mesh.polygons)
+            stats["vertices"] = len(mesh.vertices)
+            local_area = sum(poly.area for poly in mesh.polygons)
+            scale_vec = obj.matrix_world.to_scale()
+            area_scale = (
+                abs(scale_vec.x * scale_vec.y) +
+                abs(scale_vec.x * scale_vec.z) +
+                abs(scale_vec.y * scale_vec.z)
+            ) / 3.0
+            world_area_bu2 = local_area * max(area_scale, 1e-9)
+            scale_length = float(getattr(scene.unit_settings, "scale_length", 1.0) or 1.0)
+            stats["area_m2"] = world_area_bu2 * (scale_length ** 2)
+            stats["textures"] = _count_texture_nodes_on_object(obj)
+        finally:
+            eval_obj.to_mesh_clear()
+        return stats
+
+    texture_dir = bpy.path.abspath(scene.cesium_vtk_texture_base_dir).strip()
+    if not texture_dir:
+        texture_dir = job.get("intermediate_dir", "")
+    stats["textures"] = _count_texture_files_in_dir(texture_dir)
+    return stats
+
+
+def _format_cesium_mesh_stats(obj_name, mesh_stats, file_stats, duration_s):
+    return (
+        f"{obj_name} | faces {mesh_stats['faces']} | verts {mesh_stats['vertices']} | area {mesh_stats['area_m2']:.2f} m2 | "
+        f"textures {mesh_stats['textures']} | tiles {file_stats['tiles']} "
+        f"(glb {file_stats['glb']}, b3dm {file_stats['b3dm']}) | subtrees {file_stats['subtrees']} | "
+        f"tilesets {file_stats['tilesets']} | {duration_s:.1f}s"
+    )
 
 
 def check_vtk_requirements():
@@ -483,29 +636,39 @@ def _split_face_ids(face_ids, centroids, bbox, tree_type):
     mid_z = (min_z + max_z) * 0.5
 
     bins = {}
+    groups = []
     if tree_type == 'OCTREE':
         for fid in face_ids:
             cx, cy, cz = centroids[fid]
             ix = 1 if cx >= mid_x else 0
             iy = 1 if cy >= mid_y else 0
             iz = 1 if cz >= mid_z else 0
-            key = (ix, iy, iz)
-            bins.setdefault(key, []).append(fid)
+            slot = ix + (iy * 2) + (iz * 4)
+            bins.setdefault(slot, []).append(fid)
+        for slot in range(8):
+            vals = bins.get(slot)
+            if vals:
+                groups.append((slot, vals))
     else:
         for fid in face_ids:
             cx, cy, _ = centroids[fid]
             ix = 1 if cx >= mid_x else 0
             iy = 1 if cy >= mid_y else 0
-            key = (ix, iy)
-            bins.setdefault(key, []).append(fid)
+            slot = ix + (iy * 2)
+            bins.setdefault(slot, []).append(fid)
+        for slot in range(4):
+            vals = bins.get(slot)
+            if vals:
+                groups.append((slot, vals))
 
-    return [vals for vals in bins.values() if vals]
+    return groups
 
 
-def _build_native_tree(face_ids, depth, tree_type, max_faces, min_depth, max_depth, centroids, face_mins, face_maxs):
+def _build_native_tree(face_ids, depth, tree_type, max_faces, min_depth, max_depth, centroids, face_mins, face_maxs, path_code=""):
     bbox = _bbox_union_from_face_ids(face_ids, face_mins, face_maxs)
     node = {
         "depth": depth,
+        "path_code": path_code,
         "bbox": bbox,
         "face_ids": face_ids,
         "children": [],
@@ -519,7 +682,7 @@ def _build_native_tree(face_ids, depth, tree_type, max_faces, min_depth, max_dep
     if len(split_groups) <= 1:
         return node
 
-    for group in split_groups:
+    for slot, group in split_groups:
         child = _build_native_tree(
             face_ids=group,
             depth=depth + 1,
@@ -530,6 +693,7 @@ def _build_native_tree(face_ids, depth, tree_type, max_faces, min_depth, max_dep
             centroids=centroids,
             face_mins=face_mins,
             face_maxs=face_maxs,
+            path_code=f"{path_code}{slot}",
         )
         node["children"].append(child)
 
@@ -641,6 +805,11 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
     else:
         texture_mode = "gltf"
 
+    def _uri_join(*parts):
+        return "/".join([p.strip("/\\") for p in parts if p])
+
+    data_root = "Data" if scene.cesium_native_hierarchy_layout == 'EXTERNAL_SUBTILESETS' else ""
+
     base_obj, temp_collection = _prepare_base_mesh_object(context, active_obj, coords_cfg["offset"])
     try:
         face_ids, centroids, face_mins, face_maxs = _build_face_spatial_data(base_obj.data)
@@ -663,7 +832,33 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
             centroids=centroids,
             face_mins=face_mins,
             face_maxs=face_maxs,
+            path_code="",
         )
+
+        external_subtree_map = {}
+        subtree_nodes = []
+        subtree_folder_map = {}
+        if scene.cesium_native_hierarchy_layout == 'EXTERNAL_SUBTILESETS':
+            split_depth = int(scene.cesium_native_subtileset_split_depth)
+            split_depth = max(1, split_depth)
+            split_depth = min(split_depth, max_depth)
+            _collect_nodes_at_depth(tree, split_depth, subtree_nodes)
+            subtree_nodes = [n for n in subtree_nodes if n.get("children")]
+
+            subtree_counter = 1
+            for subtree in subtree_nodes:
+                code = subtree.get("path_code", "") or f"{subtree_counter}"
+                subtree_folder = _uri_join(data_root, f"c{code}")
+                subtree_counter += 1
+                subtree_folder_map[id(subtree)] = subtree_folder
+                external_subtree_map[id(subtree)] = _uri_join(subtree_folder, "tileset.json")
+
+            for subtree in subtree_nodes:
+                subtree_leaves = []
+                _collect_native_leaves(subtree, subtree_leaves)
+                folder = subtree_folder_map.get(id(subtree))
+                for leaf in subtree_leaves:
+                    leaf["_subtree_folder"] = folder
 
         leaves = []
         _collect_native_leaves(tree, leaves)
@@ -674,24 +869,23 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
         for leaf in leaves:
             tile_id = str(tile_counter)
             tile_counter += 1
-            uri = f"{tile_id}/{tile_id}.glb"
-            abs_path = os.path.join(output_dir, uri)
+            subtree_folder = leaf.get("_subtree_folder")
+            if subtree_folder:
+                disk_rel_uri = _uri_join(subtree_folder, f"f{tile_id}.glb")
+                leaf["uri"] = f"f{tile_id}.glb"
+            else:
+                if data_root:
+                    disk_rel_uri = _uri_join(data_root, f"b{tile_id}.glb")
+                else:
+                    disk_rel_uri = _uri_join("tiles", f"{tile_id}.glb")
+                leaf["uri"] = disk_rel_uri
+            abs_path = os.path.join(output_dir, disk_rel_uri)
             ok = _export_leaf_glb(context, base_obj, temp_collection, leaf["face_ids"], abs_path)
             if not ok:
                 return False, f"Failed exporting leaf tile {tile_id}."
-            leaf["uri"] = uri
 
         root_error = max(_bbox_diag_len(tree["bbox"]), 1.0)
-        external_subtree_map = {}
         if scene.cesium_native_hierarchy_layout == 'EXTERNAL_SUBTILESETS':
-            split_depth = int(scene.cesium_native_subtileset_split_depth)
-            split_depth = max(1, split_depth)
-            split_depth = min(split_depth, max_depth)
-            subtree_nodes = []
-            _collect_nodes_at_depth(tree, split_depth, subtree_nodes)
-            subtree_nodes = [n for n in subtree_nodes if n.get("children")]
-
-            subtree_counter = 1
             for subtree in subtree_nodes:
                 subtree_root_error = max(_bbox_diag_len(subtree["bbox"]), 1.0)
                 subtree_tile = _native_tree_to_tileset_node(
@@ -700,9 +894,9 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
                     base_depth=subtree["depth"],
                     external_subtree_map=None,
                 )
-                subtree_json_name = f"subtree_{subtree_counter:03d}.json"
-                subtree_counter += 1
-                subtree_json_path = os.path.join(output_dir, subtree_json_name)
+                subtree_folder = subtree_folder_map.get(id(subtree), "")
+                subtree_json_path = os.path.join(output_dir, subtree_folder, "tileset.json")
+                os.makedirs(os.path.dirname(subtree_json_path), exist_ok=True)
                 with open(subtree_json_path, "w", encoding="utf-8") as subf:
                     json.dump(
                         {
@@ -713,7 +907,6 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
                         subf,
                         indent=2,
                     )
-                external_subtree_map[id(subtree)] = subtree_json_name
 
         tileset = {
             "asset": {"version": "1.1"},
@@ -1057,6 +1250,8 @@ class OBJECT_OT_apply_cesium_vtk_preset(bpy.types.Operator):
             scene.cesium_vtk_merge_tile_poly_data = False
             scene.cesium_vtk_merged_texture_width = 2048
             scene.cesium_vtk_tree_type = 'QUADTREE'
+            scene.cesium_native_hierarchy_layout = 'EXTERNAL_SUBTILESETS'
+            scene.cesium_native_subtileset_split_depth = 2
         elif preset == 'BALANCED':
             scene.cesium_vtk_features_per_tile = 8000
             scene.cesium_native_min_depth = 3
@@ -1064,6 +1259,7 @@ class OBJECT_OT_apply_cesium_vtk_preset(bpy.types.Operator):
             scene.cesium_vtk_merge_tile_poly_data = False
             scene.cesium_vtk_merged_texture_width = 4096
             scene.cesium_vtk_tree_type = 'QUADTREE'
+            scene.cesium_native_hierarchy_layout = 'SINGLE_JSON'
         else:  # FEW_TILES
             scene.cesium_vtk_features_per_tile = 25000
             scene.cesium_native_min_depth = 1
@@ -1071,6 +1267,7 @@ class OBJECT_OT_apply_cesium_vtk_preset(bpy.types.Operator):
             scene.cesium_vtk_merge_tile_poly_data = True
             scene.cesium_vtk_merged_texture_width = 4096
             scene.cesium_vtk_tree_type = 'OCTREE'
+            scene.cesium_native_hierarchy_layout = 'SINGLE_JSON'
 
         self.report({'INFO'}, f"Applied preset: {preset}")
         return {'FINISHED'}
@@ -1212,142 +1409,223 @@ class OBJECT_OT_export_cesium_vtk_tiles(bpy.types.Operator):
                 }
             )
 
+        total_jobs = len(jobs)
+        start_time = time.time()
+        scene.cesium_vtk_progress_active = True
+        scene.cesium_vtk_progress_task = "Initializing Cesium export..."
+        scene.cesium_vtk_progress_current_mesh = 0
+        scene.cesium_vtk_progress_total_meshes = total_jobs
+        scene.cesium_vtk_progress_elapsed = 0.0
+        scene.cesium_vtk_progress_log = ""
+        scene.cesium_vtk_progress_last_stats = ""
+        _update_cesium_progress(
+            context,
+            task="Initializing Cesium export...",
+            current_mesh=0,
+            total_meshes=total_jobs,
+            elapsed=0.0,
+        )
+        _add_to_cesium_log(context, f"Starting Cesium export for {total_jobs} mesh(es)")
+
+        def _cancel_with_progress(message):
+            _add_to_cesium_log(context, f"[ERR] {message}")
+            _update_cesium_progress(
+                context,
+                task="Failed",
+                current_mesh=scene.cesium_vtk_progress_current_mesh,
+                total_meshes=total_jobs,
+                elapsed=time.time() - start_time,
+            )
+            self.report({'ERROR'}, message)
+            return {'CANCELLED'}
+
         cleanup_dirs = []
         successful_jobs = 0
-        for job in jobs:
-            obj_name = job["obj_name"]
-            output_dir = job["output_dir"]
-            os.makedirs(output_dir, exist_ok=True)
+        try:
+            for mesh_idx, job in enumerate(jobs, start=1):
+                obj_name = job["obj_name"]
+                output_dir = job["output_dir"]
+                os.makedirs(output_dir, exist_ok=True)
 
-            if backend == 'NATIVE_SPLIT':
-                if job["kind"] != "ACTIVE" or job["object"] is None:
-                    self.report({'ERROR'}, "Native split backend currently supports only 'Export active mesh' source mode.")
-                    return {'CANCELLED'}
-                ok, msg = _run_native_split_backend(
-                    context=context,
-                    scene=scene,
-                    active_obj=job["object"],
-                    output_dir=output_dir,
-                    input_format=job["input_format"],
-                    coords_cfg=coords_cfg,
+                mesh_stats = _collect_mesh_stats(context, scene, job)
+                _update_cesium_progress(
+                    context,
+                    task=f"Processing mesh: {obj_name}",
+                    current_mesh=mesh_idx,
+                    total_meshes=total_jobs,
+                    elapsed=time.time() - start_time,
                 )
-                if not ok:
-                    self.report({'ERROR'}, f"{obj_name}: {msg}")
-                    return {'CANCELLED'}
-            else:
-                if job["kind"] == "ACTIVE":
-                    input_format = job["input_format"]
-                    intermediate_dir = job["intermediate_dir"]
-                    os.makedirs(intermediate_dir, exist_ok=True)
+                _add_to_cesium_log(
+                    context,
+                    (
+                        f"-> {obj_name}: faces {mesh_stats['faces']}, area {mesh_stats['area_m2']:.2f} m2, "
+                        f"textures {mesh_stats['textures']}"
+                    ),
+                )
 
-                    if input_format == 'GLB':
-                        input_file = os.path.join(intermediate_dir, f"{obj_name}.glb")
-                        export_format = 'GLB'
-                    elif input_format == 'OBJ':
-                        input_file = os.path.join(intermediate_dir, f"{obj_name}.obj")
-                        export_format = None
-                    else:
-                        input_file = os.path.join(intermediate_dir, f"{obj_name}.gltf")
-                        export_format = 'GLTF_SEPARATE'
+                before_files = _snapshot_output_files(output_dir)
+                mesh_start = time.time()
 
-                    with _preserve_selection(context):
-                        bpy.ops.object.select_all(action='DESELECT')
-                        job["object"].select_set(True)
-                        context.view_layer.objects.active = job["object"]
+                if backend == 'NATIVE_SPLIT':
+                    if job["kind"] != "ACTIVE" or job["object"] is None:
+                        return _cancel_with_progress("Native split backend currently supports only 'Export active mesh' source mode.")
+                    ok, msg = _run_native_split_backend(
+                        context=context,
+                        scene=scene,
+                        active_obj=job["object"],
+                        output_dir=output_dir,
+                        input_format=job["input_format"],
+                        coords_cfg=coords_cfg,
+                    )
+                    if not ok:
+                        return _cancel_with_progress(f"{obj_name}: {msg}")
+                else:
+                    if job["kind"] == "ACTIVE":
+                        input_format = job["input_format"]
+                        intermediate_dir = job["intermediate_dir"]
+                        os.makedirs(intermediate_dir, exist_ok=True)
 
-                        if input_format == 'OBJ':
-                            result = _export_obj(filepath=input_file, use_selection=True)
+                        if input_format == 'GLB':
+                            input_file = os.path.join(intermediate_dir, f"{obj_name}.glb")
+                            export_format = 'GLB'
+                        elif input_format == 'OBJ':
+                            input_file = os.path.join(intermediate_dir, f"{obj_name}.obj")
+                            export_format = None
                         else:
-                            result = bpy.ops.export_scene.gltf(
-                                filepath=input_file,
-                                use_selection=True,
-                                export_format=export_format,
-                            )
-                    if 'FINISHED' not in result:
-                        self.report({'ERROR'}, f"{obj_name}: intermediate export failed.")
-                        return {'CANCELLED'}
-                    cleanup_dirs.append(intermediate_dir)
-                else:
-                    input_file = job["input_file"]
-                    input_format = 'OBJ'
-                    intermediate_dir = job["intermediate_dir"]
+                            input_file = os.path.join(intermediate_dir, f"{obj_name}.gltf")
+                            export_format = 'GLTF_SEPARATE'
 
-                texture_dir = ""
-                if input_format == 'OBJ':
-                    texture_dir = bpy.path.abspath(scene.cesium_vtk_texture_base_dir).strip()
-                    if not texture_dir:
-                        texture_dir = intermediate_dir
+                        with _preserve_selection(context):
+                            bpy.ops.object.select_all(action='DESELECT')
+                            job["object"].select_set(True)
+                            context.view_layer.objects.active = job["object"]
 
-                payload = {
-                    "input_file": input_file,
-                    "input_format": input_format,
-                    "output_dir": output_dir,
-                    "tree_type": scene.cesium_vtk_tree_type,
-                    "features_per_tile": scene.cesium_vtk_features_per_tile,
-                    "merge_tile_poly_data": scene.cesium_vtk_merge_tile_poly_data,
-                    "merged_texture_width": scene.cesium_vtk_merged_texture_width,
-                    "texture_dir": texture_dir,
-                    "crs": coords_cfg["crs"],
-                    "proj_data_dir": proj_data_dir,
-                    "offset": coords_cfg["offset"],
-                }
-                try:
-                    return_code, stdout_txt, stderr_txt, log_path = _run_vtk_conversion_subprocess(payload, output_dir)
-                except subprocess.TimeoutExpired:
-                    self.report({'ERROR'}, f"{obj_name}: VTK conversion timed out after 1 hour.")
-                    return {'CANCELLED'}
-                except Exception as exc:
-                    self.report({'ERROR'}, f"{obj_name}: failed to start VTK conversion subprocess: {exc}")
-                    return {'CANCELLED'}
-
-                if return_code != 0:
-                    if return_code < 0:
-                        signal_num = -return_code
-                        msg = f"{obj_name}: VTK subprocess crashed with signal {signal_num}."
+                            if input_format == 'OBJ':
+                                result = _export_obj(filepath=input_file, use_selection=True)
+                            else:
+                                result = bpy.ops.export_scene.gltf(
+                                    filepath=input_file,
+                                    use_selection=True,
+                                    export_format=export_format,
+                                )
+                        if 'FINISHED' not in result:
+                            return _cancel_with_progress(f"{obj_name}: intermediate export failed.")
+                        cleanup_dirs.append(intermediate_dir)
                     else:
-                        msg = f"{obj_name}: VTK subprocess failed with exit code {return_code}."
-                    if log_path:
-                        msg += f" See log: {log_path}"
-                    elif stderr_txt:
-                        msg += f" Error: {stderr_txt[:220]}"
-                    self.report({'ERROR'}, msg)
-                    return {'CANCELLED'}
+                        input_file = job["input_file"]
+                        input_format = 'OBJ'
+                        intermediate_dir = job["intermediate_dir"]
 
-            tileset_path = os.path.join(output_dir, "tileset.json")
-            if not os.path.exists(tileset_path):
-                self.report({'WARNING'}, f"{obj_name}: conversion completed, but `{tileset_path}` was not found.")
-            successful_jobs += 1
+                    texture_dir = ""
+                    if input_format == 'OBJ':
+                        texture_dir = bpy.path.abspath(scene.cesium_vtk_texture_base_dir).strip()
+                        if not texture_dir:
+                            texture_dir = intermediate_dir
 
-        if scene.cesium_vtk_cleanup_intermediate and source_mode == 'ACTIVE_MESH':
-            cleanup_failed = False
-            for intermediate_dir in sorted(set(cleanup_dirs)):
-                try:
-                    for file_name in os.listdir(intermediate_dir):
-                        file_path = os.path.join(intermediate_dir, file_name)
-                        if os.path.isfile(file_path):
-                            os.remove(file_path)
-                except Exception:
-                    cleanup_failed = True
-            if cleanup_failed:
-                self.report({'WARNING'}, "Intermediate files were kept for some meshes (cleanup failed).")
-        elif scene.cesium_vtk_cleanup_intermediate and source_mode != 'ACTIVE_MESH':
-            self.report({'INFO'}, "Cleanup skipped: external OBJ source is not deleted.")
+                    payload = {
+                        "input_file": input_file,
+                        "input_format": input_format,
+                        "output_dir": output_dir,
+                        "tree_type": scene.cesium_vtk_tree_type,
+                        "features_per_tile": scene.cesium_vtk_features_per_tile,
+                        "merge_tile_poly_data": scene.cesium_vtk_merge_tile_poly_data,
+                        "merged_texture_width": scene.cesium_vtk_merged_texture_width,
+                        "texture_dir": texture_dir,
+                        "crs": coords_cfg["crs"],
+                        "proj_data_dir": proj_data_dir,
+                        "offset": coords_cfg["offset"],
+                    }
+                    try:
+                        return_code, stdout_txt, stderr_txt, log_path = _run_vtk_conversion_subprocess(payload, output_dir)
+                    except subprocess.TimeoutExpired:
+                        return _cancel_with_progress(f"{obj_name}: VTK conversion timed out after 1 hour.")
+                    except Exception as exc:
+                        return _cancel_with_progress(f"{obj_name}: failed to start VTK conversion subprocess: {exc}")
 
-        if auto_stitch_parent:
-            if not scene.cesium_vtk_create_object_subdir:
-                self.report({'WARNING'}, "Auto-stitch skipped: enable 'Create object subfolder'.")
-            else:
-                ok, msg, parent_path, _, skipped = _build_parent_tileset(output_root, parent_name)
-                if ok:
-                    if skipped > 0:
-                        self.report({'WARNING'}, f"{msg} Skipped {skipped} invalid child tileset(s). Parent: {parent_path}")
-                    else:
-                        self.report({'INFO'}, f"{msg} Parent: {parent_path}")
+                    if return_code != 0:
+                        if return_code < 0:
+                            signal_num = -return_code
+                            msg = f"{obj_name}: VTK subprocess crashed with signal {signal_num}."
+                        else:
+                            msg = f"{obj_name}: VTK subprocess failed with exit code {return_code}."
+                        if log_path:
+                            msg += f" See log: {log_path}"
+                        elif stderr_txt:
+                            msg += f" Error: {stderr_txt[:220]}"
+                        return _cancel_with_progress(msg)
+
+                tileset_path = os.path.join(output_dir, "tileset.json")
+                if not os.path.exists(tileset_path):
+                    self.report({'WARNING'}, f"{obj_name}: conversion completed, but `{tileset_path}` was not found.")
+                    _add_to_cesium_log(context, f"[WARN] {obj_name}: tileset.json not found in output.")
+
+                after_files = _snapshot_output_files(output_dir)
+                generated_stats = _summarize_generated_files(after_files - before_files)
+                if generated_stats["tiles"] == 0 and generated_stats["tilesets"] == 0:
+                    generated_stats = _summarize_generated_files(after_files)
+                mesh_duration = time.time() - mesh_start
+                stats_line = _format_cesium_mesh_stats(obj_name, mesh_stats, generated_stats, mesh_duration)
+                scene.cesium_vtk_progress_last_stats = stats_line
+                _add_to_cesium_log(context, f"[OK] {stats_line}")
+
+                successful_jobs += 1
+                _update_cesium_progress(
+                    context,
+                    task=f"Completed mesh: {obj_name}",
+                    current_mesh=mesh_idx,
+                    total_meshes=total_jobs,
+                    elapsed=time.time() - start_time,
+                )
+
+            if scene.cesium_vtk_cleanup_intermediate and source_mode == 'ACTIVE_MESH':
+                cleanup_failed = False
+                for intermediate_dir in sorted(set(cleanup_dirs)):
+                    try:
+                        for file_name in os.listdir(intermediate_dir):
+                            file_path = os.path.join(intermediate_dir, file_name)
+                            if os.path.isfile(file_path):
+                                os.remove(file_path)
+                    except Exception:
+                        cleanup_failed = True
+                if cleanup_failed:
+                    self.report({'WARNING'}, "Intermediate files were kept for some meshes (cleanup failed).")
+                    _add_to_cesium_log(context, "[WARN] Cleanup intermediate files failed for some meshes.")
+            elif scene.cesium_vtk_cleanup_intermediate and source_mode != 'ACTIVE_MESH':
+                self.report({'INFO'}, "Cleanup skipped: external OBJ source is not deleted.")
+
+            if auto_stitch_parent:
+                if not scene.cesium_vtk_create_object_subdir:
+                    self.report({'WARNING'}, "Auto-stitch skipped: enable 'Create object subfolder'.")
+                    _add_to_cesium_log(context, "[WARN] Auto-stitch skipped (enable Create object subfolder).")
                 else:
-                    self.report({'WARNING'}, f"Auto-stitch skipped: {msg}")
+                    ok, msg, parent_path, _, skipped = _build_parent_tileset(output_root, parent_name)
+                    if ok:
+                        if skipped > 0:
+                            self.report({'WARNING'}, f"{msg} Skipped {skipped} invalid child tileset(s). Parent: {parent_path}")
+                            _add_to_cesium_log(context, f"[WARN] Parent rebuilt with skipped children ({skipped}).")
+                        else:
+                            self.report({'INFO'}, f"{msg} Parent: {parent_path}")
+                            _add_to_cesium_log(context, f"[OK] Parent tileset updated: {parent_path}")
+                    else:
+                        self.report({'WARNING'}, f"Auto-stitch skipped: {msg}")
+                        _add_to_cesium_log(context, f"[WARN] Auto-stitch skipped: {msg}")
 
-        self.report({'INFO'}, f"Cesium export completed for {successful_jobs} mesh(es).")
-        return {'FINISHED'}
+            total_elapsed = time.time() - start_time
+            mins = int(total_elapsed // 60)
+            secs = int(total_elapsed % 60)
+            _update_cesium_progress(
+                context,
+                task="Completed",
+                current_mesh=successful_jobs,
+                total_meshes=total_jobs,
+                elapsed=total_elapsed,
+            )
+            _add_to_cesium_log(context, f"=== Completed: {successful_jobs}/{total_jobs} mesh(es) in {mins}m {secs}s ===")
+            self.report({'INFO'}, f"Cesium export completed for {successful_jobs} mesh(es).")
+            return {'FINISHED'}
+        finally:
+            scene.cesium_vtk_progress_active = False
+            _redraw_3d_view(context)
 
 
 class VIEW3D_PT_cesium_vtk_export(bpy.types.Panel):
@@ -1409,6 +1687,39 @@ class VIEW3D_PT_cesium_vtk_export(bpy.types.Panel):
                 info_box = layout.box()
                 info_box.label(text="Tip: restart Blender after install/uninstall.")
                 return
+
+        if scene.cesium_vtk_progress_active or scene.cesium_vtk_progress_log or scene.cesium_vtk_progress_last_stats:
+            box_prog = layout.box()
+            box_prog.label(text="Cesium Export Progress", icon='TIME')
+            col = box_prog.column(align=True)
+            if scene.cesium_vtk_progress_task:
+                col.label(text=f"Task: {scene.cesium_vtk_progress_task}")
+            if scene.cesium_vtk_progress_total_meshes > 0:
+                col.label(
+                    text=(
+                        f"Mesh: {scene.cesium_vtk_progress_current_mesh}/"
+                        f"{scene.cesium_vtk_progress_total_meshes}"
+                    )
+                )
+            if scene.cesium_vtk_progress_elapsed > 0.0:
+                elapsed_minutes = int(scene.cesium_vtk_progress_elapsed // 60)
+                elapsed_seconds = int(scene.cesium_vtk_progress_elapsed % 60)
+                col.label(text=f"Elapsed: {elapsed_minutes}m {elapsed_seconds}s")
+
+            if scene.cesium_vtk_progress_last_stats:
+                box_stats = layout.box()
+                box_stats.label(text="Last Mesh Stats", icon='INFO')
+                for line in scene.cesium_vtk_progress_last_stats.split('\n')[-3:]:
+                    if line.strip():
+                        box_stats.label(text=line)
+
+            if scene.cesium_vtk_progress_log:
+                box_log = layout.box()
+                box_log.label(text="Recent Operations", icon='TEXT')
+                log_lines = scene.cesium_vtk_progress_log.split('\n')
+                for line in log_lines[-6:]:
+                    if line.strip():
+                        box_log.label(text=line)
 
         box_source = layout.box()
         box_source.label(text="Source")
@@ -1524,7 +1835,7 @@ class VIEW3D_PT_cesium_vtk_export(bpy.types.Panel):
                 adv.prop(scene, "cesium_native_hierarchy_layout")
                 if scene.cesium_native_hierarchy_layout == 'EXTERNAL_SUBTILESETS':
                     adv.prop(scene, "cesium_native_subtileset_split_depth")
-                    adv.label(text="Creates nested tileset.json references for large datasets.", icon='INFO')
+                    adv.label(text="Data/cXX/tileset.json + multiple f*.glb files.", icon='INFO')
             adv.prop(scene, "cesium_vtk_merge_tile_poly_data")
             row = adv.row()
             row.enabled = (backend == 'NATIVE_SPLIT') or req_info.get("supports_merged_texture_width", False)
@@ -1736,6 +2047,41 @@ def register():
         default="tileset.json",
         description="Filename used for parent tileset in output folder",
     )
+    bpy.types.Scene.cesium_vtk_progress_active = bpy.props.BoolProperty(
+        name="Cesium Export Active",
+        default=False,
+        description="Indicates if Cesium export is currently running",
+    )
+    bpy.types.Scene.cesium_vtk_progress_task = bpy.props.StringProperty(
+        name="Cesium Current Task",
+        default="",
+        description="Current export task description",
+    )
+    bpy.types.Scene.cesium_vtk_progress_current_mesh = bpy.props.IntProperty(
+        name="Cesium Current Mesh",
+        default=0,
+        description="Index of currently processed mesh",
+    )
+    bpy.types.Scene.cesium_vtk_progress_total_meshes = bpy.props.IntProperty(
+        name="Cesium Total Meshes",
+        default=0,
+        description="Total meshes in current export batch",
+    )
+    bpy.types.Scene.cesium_vtk_progress_elapsed = bpy.props.FloatProperty(
+        name="Cesium Elapsed Time",
+        default=0.0,
+        description="Elapsed export time in seconds",
+    )
+    bpy.types.Scene.cesium_vtk_progress_log = bpy.props.StringProperty(
+        name="Cesium Progress Log",
+        default="",
+        description="Recent Cesium export operations",
+    )
+    bpy.types.Scene.cesium_vtk_progress_last_stats = bpy.props.StringProperty(
+        name="Cesium Last Mesh Stats",
+        default="",
+        description="Statistics for last processed mesh",
+    )
 
 
 def unregister():
@@ -1768,6 +2114,13 @@ def unregister():
     del bpy.types.Scene.cesium_vtk_show_stitcher
     del bpy.types.Scene.cesium_vtk_auto_stitch_parent
     del bpy.types.Scene.cesium_vtk_parent_tileset_name
+    del bpy.types.Scene.cesium_vtk_progress_active
+    del bpy.types.Scene.cesium_vtk_progress_task
+    del bpy.types.Scene.cesium_vtk_progress_current_mesh
+    del bpy.types.Scene.cesium_vtk_progress_total_meshes
+    del bpy.types.Scene.cesium_vtk_progress_elapsed
+    del bpy.types.Scene.cesium_vtk_progress_log
+    del bpy.types.Scene.cesium_vtk_progress_last_stats
 
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
