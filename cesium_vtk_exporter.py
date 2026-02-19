@@ -351,7 +351,7 @@ def _split_face_ids(face_ids, centroids, bbox, tree_type):
     return [vals for vals in bins.values() if vals]
 
 
-def _build_native_tree(face_ids, depth, tree_type, max_faces, max_depth, centroids, face_mins, face_maxs):
+def _build_native_tree(face_ids, depth, tree_type, max_faces, min_depth, max_depth, centroids, face_mins, face_maxs):
     bbox = _bbox_union_from_face_ids(face_ids, face_mins, face_maxs)
     node = {
         "depth": depth,
@@ -360,7 +360,8 @@ def _build_native_tree(face_ids, depth, tree_type, max_faces, max_depth, centroi
         "children": [],
     }
 
-    if depth >= max_depth or len(face_ids) <= max_faces:
+    should_split = (depth < max_depth) and (depth < min_depth or len(face_ids) > max_faces)
+    if not should_split:
         return node
 
     split_groups = _split_face_ids(face_ids, centroids, bbox, tree_type)
@@ -373,6 +374,7 @@ def _build_native_tree(face_ids, depth, tree_type, max_faces, max_depth, centroi
             depth=depth + 1,
             tree_type=tree_type,
             max_faces=max_faces,
+            min_depth=min_depth,
             max_depth=max_depth,
             centroids=centroids,
             face_mins=face_mins,
@@ -440,17 +442,40 @@ def _export_leaf_glb(context, base_obj, temp_collection, keep_face_ids, filepath
                 pass
 
 
-def _native_tree_to_tileset_node(node, root_error):
+def _collect_nodes_at_depth(node, depth, out):
+    if node["depth"] == depth:
+        out.append(node)
+        return
+    for child in node.get("children", []):
+        _collect_nodes_at_depth(child, depth, out)
+
+
+def _native_tree_to_tileset_node(node, root_error, base_depth=0, external_subtree_map=None):
     tile = {
         "boundingVolume": {"box": _bbox_to_box(node["bbox"])},
         "geometricError": 0.0,
     }
 
-    if node["children"]:
-        depth = node["depth"]
-        tile["geometricError"] = root_error / (2 ** max(depth, 0))
+    local_depth = max(node["depth"] - base_depth, 0)
+    node_key = id(node)
+    if external_subtree_map and node_key in external_subtree_map:
+        tile["geometricError"] = root_error / (2 ** max(local_depth, 0))
         tile["refine"] = "REPLACE"
-        tile["children"] = [_native_tree_to_tileset_node(child, root_error) for child in node["children"]]
+        tile["content"] = {"uri": external_subtree_map[node_key]}
+        return tile
+
+    if node["children"]:
+        tile["geometricError"] = root_error / (2 ** max(local_depth, 0))
+        tile["refine"] = "REPLACE"
+        tile["children"] = [
+            _native_tree_to_tileset_node(
+                child,
+                root_error=root_error,
+                base_depth=base_depth,
+                external_subtree_map=external_subtree_map,
+            )
+            for child in node["children"]
+        ]
     else:
         uri = node.get("uri")
         if uri:
@@ -472,7 +497,9 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
             return False, "Active mesh has no faces."
 
         max_faces = int(scene.cesium_vtk_features_per_tile)
+        min_depth = int(scene.cesium_native_min_depth)
         max_depth = int(scene.cesium_native_max_depth)
+        min_depth = min(min_depth, max_depth)
         tree_type = scene.cesium_vtk_tree_type
 
         tree = _build_native_tree(
@@ -480,6 +507,7 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
             depth=0,
             tree_type=tree_type,
             max_faces=max_faces,
+            min_depth=min_depth,
             max_depth=max_depth,
             centroids=centroids,
             face_mins=face_mins,
@@ -503,10 +531,48 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
             leaf["uri"] = uri
 
         root_error = max(_bbox_diag_len(tree["bbox"]), 1.0)
+        external_subtree_map = {}
+        if scene.cesium_native_hierarchy_layout == 'EXTERNAL_SUBTILESETS':
+            split_depth = int(scene.cesium_native_subtileset_split_depth)
+            split_depth = max(1, split_depth)
+            split_depth = min(split_depth, max_depth)
+            subtree_nodes = []
+            _collect_nodes_at_depth(tree, split_depth, subtree_nodes)
+            subtree_nodes = [n for n in subtree_nodes if n.get("children")]
+
+            subtree_counter = 1
+            for subtree in subtree_nodes:
+                subtree_root_error = max(_bbox_diag_len(subtree["bbox"]), 1.0)
+                subtree_tile = _native_tree_to_tileset_node(
+                    subtree,
+                    root_error=subtree_root_error,
+                    base_depth=subtree["depth"],
+                    external_subtree_map=None,
+                )
+                subtree_json_name = f"subtree_{subtree_counter:03d}.json"
+                subtree_counter += 1
+                subtree_json_path = os.path.join(output_dir, subtree_json_name)
+                with open(subtree_json_path, "w", encoding="utf-8") as subf:
+                    json.dump(
+                        {
+                            "asset": {"version": "1.1"},
+                            "geometricError": subtree_root_error,
+                            "root": subtree_tile,
+                        },
+                        subf,
+                        indent=2,
+                    )
+                external_subtree_map[id(subtree)] = subtree_json_name
+
         tileset = {
-            "asset": {"version": "1.0"},
+            "asset": {"version": "1.1"},
             "geometricError": root_error,
-            "root": _native_tree_to_tileset_node(tree, root_error),
+            "root": _native_tree_to_tileset_node(
+                tree,
+                root_error=root_error,
+                base_depth=0,
+                external_subtree_map=external_subtree_map,
+            ),
         }
 
         tileset_path = os.path.join(output_dir, "tileset.json")
@@ -516,8 +582,13 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
         note_path = os.path.join(output_dir, "native_backend_info.txt")
         with open(note_path, "w", encoding="utf-8") as f:
             f.write("Backend: NATIVE_SPLIT\n")
+            f.write("3D Tiles version: 1.1\n")
             f.write(f"Tree type: {tree_type}\n")
+            f.write(f"Hierarchy layout: {scene.cesium_native_hierarchy_layout}\n")
+            f.write(f"Min depth: {min_depth}\n")
             f.write(f"Max depth: {max_depth}\n")
+            if scene.cesium_native_hierarchy_layout == 'EXTERNAL_SUBTILESETS':
+                f.write(f"Subtileset split depth: {scene.cesium_native_subtileset_split_depth}\n")
             f.write(f"Max faces per leaf: {max_faces}\n")
             f.write(f"Leaves: {len(leaves)}\n")
             f.write(f"Texture mode: {texture_mode}\n")
@@ -822,16 +893,22 @@ class OBJECT_OT_apply_cesium_vtk_preset(bpy.types.Operator):
 
         if preset == 'PYRAMID_AGGRESSIVE':
             scene.cesium_vtk_features_per_tile = 3000
+            scene.cesium_native_min_depth = 4
+            scene.cesium_native_max_depth = 10
             scene.cesium_vtk_merge_tile_poly_data = False
             scene.cesium_vtk_merged_texture_width = 2048
             scene.cesium_vtk_tree_type = 'QUADTREE'
         elif preset == 'BALANCED':
             scene.cesium_vtk_features_per_tile = 8000
+            scene.cesium_native_min_depth = 3
+            scene.cesium_native_max_depth = 8
             scene.cesium_vtk_merge_tile_poly_data = False
             scene.cesium_vtk_merged_texture_width = 4096
             scene.cesium_vtk_tree_type = 'QUADTREE'
         else:  # FEW_TILES
             scene.cesium_vtk_features_per_tile = 25000
+            scene.cesium_native_min_depth = 1
+            scene.cesium_native_max_depth = 6
             scene.cesium_vtk_merge_tile_poly_data = True
             scene.cesium_vtk_merged_texture_width = 4096
             scene.cesium_vtk_tree_type = 'OCTREE'
@@ -1155,11 +1232,26 @@ class VIEW3D_PT_cesium_vtk_export(bpy.types.Panel):
             box.label(text="Tree algorithm not available in this vtk build.", icon='INFO')
         box.prop(scene, "cesium_vtk_features_per_tile")
         if backend == 'NATIVE_SPLIT':
+            box.prop(scene, "cesium_native_min_depth")
             box.prop(scene, "cesium_native_max_depth")
-        box.prop(scene, "cesium_vtk_merge_tile_poly_data")
-        row = box.row()
-        row.enabled = (backend == 'NATIVE_SPLIT') or req_info.get("supports_merged_texture_width", False)
-        row.prop(scene, "cesium_vtk_merged_texture_width")
+            box.label(text="Native backend writes 3D Tiles asset.version 1.1.", icon='CHECKMARK')
+
+        adv_header = box.row(align=True)
+        icon = 'TRIA_DOWN' if scene.cesium_vtk_show_advanced else 'TRIA_RIGHT'
+        adv_header.prop(scene, "cesium_vtk_show_advanced", text="", emboss=False, icon=icon)
+        adv_header.label(text="Advanced Parameters")
+
+        if scene.cesium_vtk_show_advanced:
+            adv = box.box()
+            if backend == 'NATIVE_SPLIT':
+                adv.prop(scene, "cesium_native_hierarchy_layout")
+                if scene.cesium_native_hierarchy_layout == 'EXTERNAL_SUBTILESETS':
+                    adv.prop(scene, "cesium_native_subtileset_split_depth")
+                    adv.label(text="Creates nested tileset.json references for large datasets.", icon='INFO')
+            adv.prop(scene, "cesium_vtk_merge_tile_poly_data")
+            row = adv.row()
+            row.enabled = (backend == 'NATIVE_SPLIT') or req_info.get("supports_merged_texture_width", False)
+            row.prop(scene, "cesium_vtk_merged_texture_width")
         row = box.row()
         row.enabled = source_mode == 'ACTIVE_MESH'
         row.prop(scene, "cesium_vtk_cleanup_intermediate")
@@ -1276,12 +1368,38 @@ def register():
         min=100,
         description="Approximate complexity budget per generated tile",
     )
+    bpy.types.Scene.cesium_vtk_show_advanced = bpy.props.BoolProperty(
+        name="Show advanced parameters",
+        default=False,
+    )
     bpy.types.Scene.cesium_native_max_depth = bpy.props.IntProperty(
         name="Max tree depth",
         default=8,
         min=1,
         max=20,
         description="Maximum recursion depth for Native Split quadtree/octree",
+    )
+    bpy.types.Scene.cesium_native_min_depth = bpy.props.IntProperty(
+        name="Min tree depth",
+        default=2,
+        min=0,
+        max=20,
+        description="Force at least this depth before stopping (if split is possible)",
+    )
+    bpy.types.Scene.cesium_native_hierarchy_layout = bpy.props.EnumProperty(
+        name="Hierarchy layout",
+        items=[
+            ('SINGLE_JSON', 'Single JSON', 'One root tileset.json containing full hierarchy'),
+            ('EXTERNAL_SUBTILESETS', 'External sub-tilesets', 'Split hierarchy into referenced subtree_XXX.json files'),
+        ],
+        default='SINGLE_JSON',
+    )
+    bpy.types.Scene.cesium_native_subtileset_split_depth = bpy.props.IntProperty(
+        name="Subtileset split depth",
+        default=2,
+        min=1,
+        max=20,
+        description="Depth at which subtrees are emitted as external subtree_XXX.json files",
     )
     bpy.types.Scene.cesium_vtk_quick_preset = bpy.props.EnumProperty(
         name="Quick preset",
@@ -1330,7 +1448,11 @@ def unregister():
     del bpy.types.Scene.cesium_vtk_intermediate_format
     del bpy.types.Scene.cesium_vtk_tree_type
     del bpy.types.Scene.cesium_vtk_features_per_tile
+    del bpy.types.Scene.cesium_vtk_show_advanced
+    del bpy.types.Scene.cesium_native_min_depth
     del bpy.types.Scene.cesium_native_max_depth
+    del bpy.types.Scene.cesium_native_hierarchy_layout
+    del bpy.types.Scene.cesium_native_subtileset_split_depth
     del bpy.types.Scene.cesium_vtk_quick_preset
     del bpy.types.Scene.cesium_vtk_merge_tile_poly_data
     del bpy.types.Scene.cesium_vtk_merged_texture_width
