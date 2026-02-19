@@ -166,7 +166,6 @@ class ToolsPanelExport:
         format_id = scene.e3dsc_export_single_format if scene.e3dsc_export_mode == 'SINGLE' else scene.e3dsc_export_multi_format
         row = box.row(align=True)
         row.scale_y = 0.95
-
         if scene.e3dsc_export_mode == 'SINGLE':
             if format_id == 'OBJ':
                 row.operator("export.object", icon="OBJECT_DATA", text='Export OBJ')

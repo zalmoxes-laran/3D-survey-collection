@@ -1,9 +1,11 @@
 import subprocess
 import sys
 import os
+import re
 import bpy
 import site
 import pkg_resources
+import tempfile
 
 from bpy.props import BoolProperty, StringProperty
 
@@ -31,6 +33,37 @@ def check_external_modules():
         addon_prefs.preferences.is_external_module = False
         print("External modules are not installed")
 
+
+def _module_name_for_uninstall(module_spec):
+    return re.split(r"[<>=!~]", module_spec, maxsplit=1)[0].strip()
+
+
+def _start_background_pip(action, modules, log_path):
+    if action not in {"install", "uninstall"}:
+        raise ValueError(f"Unsupported action: {action}")
+
+    if action == "install":
+        cmd = [sys.executable, "-m", "pip", "install", "--user", "--only-binary", "all"]
+        cmd.extend(modules)
+    else:
+        cmd = [sys.executable, "-m", "pip", "uninstall", "-y"]
+        cmd.extend(_module_name_for_uninstall(m) for m in modules)
+
+    log_handle = open(log_path, "a", encoding="utf-8")
+    log_handle.write(f"\n=== 3DSC {action} start ===\n")
+    log_handle.write("Command: " + " ".join(cmd) + "\n")
+    log_handle.flush()
+
+    process = subprocess.Popen(
+        cmd,
+        stdout=log_handle,
+        stderr=subprocess.STDOUT,
+        universal_newlines=True,
+    )
+    log_handle.close()
+    return process.pid
+
+
 class OBJECT_OT_install_3dsc_missing_modules(bpy.types.Operator):
     bl_idname = "install_3dsc_missing.modules"
     bl_label = "missing modules"
@@ -51,9 +84,26 @@ class OBJECT_OT_install_3dsc_missing_modules(bpy.types.Operator):
                 list_modules = kml_modules()
             elif self.list_modules_to_install == "ezdxf":
                 list_modules = ezdxf_modules()
+            elif self.list_modules_to_install == "vtk_cesium":
+                list_modules = vtk_cesium_modules()
+            elif self.list_modules_to_install == "pyproj_cesium":
+                list_modules = pyproj_cesium_modules()
             else:
                 self.report({'ERROR'}, f"Unknown module type: {self.list_modules_to_install}")
                 return {'CANCELLED'}
+
+            if self.list_modules_to_install in {"vtk_cesium", "pyproj_cesium"}:
+                log_path = os.path.join(tempfile.gettempdir(), "3dsc_vtk_pip.log")
+                action = "install" if self.is_install else "uninstall"
+                pid = _start_background_pip(action, list_modules, log_path)
+                self.report(
+                    {'INFO'},
+                    (
+                        f"Started background {action} for vtk (PID {pid}). "
+                        f"Log: {log_path}. Restart Blender when completed."
+                    )
+                )
+                return {'FINISHED'}
                 
             if self.is_install:
                 install_modules(list_modules)
@@ -153,6 +203,22 @@ def kml_modules():
     )
 
     return list_of_modules 
+
+
+def vtk_cesium_modules():
+    """Strict dependency set for Cesium conversion via VTK."""
+    list_of_modules = [
+        "vtk>=9.2.0,<10.0.0",
+        "pyproj>=3.6.0,<4.0.0",
+    ]
+    return list_of_modules
+
+
+def pyproj_cesium_modules():
+    """Install only pyproj/proj data for Cesium CRS conversions."""
+    return [
+        "pyproj>=3.6.0,<4.0.0",
+    ]
 
 
 def install_modules(list_of_modules):

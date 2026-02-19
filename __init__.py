@@ -77,6 +77,7 @@ else:
             multimesh_manager,
             realitycapture,
             cesium_preprocessing,
+            cesium_vtk_exporter,
             orthogonal_render,
             #mets_exporter,
             camera_unreal_exporter,
@@ -685,6 +686,7 @@ def register():
     alignment_orientation_tool.register()
     #mets_exporter.register()
     TSM.register()
+    cesium_vtk_exporter.register()
     
 
 
@@ -902,6 +904,7 @@ def unregister():
     import_linked_lod.unregister()
     orthogonal_render.unregister()
     alignment_orientation_tool.unregister()
+    cesium_vtk_exporter.unregister()
     operators.help_popup.unregister()
     #mets_exporter.unregister()
 
