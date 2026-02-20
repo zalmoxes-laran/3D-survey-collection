@@ -10,6 +10,7 @@ import shutil
 from contextlib import contextmanager
 import math
 import time
+import struct
 
 import bpy
 import bmesh
@@ -260,12 +261,15 @@ def _summarize_generated_files(file_rel_paths):
     b3dm_count = 0
     tileset_count = 0
     subtree_dirs = set()
+    subtree_files = 0
     for rel in file_rel_paths:
         low = rel.lower()
         if low.endswith(".glb"):
             glb_count += 1
         elif low.endswith(".b3dm"):
             b3dm_count += 1
+        elif low.endswith(".subtree"):
+            subtree_files += 1
         elif low.endswith("tileset.json"):
             tileset_count += 1
             if low != "tileset.json":
@@ -275,7 +279,7 @@ def _summarize_generated_files(file_rel_paths):
         "b3dm": b3dm_count,
         "tiles": glb_count + b3dm_count,
         "tilesets": tileset_count,
-        "subtrees": len([d for d in subtree_dirs if d]),
+        "subtrees": len([d for d in subtree_dirs if d]) + subtree_files,
     }
 
 
@@ -298,6 +302,83 @@ def _count_texture_nodes_on_object(obj):
     return len(textures)
 
 
+def _collect_object_texture_diagnostics(obj):
+    diag = {
+        "uv_maps": 0,
+        "materials": 0,
+        "image_nodes": 0,
+        "texture_images": 0,
+        "missing_texture_files": 0,
+        "packed_images": 0,
+    }
+    if obj is None:
+        return diag
+
+    mesh = getattr(obj, "data", None)
+    if mesh is not None and hasattr(mesh, "uv_layers"):
+        try:
+            diag["uv_maps"] = len(mesh.uv_layers)
+        except Exception:
+            pass
+
+    unique_images = set()
+    missing_files = set()
+    diag["materials"] = len(getattr(obj, "material_slots", []))
+    for slot in obj.material_slots:
+        mat = slot.material
+        if not mat or not mat.use_nodes or not mat.node_tree:
+            continue
+        for node in mat.node_tree.nodes:
+            if node.type != 'TEX_IMAGE':
+                continue
+            diag["image_nodes"] += 1
+            image = getattr(node, "image", None)
+            if image is None:
+                continue
+            key = bpy.path.abspath(image.filepath) if image.filepath else image.name
+            unique_images.add(key)
+            if getattr(image, "packed_file", None):
+                diag["packed_images"] += 1
+                continue
+            abs_path = bpy.path.abspath(image.filepath) if getattr(image, "filepath", "") else ""
+            if abs_path and not os.path.exists(abs_path):
+                missing_files.add(abs_path)
+
+    diag["texture_images"] = len(unique_images)
+    diag["missing_texture_files"] = len(missing_files)
+    return diag
+
+
+def _build_gltf_export_kwargs(filepath, use_selection=True, export_format='GLB'):
+    kwargs = {
+        "filepath": filepath,
+        "use_selection": bool(use_selection),
+    }
+
+    prop_names = set()
+    try:
+        prop_names = {p.identifier for p in bpy.ops.export_scene.gltf.get_rna_type().properties}
+    except Exception:
+        pass
+
+    if export_format is not None and "export_format" in prop_names:
+        kwargs["export_format"] = export_format
+
+    # Force explicit material/UV export settings for stable texture output.
+    forced = (
+        ("export_materials", "EXPORT"),
+        ("export_texcoords", True),
+        ("export_normals", True),
+        ("export_colors", True),
+        ("export_image_format", "AUTO"),
+    )
+    for key, value in forced:
+        if key in prop_names:
+            kwargs[key] = value
+
+    return kwargs
+
+
 def _count_texture_files_in_dir(path):
     if not path or not os.path.isdir(path):
         return 0
@@ -315,6 +396,11 @@ def _collect_mesh_stats(context, scene, job):
         "vertices": 0,
         "area_m2": 0.0,
         "textures": 0,
+        "uv_maps": 0,
+        "materials": 0,
+        "image_nodes": 0,
+        "missing_texture_files": 0,
+        "packed_images": 0,
     }
     if job["kind"] == "ACTIVE" and job.get("object") is not None:
         obj = job["object"]
@@ -336,7 +422,13 @@ def _collect_mesh_stats(context, scene, job):
             world_area_bu2 = local_area * max(area_scale, 1e-9)
             scale_length = float(getattr(scene.unit_settings, "scale_length", 1.0) or 1.0)
             stats["area_m2"] = world_area_bu2 * (scale_length ** 2)
-            stats["textures"] = _count_texture_nodes_on_object(obj)
+            tex_diag = _collect_object_texture_diagnostics(obj)
+            stats["textures"] = tex_diag["texture_images"]
+            stats["uv_maps"] = tex_diag["uv_maps"]
+            stats["materials"] = tex_diag["materials"]
+            stats["image_nodes"] = tex_diag["image_nodes"]
+            stats["missing_texture_files"] = tex_diag["missing_texture_files"]
+            stats["packed_images"] = tex_diag["packed_images"]
         finally:
             eval_obj.to_mesh_clear()
         return stats
@@ -351,10 +443,224 @@ def _collect_mesh_stats(context, scene, job):
 def _format_cesium_mesh_stats(obj_name, mesh_stats, file_stats, duration_s):
     return (
         f"{obj_name} | faces {mesh_stats['faces']} | verts {mesh_stats['vertices']} | area {mesh_stats['area_m2']:.2f} m2 | "
-        f"textures {mesh_stats['textures']} | tiles {file_stats['tiles']} "
+        f"textures {mesh_stats['textures']} | uv {mesh_stats['uv_maps']} | missingTex {mesh_stats['missing_texture_files']} | "
+        f"tiles {file_stats['tiles']} "
         f"(glb {file_stats['glb']}, b3dm {file_stats['b3dm']}) | subtrees {file_stats['subtrees']} | "
         f"tilesets {file_stats['tilesets']} | {duration_s:.1f}s"
     )
+
+
+def _patch_glb_to_unlit(glb_path):
+    try:
+        with open(glb_path, "rb") as f:
+            data = f.read()
+    except Exception:
+        return False, "read-failed"
+
+    if len(data) < 12:
+        return False, "too-short"
+    magic, version, _ = struct.unpack_from("<4sII", data, 0)
+    if magic != b"glTF" or version != 2:
+        return False, "not-glb2"
+
+    chunks = []
+    offset = 12
+    while offset + 8 <= len(data):
+        chunk_len, chunk_type = struct.unpack_from("<II", data, offset)
+        offset += 8
+        if offset + chunk_len > len(data):
+            return False, "invalid-chunk"
+        chunk_data = data[offset:offset + chunk_len]
+        offset += chunk_len
+        chunks.append((chunk_type, chunk_data))
+
+    json_idx = None
+    json_obj = None
+    for i, (ctype, cdata) in enumerate(chunks):
+        if ctype == 0x4E4F534A:  # JSON
+            json_idx = i
+            try:
+                json_obj = json.loads(cdata.decode("utf-8"))
+            except Exception:
+                return False, "json-decode-failed"
+            break
+    if json_idx is None or json_obj is None:
+        return False, "json-missing"
+
+    mats = json_obj.get("materials")
+    if not isinstance(mats, list) or not mats:
+        return True, "no-materials"
+
+    changed = False
+    ext_used = json_obj.get("extensionsUsed")
+    if not isinstance(ext_used, list):
+        ext_used = []
+        json_obj["extensionsUsed"] = ext_used
+        changed = True
+    if "KHR_materials_unlit" not in ext_used:
+        ext_used.append("KHR_materials_unlit")
+        changed = True
+
+    for mat in mats:
+        if not isinstance(mat, dict):
+            continue
+        ext = mat.get("extensions")
+        if not isinstance(ext, dict):
+            ext = {}
+            mat["extensions"] = ext
+            changed = True
+        if "KHR_materials_unlit" not in ext:
+            ext["KHR_materials_unlit"] = {}
+            changed = True
+
+        pbr = mat.get("pbrMetallicRoughness")
+        if not isinstance(pbr, dict):
+            pbr = {}
+            mat["pbrMetallicRoughness"] = pbr
+            changed = True
+        if pbr.get("metallicFactor", None) != 0.0:
+            pbr["metallicFactor"] = 0.0
+            changed = True
+        if pbr.get("roughnessFactor", None) != 1.0:
+            pbr["roughnessFactor"] = 1.0
+            changed = True
+
+    if not changed:
+        return True, "unchanged"
+
+    json_bytes = json.dumps(json_obj, separators=(",", ":")).encode("utf-8")
+    while len(json_bytes) % 4 != 0:
+        json_bytes += b" "
+    chunks[json_idx] = (0x4E4F534A, json_bytes)
+
+    total_len = 12 + sum(8 + len(cdata) for _, cdata in chunks)
+    out = bytearray()
+    out += struct.pack("<4sII", b"glTF", 2, total_len)
+    for ctype, cdata in chunks:
+        out += struct.pack("<II", len(cdata), ctype)
+        out += cdata
+
+    try:
+        with open(glb_path, "wb") as f:
+            f.write(out)
+    except Exception:
+        return False, "write-failed"
+    return True, "patched"
+
+
+def _patch_output_glbs_to_unlit(output_dir):
+    patched = 0
+    failed = 0
+    if not output_dir or not os.path.isdir(output_dir):
+        return patched, failed
+    for root, _, names in os.walk(output_dir):
+        for name in names:
+            if not name.lower().endswith(".glb"):
+                continue
+            ok, _ = _patch_glb_to_unlit(os.path.join(root, name))
+            if ok:
+                patched += 1
+            else:
+                failed += 1
+    return patched, failed
+
+
+def _strip_glb_unlit(glb_path):
+    try:
+        with open(glb_path, "rb") as f:
+            data = f.read()
+    except Exception:
+        return False, "read-failed"
+
+    if len(data) < 12:
+        return False, "too-short"
+    magic, version, _ = struct.unpack_from("<4sII", data, 0)
+    if magic != b"glTF" or version != 2:
+        return False, "not-glb2"
+
+    chunks = []
+    offset = 12
+    while offset + 8 <= len(data):
+        chunk_len, chunk_type = struct.unpack_from("<II", data, offset)
+        offset += 8
+        if offset + chunk_len > len(data):
+            return False, "invalid-chunk"
+        chunk_data = data[offset:offset + chunk_len]
+        offset += chunk_len
+        chunks.append((chunk_type, chunk_data))
+
+    json_idx = None
+    json_obj = None
+    for i, (ctype, cdata) in enumerate(chunks):
+        if ctype == 0x4E4F534A:  # JSON
+            json_idx = i
+            try:
+                json_obj = json.loads(cdata.decode("utf-8"))
+            except Exception:
+                return False, "json-decode-failed"
+            break
+    if json_idx is None or json_obj is None:
+        return False, "json-missing"
+
+    changed = False
+    for ext_key in ("extensionsUsed", "extensionsRequired"):
+        ext_list = json_obj.get(ext_key)
+        if isinstance(ext_list, list) and "KHR_materials_unlit" in ext_list:
+            ext_list[:] = [x for x in ext_list if x != "KHR_materials_unlit"]
+            changed = True
+            if not ext_list:
+                json_obj.pop(ext_key, None)
+
+    mats = json_obj.get("materials")
+    if isinstance(mats, list):
+        for mat in mats:
+            if not isinstance(mat, dict):
+                continue
+            ext = mat.get("extensions")
+            if isinstance(ext, dict) and "KHR_materials_unlit" in ext:
+                ext.pop("KHR_materials_unlit", None)
+                changed = True
+                if not ext:
+                    mat.pop("extensions", None)
+
+    if not changed:
+        return True, "unchanged"
+
+    json_bytes = json.dumps(json_obj, separators=(",", ":")).encode("utf-8")
+    while len(json_bytes) % 4 != 0:
+        json_bytes += b" "
+    chunks[json_idx] = (0x4E4F534A, json_bytes)
+
+    total_len = 12 + sum(8 + len(cdata) for _, cdata in chunks)
+    out = bytearray()
+    out += struct.pack("<4sII", b"glTF", 2, total_len)
+    for ctype, cdata in chunks:
+        out += struct.pack("<II", len(cdata), ctype)
+        out += cdata
+
+    try:
+        with open(glb_path, "wb") as f:
+            f.write(out)
+    except Exception:
+        return False, "write-failed"
+    return True, "stripped"
+
+
+def _strip_output_glbs_unlit(output_dir):
+    stripped = 0
+    failed = 0
+    if not output_dir or not os.path.isdir(output_dir):
+        return stripped, failed
+    for root, _, names in os.walk(output_dir):
+        for name in names:
+            if not name.lower().endswith(".glb"):
+                continue
+            ok, _ = _strip_glb_unlit(os.path.join(root, name))
+            if ok:
+                stripped += 1
+            else:
+                failed += 1
+    return stripped, failed
 
 
 def check_vtk_requirements():
@@ -602,8 +908,15 @@ def _prepare_base_mesh_object(context, active_obj, offset):
     return base_obj, temp_collection
 
 
-def _build_face_spatial_data(mesh):
-    verts = [v.co.copy() for v in mesh.vertices]
+def _build_face_spatial_data(mesh, to_gltf_yup=False):
+    verts = []
+    for v in mesh.vertices:
+        co = v.co.copy()
+        if to_gltf_yup:
+            # Blender -> glTF coordinate convention used by the exporter:
+            # (x, y, z) -> (x, z, -y)
+            co = Vector((co.x, co.z, -co.y))
+        verts.append(co)
     centroids = {}
     face_mins = {}
     face_maxs = {}
@@ -664,11 +977,54 @@ def _split_face_ids(face_ids, centroids, bbox, tree_type):
     return groups
 
 
-def _build_native_tree(face_ids, depth, tree_type, max_faces, min_depth, max_depth, centroids, face_mins, face_maxs, path_code=""):
+def _child_split_bbox(parent_bbox, slot, tree_type):
+    (min_x, min_y, min_z), (max_x, max_y, max_z) = parent_bbox
+    mid_x = (min_x + max_x) * 0.5
+    mid_y = (min_y + max_y) * 0.5
+    mid_z = (min_z + max_z) * 0.5
+
+    ix = slot & 1
+    iy = (slot >> 1) & 1
+    iz = (slot >> 2) & 1
+
+    cmin_x = mid_x if ix else min_x
+    cmax_x = max_x if ix else mid_x
+    cmin_y = mid_y if iy else min_y
+    cmax_y = max_y if iy else mid_y
+
+    if tree_type == 'OCTREE':
+        cmin_z = mid_z if iz else min_z
+        cmax_z = max_z if iz else mid_z
+    else:
+        cmin_z = min_z
+        cmax_z = max_z
+
+    return (cmin_x, cmin_y, cmin_z), (cmax_x, cmax_y, cmax_z)
+
+
+def _build_native_tree(
+    face_ids,
+    depth,
+    tree_type,
+    max_faces,
+    min_depth,
+    max_depth,
+    centroids,
+    face_mins,
+    face_maxs,
+    path_code="",
+    grid_x=0,
+    grid_y=0,
+    grid_z=0,
+    split_bbox=None,
+):
     bbox = _bbox_union_from_face_ids(face_ids, face_mins, face_maxs)
     node = {
         "depth": depth,
         "path_code": path_code,
+        "grid_x": int(grid_x),
+        "grid_y": int(grid_y),
+        "grid_z": int(grid_z),
         "bbox": bbox,
         "face_ids": face_ids,
         "children": [],
@@ -678,11 +1034,19 @@ def _build_native_tree(face_ids, depth, tree_type, max_faces, min_depth, max_dep
     if not should_split:
         return node
 
-    split_groups = _split_face_ids(face_ids, centroids, bbox, tree_type)
+    split_basis_bbox = split_bbox if split_bbox is not None else bbox
+    split_groups = _split_face_ids(face_ids, centroids, split_basis_bbox, tree_type)
     if len(split_groups) <= 1:
         return node
 
     for slot, group in split_groups:
+        child_x = (grid_x * 2) + (slot & 1)
+        child_y = (grid_y * 2) + ((slot >> 1) & 1)
+        if tree_type == 'OCTREE':
+            child_z = (grid_z * 2) + ((slot >> 2) & 1)
+        else:
+            child_z = grid_z
+        child_split_bbox = _child_split_bbox(split_basis_bbox, slot, tree_type) if split_bbox is not None else None
         child = _build_native_tree(
             face_ids=group,
             depth=depth + 1,
@@ -694,6 +1058,10 @@ def _build_native_tree(face_ids, depth, tree_type, max_faces, min_depth, max_dep
             face_mins=face_mins,
             face_maxs=face_maxs,
             path_code=f"{path_code}{slot}",
+            grid_x=child_x,
+            grid_y=child_y,
+            grid_z=child_z,
+            split_bbox=child_split_bbox,
         )
         node["children"].append(child)
 
@@ -708,7 +1076,260 @@ def _collect_native_leaves(node, out):
         _collect_native_leaves(child, out)
 
 
-def _export_leaf_glb(context, base_obj, temp_collection, keep_face_ids, filepath):
+def _collect_native_nodes(node, out):
+    out.append(node)
+    for child in node.get("children", []):
+        _collect_native_nodes(child, out)
+
+
+def _implicit_level_offset(level, tree_type):
+    if level <= 0:
+        return 0
+    if tree_type == 'OCTREE':
+        return ((8 ** level) - 1) // 7
+    return ((4 ** level) - 1) // 3
+
+
+def _implicit_total_nodes(level_count, tree_type):
+    return _implicit_level_offset(level_count, tree_type)
+
+
+def _implicit_morton_index(node, tree_type):
+    depth = int(node.get("depth", 0))
+    x = int(node.get("grid_x", 0))
+    y = int(node.get("grid_y", 0))
+    z = int(node.get("grid_z", 0))
+
+    morton = 0
+    if tree_type == 'OCTREE':
+        for bit in range(depth - 1, -1, -1):
+            slot = ((x >> bit) & 1) + (((y >> bit) & 1) << 1) + (((z >> bit) & 1) << 2)
+            morton = (morton << 3) + slot
+    else:
+        for bit in range(depth - 1, -1, -1):
+            slot = ((x >> bit) & 1) + (((y >> bit) & 1) << 1)
+            morton = (morton << 2) + slot
+    return morton
+
+
+def _bitarray_set_once(bitarr, bit_idx):
+    byte_idx = bit_idx // 8
+    mask = 1 << (bit_idx % 8)
+    old = bitarr[byte_idx]
+    if old & mask:
+        return False
+    bitarr[byte_idx] = old | mask
+    return True
+
+
+def _write_subtree_file(subtree_path, tile_bits, tile_count, content_bits, content_count):
+    streams = []
+    stream_map = {}
+    stream_offsets = []
+    cursor = 0
+
+    for bits in (tile_bits, content_bits):
+        key = bytes(bits)
+        idx = stream_map.get(key)
+        if idx is None:
+            idx = len(streams)
+            stream_map[key] = idx
+            streams.append(key)
+            stream_offsets.append(cursor)
+            cursor += len(key)
+
+    buffer_views = []
+    for i, blob in enumerate(streams):
+        buffer_views.append(
+            {
+                "buffer": 0,
+                "byteOffset": stream_offsets[i],
+                "byteLength": len(blob),
+            }
+        )
+
+    tile_view_idx = stream_map[bytes(tile_bits)]
+    content_view_idx = stream_map[bytes(content_bits)]
+    bin_blob = b"".join(streams)
+
+    subtree_json = {
+        "buffers": [{"byteLength": len(bin_blob)}],
+        "bufferViews": buffer_views,
+        "tileAvailability": {
+            "bitstream": tile_view_idx,
+            "availableCount": int(tile_count),
+        },
+        "contentAvailability": [
+            {
+                "bitstream": content_view_idx,
+                "availableCount": int(content_count),
+            }
+        ],
+        "childSubtreeAvailability": {
+            "constant": 0,
+            "availableCount": 0,
+        },
+    }
+
+    json_blob = json.dumps(subtree_json, separators=(",", ":")).encode("utf-8")
+    while len(json_blob) % 8 != 0:
+        json_blob += b" "
+
+    while len(bin_blob) % 8 != 0:
+        bin_blob += b"\x00"
+
+    os.makedirs(os.path.dirname(subtree_path), exist_ok=True)
+    with open(subtree_path, "wb") as f:
+        f.write(struct.pack("<4sIQQ", b"subt", 1, len(json_blob), len(bin_blob)))
+        f.write(json_blob)
+        f.write(bin_blob)
+
+
+def _run_native_implicit_layout(context, scene, base_obj, temp_collection, tree, output_dir, tree_type):
+    def _uri_join(*parts):
+        return "/".join([p.strip("/\\") for p in parts if p])
+
+    nodes = []
+    _collect_native_nodes(tree, nodes)
+    nodes = [n for n in nodes if n.get("face_ids")]
+    if not nodes:
+        return False, "Implicit layout: no nodes generated for export."
+
+    max_depth = max(int(n.get("depth", 0)) for n in nodes)
+    available_levels = max_depth + 1
+    total_nodes = _implicit_total_nodes(available_levels, tree_type)
+    if total_nodes > 200_000_000:
+        return False, (
+            f"Implicit layout too deep ({available_levels} levels -> {total_nodes} availability bits). "
+            "Reduce max depth or increase features-per-tile."
+        )
+
+    tile_bits = bytearray((total_nodes + 7) // 8)
+    content_bits = bytearray((total_nodes + 7) // 8)
+    tile_count = 0
+    content_count = 0
+
+    force_unlit = bool(getattr(scene, "cesium_vtk_force_unlit_materials", True))
+    for node in nodes:
+        level = int(node.get("depth", 0))
+        x = int(node.get("grid_x", 0))
+        y = int(node.get("grid_y", 0))
+        z = int(node.get("grid_z", 0))
+
+        bit_idx = _implicit_level_offset(level, tree_type) + _implicit_morton_index(node, tree_type)
+        if _bitarray_set_once(tile_bits, bit_idx):
+            tile_count += 1
+
+        if tree_type == 'OCTREE':
+            rel_uri = _uri_join("tiles", str(level), str(x), str(y), f"{z}.glb")
+            tile_label = f"{level}/{x}/{y}/{z}"
+        else:
+            rel_uri = _uri_join("tiles", str(level), str(x), f"{y}.glb")
+            tile_label = f"{level}/{x}/{y}"
+        abs_path = os.path.join(output_dir, rel_uri)
+        ok = _export_leaf_glb(
+            context,
+            base_obj,
+            temp_collection,
+            node["face_ids"],
+            abs_path,
+            force_unlit=force_unlit,
+        )
+        if not ok:
+            return False, f"Implicit layout: failed exporting tile {tile_label}."
+
+        if _bitarray_set_once(content_bits, bit_idx):
+            content_count += 1
+
+    if tree_type == 'OCTREE':
+        subtree_rel = _uri_join("subtrees", "0", "0", "0", "0.subtree")
+        content_uri_template = "tiles/{level}/{x}/{y}/{z}.glb"
+        subtree_uri_template = "subtrees/{level}/{x}/{y}/{z}.subtree"
+        subtree_note = "subtrees/0/0/0/0.subtree"
+    else:
+        subtree_rel = _uri_join("subtrees", "0", "0", "0.subtree")
+        content_uri_template = "tiles/{level}/{x}/{y}.glb"
+        subtree_uri_template = "subtrees/{level}/{x}/{y}.subtree"
+        subtree_note = "subtrees/0/0/0.subtree"
+    _write_subtree_file(
+        os.path.join(output_dir, subtree_rel),
+        tile_bits,
+        tile_count,
+        content_bits,
+        content_count,
+    )
+
+    root_error = max(_bbox_diag_len(tree["bbox"]), 1.0)
+    root_tile_error = max(root_error / (2 ** max(available_levels, 1)), 0.0)
+    subdivision = "OCTREE" if tree_type == 'OCTREE' else "QUADTREE"
+    root_box = _bbox_to_box(tree["bbox"])
+    tileset = {
+        "asset": {
+            "version": "1.1",
+            "extras": {
+                "ion": {
+                    "georeferenced": False,
+                    "movable": True,
+                }
+            },
+        },
+        "schema": {
+            "id": "cesium-tiling-pipeline",
+            "classes": {
+                "tile": {
+                    "properties": {
+                        "tightBoundingBox": {
+                            "name": "Tight Bounding Box",
+                            "type": "SCALAR",
+                            "componentType": "FLOAT64",
+                            "array": True,
+                            "count": 12,
+                            "semantic": "TILE_BOUNDING_BOX",
+                        }
+                    }
+                }
+            },
+        },
+        "geometricError": root_error,
+        "root": {
+            "boundingVolume": {"box": root_box},
+            "metadata": {
+                "class": "tile",
+                "properties": {
+                    "tightBoundingBox": root_box,
+                },
+            },
+            "geometricError": root_tile_error,
+            "refine": "REPLACE",
+            "content": {"uri": content_uri_template},
+            "implicitTiling": {
+                "subdivisionScheme": subdivision,
+                "subtreeLevels": available_levels,
+                "availableLevels": available_levels,
+                "subtrees": {"uri": subtree_uri_template},
+            },
+        },
+    }
+    with open(os.path.join(output_dir, "tileset.json"), "w", encoding="utf-8") as f:
+        json.dump(tileset, f, indent=2)
+
+    note_path = os.path.join(output_dir, "native_backend_info.txt")
+    with open(note_path, "w", encoding="utf-8") as f:
+        f.write("Backend: NATIVE_SPLIT\n")
+        f.write("3D Tiles version: 1.1\n")
+        f.write(f"Tree type: {tree_type}\n")
+        f.write("Hierarchy layout: IMPLICIT_TILING\n")
+        f.write(f"Available levels: {available_levels}\n")
+        f.write(f"Total tiles generated: {len(nodes)}\n")
+        f.write(f"Total nodes with content: {content_count}\n")
+        f.write("Root content exported: True\n")
+        f.write(f"Subtree availability bits: {total_nodes}\n")
+        f.write(f"Subtree file: {subtree_note}\n")
+
+    return True, f"Implicit tiling completed ({len(nodes)} tiles, {available_levels} levels)."
+
+
+def _export_leaf_glb(context, base_obj, temp_collection, keep_face_ids, filepath, force_unlit=False):
     tile_obj = base_obj.copy()
     tile_obj.data = base_obj.data.copy()
     tile_obj_name = tile_obj.name
@@ -736,11 +1357,16 @@ def _export_leaf_glb(context, base_obj, temp_collection, keep_face_ids, filepath
             tile_obj.select_set(True)
             context.view_layer.objects.active = tile_obj
             result = bpy.ops.export_scene.gltf(
-                filepath=filepath,
-                use_selection=True,
-                export_format='GLB',
+                **_build_gltf_export_kwargs(
+                    filepath=filepath,
+                    use_selection=True,
+                    export_format='GLB',
+                )
             )
-        return 'FINISHED' in result
+        ok = 'FINISHED' in result
+        if ok and force_unlit:
+            _patch_glb_to_unlit(filepath)
+        return ok
     finally:
         # Robust cleanup: object may already be unlinked by Blender internals.
         obj = bpy.data.objects.get(tile_obj_name)
@@ -779,6 +1405,10 @@ def _native_tree_to_tileset_node(node, root_error, base_depth=0, external_subtre
         tile["content"] = {"uri": external_subtree_map[node_key]}
         return tile
 
+    uri = node.get("uri")
+    if uri:
+        tile["content"] = {"uri": uri}
+
     if node["children"]:
         tile["geometricError"] = root_error / (2 ** max(local_depth, 0))
         tile["refine"] = "REPLACE"
@@ -791,11 +1421,6 @@ def _native_tree_to_tileset_node(node, root_error, base_depth=0, external_subtre
             )
             for child in node["children"]
         ]
-    else:
-        uri = node.get("uri")
-        if uri:
-            tile["content"] = {"uri": uri}
-
     return tile
 
 
@@ -808,11 +1433,20 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
     def _uri_join(*parts):
         return "/".join([p.strip("/\\") for p in parts if p])
 
-    data_root = "Data" if scene.cesium_native_hierarchy_layout == 'EXTERNAL_SUBTILESETS' else ""
+    # Keep a stable root folder for tile content (Aton/TempluMare-like layout).
+    data_root = "Data"
 
     base_obj, temp_collection = _prepare_base_mesh_object(context, active_obj, coords_cfg["offset"])
     try:
-        face_ids, centroids, face_mins, face_maxs = _build_face_spatial_data(base_obj.data)
+        bbox_frame = getattr(scene, "cesium_native_bbox_frame", "GLTF_FRAME")
+        use_gltf_bbox_frame = bbox_frame != 'LEGACY_BLENDER_FRAME'
+
+        # Native split writes GLB through Blender's glTF exporter (Y-up conversion enabled),
+        # so we compute hierarchy/bounding volumes in the same output coordinate frame.
+        face_ids, centroids, face_mins, face_maxs = _build_face_spatial_data(
+            base_obj.data,
+            to_gltf_yup=use_gltf_bbox_frame,
+        )
         if not face_ids:
             return False, "Active mesh has no faces."
 
@@ -821,6 +1455,13 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
         max_depth = int(scene.cesium_native_max_depth)
         min_depth = min(min_depth, max_depth)
         tree_type = scene.cesium_vtk_tree_type
+
+        use_regular_implicit_grid = scene.cesium_native_hierarchy_layout == 'IMPLICIT_TILING'
+        root_split_bbox = (
+            _bbox_union_from_face_ids(face_ids, face_mins, face_maxs)
+            if use_regular_implicit_grid
+            else None
+        )
 
         tree = _build_native_tree(
             face_ids=face_ids,
@@ -833,7 +1474,19 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
             face_mins=face_mins,
             face_maxs=face_maxs,
             path_code="",
+            split_bbox=root_split_bbox,
         )
+
+        if scene.cesium_native_hierarchy_layout == 'IMPLICIT_TILING':
+            return _run_native_implicit_layout(
+                context=context,
+                scene=scene,
+                base_obj=base_obj,
+                temp_collection=temp_collection,
+                tree=tree,
+                output_dir=output_dir,
+                tree_type=tree_type,
+            )
 
         external_subtree_map = {}
         subtree_nodes = []
@@ -874,15 +1527,37 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
                 disk_rel_uri = _uri_join(subtree_folder, f"f{tile_id}.glb")
                 leaf["uri"] = f"f{tile_id}.glb"
             else:
-                if data_root:
-                    disk_rel_uri = _uri_join(data_root, f"b{tile_id}.glb")
-                else:
-                    disk_rel_uri = _uri_join("tiles", f"{tile_id}.glb")
+                disk_rel_uri = _uri_join(data_root, f"b{tile_id}.glb")
                 leaf["uri"] = disk_rel_uri
             abs_path = os.path.join(output_dir, disk_rel_uri)
-            ok = _export_leaf_glb(context, base_obj, temp_collection, leaf["face_ids"], abs_path)
+            ok = _export_leaf_glb(
+                context,
+                base_obj,
+                temp_collection,
+                leaf["face_ids"],
+                abs_path,
+                force_unlit=bool(getattr(scene, "cesium_vtk_force_unlit_materials", True)),
+            )
             if not ok:
                 return False, f"Failed exporting leaf tile {tile_id}."
+
+        if (
+            scene.cesium_native_hierarchy_layout == 'SINGLE_JSON'
+            and bool(getattr(scene, "cesium_singlejson_add_root_content", True))
+        ):
+            root_uri = _uri_join(data_root, "root.glb")
+            root_abs_path = os.path.join(output_dir, root_uri)
+            ok = _export_leaf_glb(
+                context,
+                base_obj,
+                temp_collection,
+                face_ids,
+                root_abs_path,
+                force_unlit=bool(getattr(scene, "cesium_vtk_force_unlit_materials", True)),
+            )
+            if not ok:
+                return False, "Failed exporting single-JSON root content tile."
+            tree["uri"] = root_uri
 
         root_error = max(_bbox_diag_len(tree["bbox"]), 1.0)
         if scene.cesium_native_hierarchy_layout == 'EXTERNAL_SUBTILESETS':
@@ -928,11 +1603,14 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
             f.write("Backend: NATIVE_SPLIT\n")
             f.write("3D Tiles version: 1.1\n")
             f.write(f"Tree type: {tree_type}\n")
+            f.write(f"Bounding volume frame: {bbox_frame}\n")
             f.write(f"Hierarchy layout: {scene.cesium_native_hierarchy_layout}\n")
             f.write(f"Min depth: {min_depth}\n")
             f.write(f"Max depth: {max_depth}\n")
             if scene.cesium_native_hierarchy_layout == 'EXTERNAL_SUBTILESETS':
                 f.write(f"Subtileset split depth: {scene.cesium_native_subtileset_split_depth}\n")
+            else:
+                f.write(f"Single JSON root content: {bool(getattr(scene, 'cesium_singlejson_add_root_content', True))}\n")
             f.write(f"Max faces per leaf: {max_faces}\n")
             f.write(f"Leaves: {len(leaves)}\n")
             f.write(f"Texture mode: {texture_mode}\n")
@@ -1233,6 +1911,60 @@ class OBJECT_OT_clear_cesium_vtk_folder(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class OBJECT_OT_patch_cesium_output_unlit(bpy.types.Operator):
+    """Patch all GLB tiles in output folder to KHR_materials_unlit."""
+    bl_idname = "object.patch_cesium_output_unlit"
+    bl_label = "Patch Output GLBs to Unlit"
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        scene = context.scene
+        output_root = bpy.path.abspath(scene.cesium_vtk_output_dir).strip()
+        if not output_root:
+            self.report({'ERROR'}, "Set a valid output folder first.")
+            return {'CANCELLED'}
+        if not os.path.isdir(output_root):
+            self.report({'ERROR'}, f"Output folder not found: {output_root}")
+            return {'CANCELLED'}
+
+        patched, failed = _patch_output_glbs_to_unlit(output_root)
+        if patched == 0 and failed == 0:
+            self.report({'WARNING'}, "No GLB files found in output folder.")
+            return {'CANCELLED'}
+        if failed > 0:
+            self.report({'WARNING'}, f"Patched {patched} GLB file(s), failed on {failed}.")
+        else:
+            self.report({'INFO'}, f"Patched {patched} GLB file(s) to unlit.")
+        return {'FINISHED'}
+
+
+class OBJECT_OT_strip_cesium_output_unlit(bpy.types.Operator):
+    """Remove KHR_materials_unlit from all GLB tiles in output folder."""
+    bl_idname = "object.strip_cesium_output_unlit"
+    bl_label = "Remove Unlit from Output GLBs"
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        scene = context.scene
+        output_root = bpy.path.abspath(scene.cesium_vtk_output_dir).strip()
+        if not output_root:
+            self.report({'ERROR'}, "Set a valid output folder first.")
+            return {'CANCELLED'}
+        if not os.path.isdir(output_root):
+            self.report({'ERROR'}, f"Output folder not found: {output_root}")
+            return {'CANCELLED'}
+
+        stripped, failed = _strip_output_glbs_unlit(output_root)
+        if stripped == 0 and failed == 0:
+            self.report({'WARNING'}, "No GLB files found in output folder.")
+            return {'CANCELLED'}
+        if failed > 0:
+            self.report({'WARNING'}, f"Processed {stripped} GLB file(s), failed on {failed}.")
+        else:
+            self.report({'INFO'}, f"Removed unlit extension from {stripped} GLB file(s).")
+        return {'FINISHED'}
+
+
 class OBJECT_OT_apply_cesium_vtk_preset(bpy.types.Operator):
     """Apply quick tiling presets."""
     bl_idname = "object.apply_cesium_vtk_preset"
@@ -1248,26 +1980,54 @@ class OBJECT_OT_apply_cesium_vtk_preset(bpy.types.Operator):
             scene.cesium_native_min_depth = 4
             scene.cesium_native_max_depth = 10
             scene.cesium_vtk_merge_tile_poly_data = False
+            scene.cesium_vtk_force_unlit_materials = False
             scene.cesium_vtk_merged_texture_width = 2048
             scene.cesium_vtk_tree_type = 'QUADTREE'
             scene.cesium_native_hierarchy_layout = 'EXTERNAL_SUBTILESETS'
+            scene.cesium_native_bbox_frame = 'GLTF_FRAME'
+            scene.cesium_native_subtileset_split_depth = 2
+        elif preset == 'ATON_COMPAT':
+            scene.cesium_vtk_features_per_tile = 8000
+            scene.cesium_native_min_depth = 3
+            scene.cesium_native_max_depth = 8
+            scene.cesium_vtk_merge_tile_poly_data = False
+            scene.cesium_vtk_force_unlit_materials = False
+            scene.cesium_vtk_merged_texture_width = 2048
+            scene.cesium_vtk_tree_type = 'QUADTREE'
+            scene.cesium_native_hierarchy_layout = 'EXTERNAL_SUBTILESETS'
+            scene.cesium_native_bbox_frame = 'LEGACY_BLENDER_FRAME'
             scene.cesium_native_subtileset_split_depth = 2
         elif preset == 'BALANCED':
             scene.cesium_vtk_features_per_tile = 8000
             scene.cesium_native_min_depth = 3
             scene.cesium_native_max_depth = 8
             scene.cesium_vtk_merge_tile_poly_data = False
+            scene.cesium_vtk_force_unlit_materials = False
             scene.cesium_vtk_merged_texture_width = 4096
             scene.cesium_vtk_tree_type = 'QUADTREE'
             scene.cesium_native_hierarchy_layout = 'SINGLE_JSON'
+            scene.cesium_native_bbox_frame = 'GLTF_FRAME'
+        elif preset == 'MASSENZIO_STYLE':
+            scene.cesium_vtk_features_per_tile = 12000
+            scene.cesium_native_min_depth = 2
+            scene.cesium_native_max_depth = 5
+            scene.cesium_vtk_merge_tile_poly_data = False
+            scene.cesium_vtk_force_unlit_materials = False
+            scene.cesium_vtk_merged_texture_width = 2048
+            scene.cesium_vtk_tree_type = 'OCTREE'
+            scene.cesium_native_hierarchy_layout = 'IMPLICIT_TILING'
+            scene.cesium_native_bbox_frame = 'GLTF_FRAME'
         else:  # FEW_TILES
             scene.cesium_vtk_features_per_tile = 25000
             scene.cesium_native_min_depth = 1
             scene.cesium_native_max_depth = 6
             scene.cesium_vtk_merge_tile_poly_data = True
+            scene.cesium_vtk_force_unlit_materials = False
             scene.cesium_vtk_merged_texture_width = 4096
             scene.cesium_vtk_tree_type = 'OCTREE'
-            scene.cesium_native_hierarchy_layout = 'SINGLE_JSON'
+            scene.cesium_native_hierarchy_layout = 'EXTERNAL_SUBTILESETS'
+            scene.cesium_native_bbox_frame = 'GLTF_FRAME'
+            scene.cesium_native_subtileset_split_depth = 2
 
         self.report({'INFO'}, f"Applied preset: {preset}")
         return {'FINISHED'}
@@ -1459,7 +2219,8 @@ class OBJECT_OT_export_cesium_vtk_tiles(bpy.types.Operator):
                     context,
                     (
                         f"-> {obj_name}: faces {mesh_stats['faces']}, area {mesh_stats['area_m2']:.2f} m2, "
-                        f"textures {mesh_stats['textures']}"
+                        f"textures {mesh_stats['textures']}, uv {mesh_stats['uv_maps']}, "
+                        f"imgNodes {mesh_stats['image_nodes']}, missingTexFiles {mesh_stats['missing_texture_files']}"
                     ),
                 )
 
@@ -1504,9 +2265,11 @@ class OBJECT_OT_export_cesium_vtk_tiles(bpy.types.Operator):
                                 result = _export_obj(filepath=input_file, use_selection=True)
                             else:
                                 result = bpy.ops.export_scene.gltf(
-                                    filepath=input_file,
-                                    use_selection=True,
-                                    export_format=export_format,
+                                    **_build_gltf_export_kwargs(
+                                        filepath=input_file,
+                                        use_selection=True,
+                                        export_format=export_format,
+                                    )
                                 )
                         if 'FINISHED' not in result:
                             return _cancel_with_progress(f"{obj_name}: intermediate export failed.")
@@ -1554,6 +2317,14 @@ class OBJECT_OT_export_cesium_vtk_tiles(bpy.types.Operator):
                             msg += f" Error: {stderr_txt[:220]}"
                         return _cancel_with_progress(msg)
 
+                    if scene.cesium_vtk_force_unlit_materials:
+                        patched, failed = _patch_output_glbs_to_unlit(output_dir)
+                        if failed > 0:
+                            _add_to_cesium_log(
+                                context,
+                                f"[WARN] {obj_name}: unlit patch applied to {patched} glb, failed on {failed}.",
+                            )
+
                 tileset_path = os.path.join(output_dir, "tileset.json")
                 if not os.path.exists(tileset_path):
                     self.report({'WARNING'}, f"{obj_name}: conversion completed, but `{tileset_path}` was not found.")
@@ -1593,7 +2364,7 @@ class OBJECT_OT_export_cesium_vtk_tiles(bpy.types.Operator):
             elif scene.cesium_vtk_cleanup_intermediate and source_mode != 'ACTIVE_MESH':
                 self.report({'INFO'}, "Cleanup skipped: external OBJ source is not deleted.")
 
-            if auto_stitch_parent:
+            if auto_stitch_parent and total_jobs > 1:
                 if not scene.cesium_vtk_create_object_subdir:
                     self.report({'WARNING'}, "Auto-stitch skipped: enable 'Create object subfolder'.")
                     _add_to_cesium_log(context, "[WARN] Auto-stitch skipped (enable Create object subfolder).")
@@ -1609,6 +2380,8 @@ class OBJECT_OT_export_cesium_vtk_tiles(bpy.types.Operator):
                     else:
                         self.report({'WARNING'}, f"Auto-stitch skipped: {msg}")
                         _add_to_cesium_log(context, f"[WARN] Auto-stitch skipped: {msg}")
+            elif auto_stitch_parent and total_jobs <= 1:
+                _add_to_cesium_log(context, "Auto-stitch skipped: single mesh export does not need parent tileset.")
 
             total_elapsed = time.time() - start_time
             mins = int(total_elapsed // 60)
@@ -1833,9 +2606,24 @@ class VIEW3D_PT_cesium_vtk_export(bpy.types.Panel):
             adv = box.box()
             if backend == 'NATIVE_SPLIT':
                 adv.prop(scene, "cesium_native_hierarchy_layout")
+                adv.prop(scene, "cesium_native_bbox_frame")
+                adv.label(text="Current native mode is spatial split (no decimation pyramid yet).", icon='INFO')
+                if scene.cesium_native_bbox_frame == 'LEGACY_BLENDER_FRAME':
+                    adv.label(text="Legacy bbox frame for ATON compatibility (same as old datasets).", icon='INFO')
                 if scene.cesium_native_hierarchy_layout == 'EXTERNAL_SUBTILESETS':
                     adv.prop(scene, "cesium_native_subtileset_split_depth")
                     adv.label(text="Data/cXX/tileset.json + multiple f*.glb files.", icon='INFO')
+                elif scene.cesium_native_hierarchy_layout == 'SINGLE_JSON':
+                    adv.prop(scene, "cesium_singlejson_add_root_content")
+                    adv.label(text="Writes Data/root.glb to improve single-JSON viewer compatibility.", icon='INFO')
+                else:
+                    adv.label(text="Massenzio-style implicit tiling (tiles/ + subtrees/).", icon='INFO')
+            adv.prop(scene, "cesium_vtk_force_unlit_materials")
+            if scene.cesium_vtk_force_unlit_materials:
+                adv.label(text="Experimental: some viewers may fail loading unlit GLB.", icon='ERROR')
+            row = adv.row(align=True)
+            row.operator("object.patch_cesium_output_unlit", icon='SHADING_TEXTURE')
+            row.operator("object.strip_cesium_output_unlit", icon='X')
             adv.prop(scene, "cesium_vtk_merge_tile_poly_data")
             row = adv.row()
             row.enabled = (backend == 'NATIVE_SPLIT') or req_info.get("supports_merged_texture_width", False)
@@ -1850,6 +2638,8 @@ class VIEW3D_PT_cesium_vtk_export(bpy.types.Panel):
 classes = (
     OBJECT_OT_reload_vtk_modules,
     OBJECT_OT_clear_cesium_vtk_folder,
+    OBJECT_OT_patch_cesium_output_unlit,
+    OBJECT_OT_strip_cesium_output_unlit,
     OBJECT_OT_apply_cesium_vtk_preset,
     OBJECT_OT_rebuild_cesium_parent_tileset,
     OBJECT_OT_export_cesium_vtk_tiles,
@@ -1993,8 +2783,22 @@ def register():
         items=[
             ('SINGLE_JSON', 'Single JSON', 'One root tileset.json containing full hierarchy'),
             ('EXTERNAL_SUBTILESETS', 'External sub-tilesets', 'Split hierarchy into referenced subtree_XXX.json files'),
+            ('IMPLICIT_TILING', 'Implicit tiles/subtrees', 'Massenzio-style implicit tiling: tiles/{level}/{x}/{y}/{z}.glb + subtrees'),
         ],
         default='SINGLE_JSON',
+    )
+    bpy.types.Scene.cesium_native_bbox_frame = bpy.props.EnumProperty(
+        name="Bounding volume frame",
+        items=[
+            ('GLTF_FRAME', 'Match GLB frame', 'Bounding volumes in the same frame as exported GLB (recommended)'),
+            ('LEGACY_BLENDER_FRAME', 'Legacy Blender frame', 'Compatibility mode matching old exported datasets'),
+        ],
+        default='GLTF_FRAME',
+    )
+    bpy.types.Scene.cesium_singlejson_add_root_content = bpy.props.BoolProperty(
+        name="Single JSON root content",
+        default=True,
+        description="Write a root GLB tile (Data/root.glb) for viewers that require root content",
     )
     bpy.types.Scene.cesium_native_subtileset_split_depth = bpy.props.IntProperty(
         name="Subtileset split depth",
@@ -2007,7 +2811,9 @@ def register():
         name="Quick preset",
         items=[
             ('PYRAMID_AGGRESSIVE', 'Aggressive hierarchy', 'More/smaller tiles, deeper tree'),
+            ('ATON_COMPAT', 'ATON compatibility', 'Legacy bbox frame + quadtree external sub-tilesets'),
             ('BALANCED', 'Balanced', 'Good default for medium scenes'),
+            ('MASSENZIO_STYLE', 'Massenzio-style implicit', 'Implicit tiling layout (tiles + subtree) similar to massenzio-tileset'),
             ('FEW_TILES', 'Few tiles', 'Larger tiles, less hierarchy'),
         ],
         default='BALANCED',
@@ -2016,6 +2822,11 @@ def register():
         name="Merge tile polydata",
         default=False,
         description="If enabled, writer may merge geometries while tiling (can reduce tile granularity)",
+    )
+    bpy.types.Scene.cesium_vtk_force_unlit_materials = bpy.props.BoolProperty(
+        name="Force unlit materials (Aton)",
+        default=False,
+        description="Experimental: post-process GLB tiles to KHR_materials_unlit",
     )
     bpy.types.Scene.cesium_vtk_merged_texture_width = bpy.props.IntProperty(
         name="Merged texture width",
@@ -2105,9 +2916,12 @@ def unregister():
     del bpy.types.Scene.cesium_native_min_depth
     del bpy.types.Scene.cesium_native_max_depth
     del bpy.types.Scene.cesium_native_hierarchy_layout
+    del bpy.types.Scene.cesium_native_bbox_frame
+    del bpy.types.Scene.cesium_singlejson_add_root_content
     del bpy.types.Scene.cesium_native_subtileset_split_depth
     del bpy.types.Scene.cesium_vtk_quick_preset
     del bpy.types.Scene.cesium_vtk_merge_tile_poly_data
+    del bpy.types.Scene.cesium_vtk_force_unlit_materials
     del bpy.types.Scene.cesium_vtk_merged_texture_width
     del bpy.types.Scene.cesium_vtk_cleanup_intermediate
     del bpy.types.Scene.cesium_vtk_create_object_subdir
