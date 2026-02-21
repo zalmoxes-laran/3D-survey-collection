@@ -349,7 +349,7 @@ def _collect_object_texture_diagnostics(obj):
     return diag
 
 
-def _build_gltf_export_kwargs(filepath, use_selection=True, export_format='GLB'):
+def _build_gltf_export_kwargs(filepath, use_selection=True, export_format='GLB', export_yup=None):
     kwargs = {
         "filepath": filepath,
         "use_selection": bool(use_selection),
@@ -363,6 +363,8 @@ def _build_gltf_export_kwargs(filepath, use_selection=True, export_format='GLB')
 
     if export_format is not None and "export_format" in prop_names:
         kwargs["export_format"] = export_format
+    if export_yup is not None and "export_yup" in prop_names:
+        kwargs["export_yup"] = bool(export_yup)
 
     # Force explicit material/UV export settings for stable texture output.
     forced = (
@@ -908,6 +910,223 @@ def _prepare_base_mesh_object(context, active_obj, offset):
     return base_obj, temp_collection
 
 
+def _cleanup_native_bake_assets(bake_info):
+    if not isinstance(bake_info, dict):
+        return
+
+    for mat_name in bake_info.get("temp_materials", []) or []:
+        mat = bpy.data.materials.get(mat_name)
+        if mat is not None and mat.users == 0:
+            try:
+                bpy.data.materials.remove(mat, do_unlink=True)
+            except Exception:
+                pass
+
+    baked_mat_name = bake_info.get("baked_material", "")
+    if baked_mat_name:
+        mat = bpy.data.materials.get(baked_mat_name)
+        if mat is not None and mat.users == 0:
+            try:
+                bpy.data.materials.remove(mat, do_unlink=True)
+            except Exception:
+                pass
+
+    baked_img_name = bake_info.get("baked_image", "")
+    if baked_img_name:
+        img = bpy.data.images.get(baked_img_name)
+        if img is not None and img.users == 0:
+            try:
+                bpy.data.images.remove(img, do_unlink=True)
+            except Exception:
+                pass
+
+
+def _native_bake_basecolor_texture(context, scene, base_obj, atlas_size, margin_px):
+    bake_info = {
+        "enabled": True,
+        "applied": False,
+        "atlas_size": int(atlas_size),
+        "margin_px": int(margin_px),
+        "source_texture_images": 0,
+        "source_image_nodes": 0,
+        "temp_materials": [],
+        "baked_material": "",
+        "baked_image": "",
+    }
+
+    mesh = getattr(base_obj, "data", None)
+    if mesh is None or len(mesh.polygons) == 0:
+        return False, "Mesh is empty, cannot bake textures.", bake_info
+
+    diag = _collect_object_texture_diagnostics(base_obj)
+    bake_info["source_texture_images"] = int(diag.get("texture_images", 0))
+    bake_info["source_image_nodes"] = int(diag.get("image_nodes", 0))
+    if bake_info["source_texture_images"] <= 0:
+        return True, "No source texture images found: bake skipped.", bake_info
+
+    local_materials = []
+    for idx, slot in enumerate(base_obj.material_slots):
+        mat = slot.material
+        if mat is None:
+            continue
+        mat_copy = mat.copy()
+        mat_copy.name = f"__CesiumBakeSrc_{_sanitize_name(base_obj.name)}_{idx:03d}"
+        slot.material = mat_copy
+        local_materials.append(mat_copy)
+        bake_info["temp_materials"].append(mat_copy.name)
+
+    if not local_materials:
+        return True, "No materials on source mesh: bake skipped.", bake_info
+
+    uv_layer = mesh.uv_layers.get("__CesiumBakeUV")
+    if uv_layer is None:
+        uv_layer = mesh.uv_layers.new(name="__CesiumBakeUV")
+    mesh.uv_layers.active = uv_layer
+    if hasattr(uv_layer, "active_render"):
+        uv_layer.active_render = True
+
+    image_name = f"__CesiumBakeAtlas_{_sanitize_name(base_obj.name)}"
+    bake_image = bpy.data.images.new(
+        name=image_name,
+        width=int(atlas_size),
+        height=int(atlas_size),
+        alpha=True,
+        float_buffer=False,
+    )
+    bake_image.generated_color = (1.0, 1.0, 1.0, 1.0)
+    bake_info["baked_image"] = bake_image.name
+
+    target_nodes = []
+    for mat in local_materials:
+        if not mat.use_nodes:
+            mat.use_nodes = True
+        nt = mat.node_tree
+        if nt is None:
+            continue
+        for node in nt.nodes:
+            node.select = False
+        tex_node = nt.nodes.new("ShaderNodeTexImage")
+        tex_node.name = "__CesiumBakeTarget"
+        tex_node.label = "Cesium Bake Target"
+        tex_node.image = bake_image
+        tex_node.select = True
+        nt.nodes.active = tex_node
+        target_nodes.append(tex_node)
+
+    if not target_nodes:
+        return False, "No valid material node trees available for bake.", bake_info
+
+    previous_engine = scene.render.engine
+    previous_bake_margin = int(getattr(scene.render.bake, "margin", int(margin_px)))
+    previous_bake_use_clear = bool(getattr(scene.render.bake, "use_clear", True))
+    previous_bake_selected_to_active = bool(getattr(scene.render.bake, "use_selected_to_active", False))
+    previous_cycles_samples = None
+    if hasattr(scene, "cycles"):
+        previous_cycles_samples = int(getattr(scene.cycles, "samples", 1))
+
+    try:
+        with _preserve_selection(context):
+            if getattr(context, "mode", "OBJECT") != 'OBJECT':
+                bpy.ops.object.mode_set(mode='OBJECT')
+            bpy.ops.object.select_all(action='DESELECT')
+            base_obj.hide_set(False)
+            base_obj.hide_viewport = False
+            base_obj.hide_render = False
+            base_obj.select_set(True)
+            context.view_layer.objects.active = base_obj
+
+            bpy.ops.object.mode_set(mode='EDIT')
+            bpy.ops.mesh.select_all(action='SELECT')
+            bpy.ops.uv.smart_project(angle_limit=66.0, island_margin=0.02)
+            bpy.ops.object.mode_set(mode='OBJECT')
+
+            scene.render.engine = 'CYCLES'
+            scene.render.bake.margin = int(margin_px)
+            scene.render.bake.use_clear = True
+            if hasattr(scene.render.bake, "use_selected_to_active"):
+                scene.render.bake.use_selected_to_active = False
+            if previous_cycles_samples is not None:
+                scene.cycles.samples = 1
+
+            result = bpy.ops.object.bake(
+                type='DIFFUSE',
+                pass_filter={'COLOR'},
+                use_clear=True,
+                margin=int(margin_px),
+            )
+            if 'FINISHED' not in result:
+                return False, "Bake operator failed.", bake_info
+    except Exception as exc:
+        return False, f"Bake failed: {exc}", bake_info
+    finally:
+        try:
+            if getattr(context, "mode", "OBJECT") != 'OBJECT':
+                bpy.ops.object.mode_set(mode='OBJECT')
+        except Exception:
+            pass
+        try:
+            scene.render.engine = previous_engine
+        except Exception:
+            pass
+        try:
+            scene.render.bake.margin = previous_bake_margin
+            scene.render.bake.use_clear = previous_bake_use_clear
+            if hasattr(scene.render.bake, "use_selected_to_active"):
+                scene.render.bake.use_selected_to_active = previous_bake_selected_to_active
+        except Exception:
+            pass
+        if previous_cycles_samples is not None:
+            try:
+                scene.cycles.samples = previous_cycles_samples
+            except Exception:
+                pass
+
+    try:
+        bake_image.pack()
+    except Exception:
+        pass
+
+    baked_mat = bpy.data.materials.new(name=f"CesiumBaked_{_sanitize_name(base_obj.name)}")
+    baked_mat.use_nodes = True
+    nt = baked_mat.node_tree
+    nt.nodes.clear()
+    out_node = nt.nodes.new("ShaderNodeOutputMaterial")
+    bsdf_node = nt.nodes.new("ShaderNodeBsdfPrincipled")
+    tex_node = nt.nodes.new("ShaderNodeTexImage")
+    tex_node.image = bake_image
+    tex_node.location = (-500, 0)
+    bsdf_node.location = (-250, 0)
+    out_node.location = (20, 0)
+    if "Metallic" in bsdf_node.inputs:
+        bsdf_node.inputs["Metallic"].default_value = 0.0
+    if "Roughness" in bsdf_node.inputs:
+        bsdf_node.inputs["Roughness"].default_value = 1.0
+    if "Color" in tex_node.outputs and "Base Color" in bsdf_node.inputs:
+        nt.links.new(tex_node.outputs["Color"], bsdf_node.inputs["Base Color"])
+    if "Alpha" in tex_node.outputs and "Alpha" in bsdf_node.inputs:
+        nt.links.new(tex_node.outputs["Alpha"], bsdf_node.inputs["Alpha"])
+    if "BSDF" in bsdf_node.outputs and "Surface" in out_node.inputs:
+        nt.links.new(bsdf_node.outputs["BSDF"], out_node.inputs["Surface"])
+
+    bake_info["baked_material"] = baked_mat.name
+    mesh.materials.clear()
+    mesh.materials.append(baked_mat)
+    for poly in mesh.polygons:
+        poly.material_index = 0
+    mesh.update()
+
+    for mat_name in list(bake_info.get("temp_materials", [])):
+        mat = bpy.data.materials.get(mat_name)
+        if mat is not None and mat.users == 0:
+            try:
+                bpy.data.materials.remove(mat, do_unlink=True)
+            except Exception:
+                pass
+
+    bake_info["applied"] = True
+    return True, f"Baked {bake_info['source_texture_images']} source texture(s) to {int(atlas_size)}px atlas.", bake_info
+
+
 def _build_face_spatial_data(mesh, to_gltf_yup=False):
     verts = []
     for v in mesh.vertices:
@@ -1185,7 +1404,17 @@ def _write_subtree_file(subtree_path, tile_bits, tile_count, content_bits, conte
         f.write(bin_blob)
 
 
-def _run_native_implicit_layout(context, scene, base_obj, temp_collection, tree, output_dir, tree_type):
+def _run_native_implicit_layout(
+    context,
+    scene,
+    base_obj,
+    temp_collection,
+    tree,
+    output_dir,
+    tree_type,
+    export_yup=True,
+    bake_info=None,
+):
     def _uri_join(*parts):
         return "/".join([p.strip("/\\") for p in parts if p])
 
@@ -1209,7 +1438,7 @@ def _run_native_implicit_layout(context, scene, base_obj, temp_collection, tree,
     tile_count = 0
     content_count = 0
 
-    force_unlit = bool(getattr(scene, "cesium_vtk_force_unlit_materials", True))
+    force_unlit = bool(getattr(scene, "cesium_vtk_force_unlit_materials", False))
     for node in nodes:
         level = int(node.get("depth", 0))
         x = int(node.get("grid_x", 0))
@@ -1234,6 +1463,7 @@ def _run_native_implicit_layout(context, scene, base_obj, temp_collection, tree,
             node["face_ids"],
             abs_path,
             force_unlit=force_unlit,
+            export_yup=export_yup,
         )
         if not ok:
             return False, f"Implicit layout: failed exporting tile {tile_label}."
@@ -1318,6 +1548,8 @@ def _run_native_implicit_layout(context, scene, base_obj, temp_collection, tree,
         f.write("Backend: NATIVE_SPLIT\n")
         f.write("3D Tiles version: 1.1\n")
         f.write(f"Tree type: {tree_type}\n")
+        f.write(f"Bounding volume frame: {getattr(scene, 'cesium_native_bbox_frame', 'GLTF_FRAME')}\n")
+        f.write(f"GLB export Y-up: {bool(export_yup)}\n")
         f.write("Hierarchy layout: IMPLICIT_TILING\n")
         f.write(f"Available levels: {available_levels}\n")
         f.write(f"Total tiles generated: {len(nodes)}\n")
@@ -1325,11 +1557,18 @@ def _run_native_implicit_layout(context, scene, base_obj, temp_collection, tree,
         f.write("Root content exported: True\n")
         f.write(f"Subtree availability bits: {total_nodes}\n")
         f.write(f"Subtree file: {subtree_note}\n")
+        if isinstance(bake_info, dict):
+            f.write(f"Texture bake enabled: {bool(bake_info.get('enabled', False))}\n")
+            f.write(f"Texture bake applied: {bool(bake_info.get('applied', False))}\n")
+            if bake_info.get("enabled"):
+                f.write(f"Bake atlas size: {int(bake_info.get('atlas_size', 0))}\n")
+                f.write(f"Bake margin px: {int(bake_info.get('margin_px', 0))}\n")
+                f.write(f"Bake source texture images: {int(bake_info.get('source_texture_images', 0))}\n")
 
     return True, f"Implicit tiling completed ({len(nodes)} tiles, {available_levels} levels)."
 
 
-def _export_leaf_glb(context, base_obj, temp_collection, keep_face_ids, filepath, force_unlit=False):
+def _export_leaf_glb(context, base_obj, temp_collection, keep_face_ids, filepath, force_unlit=False, export_yup=True):
     tile_obj = base_obj.copy()
     tile_obj.data = base_obj.data.copy()
     tile_obj_name = tile_obj.name
@@ -1361,6 +1600,7 @@ def _export_leaf_glb(context, base_obj, temp_collection, keep_face_ids, filepath
                     filepath=filepath,
                     use_selection=True,
                     export_format='GLB',
+                    export_yup=export_yup,
                 )
             )
         ok = 'FINISHED' in result
@@ -1436,10 +1676,27 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
     # Keep a stable root folder for tile content (Aton/TempluMare-like layout).
     data_root = "Data"
 
+    bake_info = {
+        "enabled": bool(getattr(scene, "cesium_native_bake_texture_atlas", True)),
+        "applied": False,
+        "atlas_size": int(getattr(scene, "cesium_native_bake_texture_size", 4096)),
+        "margin_px": int(getattr(scene, "cesium_native_bake_margin", 8)),
+        "source_texture_images": 0,
+        "source_image_nodes": 0,
+        "temp_materials": [],
+        "baked_material": "",
+        "baked_image": "",
+    }
+
     base_obj, temp_collection = _prepare_base_mesh_object(context, active_obj, coords_cfg["offset"])
     try:
         bbox_frame = getattr(scene, "cesium_native_bbox_frame", "GLTF_FRAME")
         use_gltf_bbox_frame = bbox_frame != 'LEGACY_BLENDER_FRAME'
+        export_yup = bool(use_gltf_bbox_frame)
+        if export_yup:
+            _add_to_cesium_log(context, f"[NATIVE] {active_obj.name}: bbox=GLTF_FRAME, GLB export_yup=ON")
+        else:
+            _add_to_cesium_log(context, f"[NATIVE] {active_obj.name}: bbox=LEGACY_BLENDER_FRAME, GLB export_yup=OFF")
 
         # Native split writes GLB through Blender's glTF exporter (Y-up conversion enabled),
         # so we compute hierarchy/bounding volumes in the same output coordinate frame.
@@ -1449,6 +1706,24 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
         )
         if not face_ids:
             return False, "Active mesh has no faces."
+
+        if bake_info["enabled"]:
+            ok_bake, bake_msg, bake_result = _native_bake_basecolor_texture(
+                context=context,
+                scene=scene,
+                base_obj=base_obj,
+                atlas_size=bake_info["atlas_size"],
+                margin_px=bake_info["margin_px"],
+            )
+            bake_info.update(bake_result or {})
+            if not ok_bake:
+                return False, f"Native bake failed: {bake_msg}"
+            if bake_info.get("applied"):
+                _add_to_cesium_log(context, f"[NATIVE] {active_obj.name}: {bake_msg}")
+            else:
+                _add_to_cesium_log(context, f"[NATIVE] {active_obj.name}: {bake_msg}")
+        else:
+            _add_to_cesium_log(context, f"[NATIVE] {active_obj.name}: texture bake disabled.")
 
         max_faces = int(scene.cesium_vtk_features_per_tile)
         min_depth = int(scene.cesium_native_min_depth)
@@ -1486,6 +1761,8 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
                 tree=tree,
                 output_dir=output_dir,
                 tree_type=tree_type,
+                export_yup=export_yup,
+                bake_info=bake_info,
             )
 
         external_subtree_map = {}
@@ -1536,7 +1813,8 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
                 temp_collection,
                 leaf["face_ids"],
                 abs_path,
-                force_unlit=bool(getattr(scene, "cesium_vtk_force_unlit_materials", True)),
+                force_unlit=bool(getattr(scene, "cesium_vtk_force_unlit_materials", False)),
+                export_yup=export_yup,
             )
             if not ok:
                 return False, f"Failed exporting leaf tile {tile_id}."
@@ -1553,7 +1831,8 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
                 temp_collection,
                 face_ids,
                 root_abs_path,
-                force_unlit=bool(getattr(scene, "cesium_vtk_force_unlit_materials", True)),
+                force_unlit=bool(getattr(scene, "cesium_vtk_force_unlit_materials", False)),
+                export_yup=export_yup,
             )
             if not ok:
                 return False, "Failed exporting single-JSON root content tile."
@@ -1604,6 +1883,7 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
             f.write("3D Tiles version: 1.1\n")
             f.write(f"Tree type: {tree_type}\n")
             f.write(f"Bounding volume frame: {bbox_frame}\n")
+            f.write(f"GLB export Y-up: {bool(export_yup)}\n")
             f.write(f"Hierarchy layout: {scene.cesium_native_hierarchy_layout}\n")
             f.write(f"Min depth: {min_depth}\n")
             f.write(f"Max depth: {max_depth}\n")
@@ -1614,17 +1894,29 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
             f.write(f"Max faces per leaf: {max_faces}\n")
             f.write(f"Leaves: {len(leaves)}\n")
             f.write(f"Texture mode: {texture_mode}\n")
+            f.write(f"Texture bake enabled: {bool(bake_info.get('enabled', False))}\n")
+            f.write(f"Texture bake applied: {bool(bake_info.get('applied', False))}\n")
+            if bake_info.get("enabled"):
+                f.write(f"Bake atlas size: {int(bake_info.get('atlas_size', 0))}\n")
+                f.write(f"Bake margin px: {int(bake_info.get('margin_px', 0))}\n")
+                f.write(f"Bake source texture images: {int(bake_info.get('source_texture_images', 0))}\n")
 
         return True, f"Native split completed ({len(leaves)} leaf tiles)."
     finally:
         try:
-            bpy.data.meshes.remove(base_obj.data, do_unlink=True)
+            mesh_data = base_obj.data
         except Exception:
-            pass
+            mesh_data = None
         try:
             bpy.data.objects.remove(base_obj, do_unlink=True)
         except Exception:
             pass
+        try:
+            if mesh_data is not None and mesh_data.users == 0:
+                bpy.data.meshes.remove(mesh_data, do_unlink=True)
+        except Exception:
+            pass
+        _cleanup_native_bake_assets(bake_info)
 
 
 def _run_vtk_conversion_subprocess(payload, output_dir):
@@ -1974,6 +2266,9 @@ class OBJECT_OT_apply_cesium_vtk_preset(bpy.types.Operator):
     def execute(self, context):
         scene = context.scene
         preset = scene.cesium_vtk_quick_preset
+        scene.cesium_native_bake_texture_atlas = True
+        scene.cesium_native_bake_texture_size = 4096
+        scene.cesium_native_bake_margin = 8
 
         if preset == 'PYRAMID_AGGRESSIVE':
             scene.cesium_vtk_features_per_tile = 3000
@@ -2081,7 +2376,7 @@ class OBJECT_OT_export_cesium_vtk_tiles(bpy.types.Operator):
         if not output_root:
             self.report({'ERROR'}, "Set a valid output directory.")
             return {'CANCELLED'}
-        if source_mode == 'ACTIVE_MESH' and not work_dir:
+        if source_mode == 'ACTIVE_MESH' and backend == 'VTK' and not work_dir:
             self.report({'ERROR'}, "Set a valid working directory.")
             return {'CANCELLED'}
 
@@ -2131,7 +2426,7 @@ class OBJECT_OT_export_cesium_vtk_tiles(bpy.types.Operator):
             input_format = scene.cesium_vtk_intermediate_format
             for mesh_obj in mesh_objects:
                 obj_name = _sanitize_name(mesh_obj.name)
-                intermediate_dir = os.path.join(work_dir, obj_name)
+                intermediate_dir = os.path.join(work_dir, obj_name) if backend == 'VTK' else ""
                 output_dir = os.path.join(output_root, obj_name) if scene.cesium_vtk_create_object_subdir else output_root
                 jobs.append(
                     {
@@ -2186,6 +2481,25 @@ class OBJECT_OT_export_cesium_vtk_tiles(bpy.types.Operator):
             elapsed=0.0,
         )
         _add_to_cesium_log(context, f"Starting Cesium export for {total_jobs} mesh(es)")
+        _add_to_cesium_log(context, f"Backend: {backend}")
+        if backend == 'VTK':
+            if source_mode == 'ACTIVE_MESH':
+                _add_to_cesium_log(context, f"TEMP folder in use: {work_dir}")
+            else:
+                _add_to_cesium_log(context, "TEMP folder not used (Existing OBJ source mode).")
+        else:
+            _add_to_cesium_log(context, "TEMP folder not used by Native Split (direct-to-output mode).")
+            if getattr(scene, "cesium_native_bake_texture_atlas", True):
+                _add_to_cesium_log(
+                    context,
+                    (
+                        "Native bake atlas: ON "
+                        f"({int(getattr(scene, 'cesium_native_bake_texture_size', 4096))} px, "
+                        f"margin {int(getattr(scene, 'cesium_native_bake_margin', 8))} px)"
+                    ),
+                )
+            else:
+                _add_to_cesium_log(context, "Native bake atlas: OFF")
 
         def _cancel_with_progress(message):
             _add_to_cesium_log(context, f"[ERR] {message}")
@@ -2348,7 +2662,7 @@ class OBJECT_OT_export_cesium_vtk_tiles(bpy.types.Operator):
                     elapsed=time.time() - start_time,
                 )
 
-            if scene.cesium_vtk_cleanup_intermediate and source_mode == 'ACTIVE_MESH':
+            if scene.cesium_vtk_cleanup_intermediate and source_mode == 'ACTIVE_MESH' and backend == 'VTK':
                 cleanup_failed = False
                 for intermediate_dir in sorted(set(cleanup_dirs)):
                     try:
@@ -2361,8 +2675,16 @@ class OBJECT_OT_export_cesium_vtk_tiles(bpy.types.Operator):
                 if cleanup_failed:
                     self.report({'WARNING'}, "Intermediate files were kept for some meshes (cleanup failed).")
                     _add_to_cesium_log(context, "[WARN] Cleanup intermediate files failed for some meshes.")
-            elif scene.cesium_vtk_cleanup_intermediate and source_mode != 'ACTIVE_MESH':
+                    _add_to_cesium_log(context, f"[WARN] Intermediates may remain in: {work_dir}")
+                else:
+                    _add_to_cesium_log(context, f"Intermediates cleaned from: {work_dir}")
+            elif scene.cesium_vtk_cleanup_intermediate and source_mode != 'ACTIVE_MESH' and backend == 'VTK':
                 self.report({'INFO'}, "Cleanup skipped: external OBJ source is not deleted.")
+                _add_to_cesium_log(context, "Cleanup skipped: external OBJ source is not deleted.")
+            elif backend == 'VTK' and source_mode == 'ACTIVE_MESH':
+                _add_to_cesium_log(context, f"Intermediates kept in: {work_dir}")
+            elif backend == 'NATIVE_SPLIT':
+                _add_to_cesium_log(context, "No intermediate files generated.")
 
             if auto_stitch_parent and total_jobs > 1:
                 if not scene.cesium_vtk_create_object_subdir:
@@ -2517,21 +2839,30 @@ class VIEW3D_PT_cesium_vtk_export(bpy.types.Panel):
         box = layout.box()
         box.label(text="Paths")
         if source_mode == 'ACTIVE_MESH':
-            box.prop(scene, "cesium_vtk_work_dir_mode", text="Temp folder mode")
-            if scene.cesium_vtk_work_dir_mode == 'CUSTOM':
-                row = box.row(align=True)
-                row.prop(scene, "cesium_vtk_work_dir", text="Temp folder")
-                op = row.operator("object.clear_cesium_vtk_folder", text="", icon='TRASH')
-                op.target = 'WORK'
+            if backend == 'VTK':
+                box.prop(scene, "cesium_vtk_work_dir_mode", text="Temp folder mode")
+                if scene.cesium_vtk_work_dir_mode == 'CUSTOM':
+                    row = box.row(align=True)
+                    row.prop(scene, "cesium_vtk_work_dir", text="Temp folder")
+                    op = row.operator("object.clear_cesium_vtk_folder", text="", icon='TRASH')
+                    op.target = 'WORK'
+                else:
+                    auto_temp_dir, is_blend_relative = _get_default_temp_work_dir()
+                    row = box.row(align=True)
+                    row.label(text="Temp folder (auto)")
+                    op = row.operator("object.clear_cesium_vtk_folder", text="", icon='TRASH')
+                    op.target = 'WORK'
+                    box.label(text=auto_temp_dir, icon='FILE_FOLDER')
+                    if not is_blend_relative:
+                        box.label(text="Blend not saved: temporary system folder is used.", icon='INFO')
+                box.label(text="TEMP folder stores exported source files before conversion.", icon='INFO')
             else:
-                auto_temp_dir, is_blend_relative = _get_default_temp_work_dir()
-                row = box.row(align=True)
-                row.label(text="Temp folder (auto)")
-                op = row.operator("object.clear_cesium_vtk_folder", text="", icon='TRASH')
-                op.target = 'WORK'
-                box.label(text=auto_temp_dir, icon='FILE_FOLDER')
-                if not is_blend_relative:
-                    box.label(text="Blend not saved: temporary system folder is used.", icon='INFO')
+                box.label(text="Temp folder not used by Native Split (tiles are written directly to output).", icon='INFO')
+                box.label(text="Direct-to-output mode; TEMP controls are ignored.", icon='INFO')
+        elif backend == 'NATIVE_SPLIT':
+            box.label(text="Direct-to-output mode; TEMP controls are ignored.", icon='INFO')
+        else:
+            box.label(text="TEMP folder not used in Existing OBJ mode.", icon='INFO')
         row = box.row(align=True)
         row.prop(scene, "cesium_vtk_output_dir")
         op = row.operator("object.clear_cesium_vtk_folder", text="", icon='TRASH')
@@ -2595,6 +2926,12 @@ class VIEW3D_PT_cesium_vtk_export(bpy.types.Panel):
         if backend == 'NATIVE_SPLIT':
             box.prop(scene, "cesium_native_min_depth")
             box.prop(scene, "cesium_native_max_depth")
+            box.prop(scene, "cesium_native_bake_texture_atlas")
+            bake_row = box.row(align=True)
+            bake_row.enabled = bool(scene.cesium_native_bake_texture_atlas)
+            bake_row.prop(scene, "cesium_native_bake_texture_size")
+            bake_row.prop(scene, "cesium_native_bake_margin")
+            box.label(text="Native bake is ON by default for better texture compatibility.", icon='INFO')
             box.label(text="Native backend writes 3D Tiles asset.version 1.1.", icon='CHECKMARK')
 
         adv_header = box.row(align=True)
@@ -2609,7 +2946,7 @@ class VIEW3D_PT_cesium_vtk_export(bpy.types.Panel):
                 adv.prop(scene, "cesium_native_bbox_frame")
                 adv.label(text="Current native mode is spatial split (no decimation pyramid yet).", icon='INFO')
                 if scene.cesium_native_bbox_frame == 'LEGACY_BLENDER_FRAME':
-                    adv.label(text="Legacy bbox frame for ATON compatibility (same as old datasets).", icon='INFO')
+                    adv.label(text="Legacy frame: GLB export_yup is forced OFF to keep bbox/tile alignment.", icon='INFO')
                 if scene.cesium_native_hierarchy_layout == 'EXTERNAL_SUBTILESETS':
                     adv.prop(scene, "cesium_native_subtileset_split_depth")
                     adv.label(text="Data/cXX/tileset.json + multiple f*.glb files.", icon='INFO')
@@ -2629,8 +2966,10 @@ class VIEW3D_PT_cesium_vtk_export(bpy.types.Panel):
             row.enabled = (backend == 'NATIVE_SPLIT') or req_info.get("supports_merged_texture_width", False)
             row.prop(scene, "cesium_vtk_merged_texture_width")
         row = box.row()
-        row.enabled = source_mode == 'ACTIVE_MESH'
+        row.enabled = (backend == 'VTK' and source_mode == 'ACTIVE_MESH')
         row.prop(scene, "cesium_vtk_cleanup_intermediate")
+        if backend == 'NATIVE_SPLIT':
+            box.label(text="No intermediate files are produced in Native Split.", icon='INFO')
 
         layout.operator("object.export_cesium_vtk_tiles", icon='EXPORT')
 
@@ -2778,6 +3117,25 @@ def register():
         max=20,
         description="Force at least this depth before stopping (if split is possible)",
     )
+    bpy.types.Scene.cesium_native_bake_texture_atlas = bpy.props.BoolProperty(
+        name="Bake textures to atlas",
+        default=True,
+        description="Bake source materials into a single atlas before native split export",
+    )
+    bpy.types.Scene.cesium_native_bake_texture_size = bpy.props.IntProperty(
+        name="Bake atlas size",
+        default=4096,
+        min=512,
+        max=16384,
+        description="Texture atlas size used for native bake step",
+    )
+    bpy.types.Scene.cesium_native_bake_margin = bpy.props.IntProperty(
+        name="Bake margin px",
+        default=8,
+        min=0,
+        max=64,
+        description="Pixel margin between UV islands in baked atlas",
+    )
     bpy.types.Scene.cesium_native_hierarchy_layout = bpy.props.EnumProperty(
         name="Hierarchy layout",
         items=[
@@ -2915,6 +3273,9 @@ def unregister():
     del bpy.types.Scene.cesium_vtk_show_advanced
     del bpy.types.Scene.cesium_native_min_depth
     del bpy.types.Scene.cesium_native_max_depth
+    del bpy.types.Scene.cesium_native_bake_texture_atlas
+    del bpy.types.Scene.cesium_native_bake_texture_size
+    del bpy.types.Scene.cesium_native_bake_margin
     del bpy.types.Scene.cesium_native_hierarchy_layout
     del bpy.types.Scene.cesium_native_bbox_frame
     del bpy.types.Scene.cesium_singlejson_add_root_content
