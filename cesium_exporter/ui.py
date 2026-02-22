@@ -16,34 +16,6 @@ class VIEW3D_PT_cesium_export(bpy.types.Panel):
         active_obj = context.active_object
         source_mode = scene.cesium_source_mode
 
-        # ---- Progress section ----
-        if scene.cesium_progress_active or scene.cesium_progress_log or scene.cesium_progress_last_stats:
-            box_prog = layout.box()
-            box_prog.label(text="Export Progress", icon='TIME')
-            col = box_prog.column(align=True)
-            if scene.cesium_progress_task:
-                col.label(text=f"Task: {scene.cesium_progress_task}")
-            if scene.cesium_progress_total_meshes > 0:
-                col.label(text=f"Mesh: {scene.cesium_progress_current_mesh}/{scene.cesium_progress_total_meshes}")
-            if scene.cesium_progress_elapsed > 0.0:
-                elapsed_m = int(scene.cesium_progress_elapsed // 60)
-                elapsed_s = int(scene.cesium_progress_elapsed % 60)
-                col.label(text=f"Elapsed: {elapsed_m}m {elapsed_s}s")
-
-            if scene.cesium_progress_last_stats:
-                box_stats = layout.box()
-                box_stats.label(text="Last Mesh Stats", icon='INFO')
-                for line in scene.cesium_progress_last_stats.split('\n')[-3:]:
-                    if line.strip():
-                        box_stats.label(text=line)
-
-            if scene.cesium_progress_log:
-                box_log = layout.box()
-                box_log.label(text="Recent Operations", icon='TEXT')
-                for line in scene.cesium_progress_log.split('\n')[-6:]:
-                    if line.strip():
-                        box_log.label(text=line)
-
         # ---- Source ----
         box_source = layout.box()
         box_source.label(text="Source")
@@ -88,6 +60,7 @@ class VIEW3D_PT_cesium_export(bpy.types.Panel):
         box.prop(scene, "cesium_lod_mode")
 
         if scene.cesium_lod_mode:
+            box.prop(scene, "cesium_lod_strategy")
             box.prop(scene, "cesium_lod_auto_params")
             if not scene.cesium_lod_auto_params:
                 box.prop(scene, "cesium_native_max_depth")
@@ -164,3 +137,31 @@ class VIEW3D_PT_cesium_export(bpy.types.Panel):
 
         # ---- Export button ----
         layout.operator("object.export_cesium_tiles", icon='EXPORT')
+
+        # ---- Progress section (shown below Export button during/after export) ----
+        if scene.cesium_progress_active or scene.cesium_progress_log or scene.cesium_progress_last_stats:
+            box_prog = layout.box()
+            box_prog.label(text="Export Progress", icon='TIME')
+            col = box_prog.column(align=True)
+            if scene.cesium_progress_task:
+                col.label(text=f"Task: {scene.cesium_progress_task}")
+            if scene.cesium_progress_total_meshes > 0:
+                col.label(text=f"Mesh: {scene.cesium_progress_current_mesh}/{scene.cesium_progress_total_meshes}")
+            if scene.cesium_progress_elapsed > 0.0:
+                elapsed_m = int(scene.cesium_progress_elapsed // 60)
+                elapsed_s = int(scene.cesium_progress_elapsed % 60)
+                col.label(text=f"Elapsed: {elapsed_m}m {elapsed_s}s")
+
+            if scene.cesium_progress_last_stats:
+                box_stats = layout.box()
+                box_stats.label(text="Last Mesh Stats", icon='INFO')
+                for line in scene.cesium_progress_last_stats.split('\n')[-3:]:
+                    if line.strip():
+                        box_stats.label(text=line)
+
+            if scene.cesium_progress_log:
+                box_log = layout.box()
+                box_log.label(text="Recent Operations", icon='TEXT')
+                for line in scene.cesium_progress_log.split('\n')[-6:]:
+                    if line.strip():
+                        box_log.label(text=line)

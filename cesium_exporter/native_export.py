@@ -13,7 +13,7 @@ from .implicit import (
     _write_subtree_file,
 )
 from .lod import _cleanup_lod_image_cache, _compute_lod_parameters, _prepare_lod_image_cache
-from .native_bake import _cleanup_native_bake_assets, _native_bake_basecolor_texture, _prepare_base_mesh_object
+from .native_bake import _cleanup_native_bake_assets, _native_bake_basecolor_texture, _prepare_base_mesh_object, _rebake_node_texture
 from .native_tree import (
     _build_face_spatial_data,
     _build_native_tree,
@@ -31,17 +31,26 @@ def _export_node_glb(
     force_unlit=False, export_yup=True,
     decimation_ratio=1.0, preserve_borders=True,
     lod_image=None,
+    lod_strategy='REBAKE',
+    rebake_atlas_size=None,
+    rebake_margin_px=8,
+    scene=None,
 ):
     """Export a GLB for a tree node.
 
     For leaf nodes: decimation_ratio=1.0, lod_image=None (uses full mesh+texture).
-    For internal LOD nodes: decimation_ratio<1.0, lod_image=downsampled atlas.
+    For internal LOD nodes with REBAKE strategy: decimate, re-UV, re-bake from base_obj.
+    For internal LOD nodes with legacy behavior: decimation_ratio<1.0, lod_image=downsampled atlas.
     """
     tile_obj = base_obj.copy()
     tile_obj.data = base_obj.data.copy()
     tile_obj_name = tile_obj.name
     tile_mesh_name = tile_obj.data.name
     temp_collection.objects.link(tile_obj)
+
+    # Track rebake artifacts for cleanup
+    _rebake_img_name = None
+    _rebake_mat_name = None
 
     try:
         # 1) Keep only faces belonging to this node
@@ -90,7 +99,25 @@ def _export_node_glb(
             if len(tile_obj.data.polygons) == 0:
                 return False
 
-        # 3) Swap texture to LOD-sized atlas if provided
+            # 2b) Re-bake texture onto decimated mesh (LODgenerator pattern)
+            if lod_strategy == 'REBAKE' and rebake_atlas_size is not None and scene is not None:
+                ok_rb, rb_img, rb_mat = _rebake_node_texture(
+                    context, scene, base_obj, tile_obj,
+                    atlas_size=rebake_atlas_size,
+                    margin_px=rebake_margin_px,
+                )
+                if ok_rb and rb_mat is not None:
+                    _rebake_img_name = rb_img.name if rb_img else None
+                    _rebake_mat_name = rb_mat.name
+                    tile_obj.data.materials.clear()
+                    tile_obj.data.materials.append(rb_mat)
+                    for poly in tile_obj.data.polygons:
+                        poly.material_index = 0
+                    tile_obj.data.update()
+                    # Skip step 3 (texture swap) — we have a fresh bake
+                    lod_image = None
+
+        # 3) Swap texture to LOD-sized atlas if provided (legacy path, skipped if REBAKE succeeded)
         if lod_image is not None:
             for slot in tile_obj.material_slots:
                 mat = slot.material
@@ -119,18 +146,35 @@ def _export_node_glb(
             _patch_glb_to_unlit(filepath)
         return ok
     finally:
-        obj = bpy.data.objects.get(tile_obj_name)
-        if obj is not None:
-            try:
-                bpy.data.objects.remove(obj, do_unlink=True)
-            except Exception:
-                pass
-        mesh = bpy.data.meshes.get(tile_mesh_name)
-        if mesh is not None and mesh.users == 0:
-            try:
-                bpy.data.meshes.remove(mesh, do_unlink=True)
-            except Exception:
-                pass
+        # DEBUG: cleanup disabled – keep temp objects in Blender for inspection
+        pass
+        # obj = bpy.data.objects.get(tile_obj_name)
+        # if obj is not None:
+        #     try:
+        #         bpy.data.objects.remove(obj, do_unlink=True)
+        #     except Exception:
+        #         pass
+        # mesh = bpy.data.meshes.get(tile_mesh_name)
+        # if mesh is not None and mesh.users == 0:
+        #     try:
+        #         bpy.data.meshes.remove(mesh, do_unlink=True)
+        #     except Exception:
+        #         pass
+        # # Cleanup rebake artifacts (material + image created per-node)
+        # if _rebake_mat_name:
+        #     mat = bpy.data.materials.get(_rebake_mat_name)
+        #     if mat is not None and mat.users == 0:
+        #         try:
+        #             bpy.data.materials.remove(mat, do_unlink=True)
+        #         except Exception:
+        #             pass
+        # if _rebake_img_name:
+        #     img = bpy.data.images.get(_rebake_img_name)
+        #     if img is not None and img.users == 0:
+        #         try:
+        #             bpy.data.images.remove(img, do_unlink=True)
+        #         except Exception:
+        #             pass
 
 
 # ---------------------------------------------------------------------------
@@ -203,6 +247,8 @@ def _run_native_implicit_layout(
 
     force_unlit = bool(getattr(scene, "cesium_force_unlit_materials", False))
     preserve_borders = bool(getattr(scene, "cesium_lod_preserve_borders", True))
+    lod_strategy = str(getattr(scene, "cesium_lod_strategy", "REBAKE")) if lod_mode else "LEAF_ONLY"
+    rebake_margin = int(getattr(scene, "cesium_native_bake_margin", 8))
 
     for node in nodes:
         level = int(node.get("depth", 0))
@@ -211,6 +257,14 @@ def _run_native_implicit_layout(
         z = int(node.get("grid_z", 0))
 
         bit_idx = _implicit_level_offset(level, tree_type) + _implicit_morton_index(node, tree_type)
+        is_leaf = not node["children"]
+
+        # LEAF_ONLY strategy: skip internal nodes entirely
+        if lod_strategy == 'LEAF_ONLY' and not is_leaf:
+            if _bitarray_set_once(tile_bits, bit_idx):
+                tile_count += 1
+            continue
+
         if _bitarray_set_once(tile_bits, bit_idx):
             tile_count += 1
 
@@ -225,7 +279,7 @@ def _run_native_implicit_layout(
         # Determine LOD parameters for this node
         dec_ratio = 1.0
         lod_image = None
-        is_leaf = not node["children"]
+        rebake_atlas_sz = None
         if lod_mode and lod_config and not is_leaf:
             # Find config for this level
             levels_cfg = lod_config.get("lod_levels", [])
@@ -237,7 +291,9 @@ def _run_native_implicit_layout(
             if level_cfg:
                 dec_ratio = level_cfg["decimation_ratio"]
                 atlas_sz = level_cfg["atlas_size"]
-                if lod_image_cache and atlas_sz in lod_image_cache:
+                if lod_strategy == 'REBAKE':
+                    rebake_atlas_sz = atlas_sz
+                elif lod_image_cache and atlas_sz in lod_image_cache:
                     lod_image = lod_image_cache[atlas_sz]
 
         ok = _export_node_glb(
@@ -245,6 +301,10 @@ def _run_native_implicit_layout(
             force_unlit=force_unlit, export_yup=True,
             decimation_ratio=dec_ratio, preserve_borders=preserve_borders,
             lod_image=lod_image,
+            lod_strategy=lod_strategy,
+            rebake_atlas_size=rebake_atlas_sz,
+            rebake_margin_px=rebake_margin,
+            scene=scene,
         )
         if not ok:
             return False, f"Implicit layout: failed exporting tile {tile_label}."
@@ -325,6 +385,8 @@ def _run_native_implicit_layout(
         f.write("GLB export Y-up: True\n")
         f.write("Hierarchy layout: IMPLICIT_TILING\n")
         f.write(f"LOD mode: {bool(lod_mode)}\n")
+        if lod_mode:
+            f.write(f"LOD strategy: {lod_strategy}\n")
         f.write(f"Available levels: {available_levels}\n")
         f.write(f"Total tiles generated: {len(nodes)}\n")
         f.write(f"Total nodes with content: {content_count}\n")
@@ -415,10 +477,11 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
             # Override depth/features from LOD config
             max_depth = lod_config["max_depth"]
             max_faces = lod_config["features_per_tile"]
+            lod_strat = str(getattr(scene, "cesium_lod_strategy", "REBAKE"))
             _add_to_cesium_log(
                 context,
                 f"[LOD] Auto-params: depth={max_depth}, feat/tile={max_faces}, "
-                f"levels={len(lod_config['lod_levels'])}"
+                f"levels={len(lod_config['lod_levels'])}, strategy={lod_strat}"
             )
 
             # Prepare LOD image cache
@@ -487,10 +550,18 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
                     leaf["_subtree_folder"] = folder
 
         # Collect all nodes to export (LOD mode: all nodes; else: only leaves)
+        lod_strategy = str(getattr(scene, "cesium_lod_strategy", "REBAKE")) if lod_mode else "LEAF_ONLY"
+        rebake_margin = int(getattr(scene, "cesium_native_bake_margin", 8))
+
         if lod_mode:
-            all_nodes = []
-            _collect_native_nodes(tree, all_nodes)
-            all_nodes = [n for n in all_nodes if n.get("face_ids")]
+            if lod_strategy == 'LEAF_ONLY':
+                # LEAF_ONLY: only export leaf nodes (same as non-LOD mode)
+                all_nodes = []
+                _collect_native_leaves(tree, all_nodes)
+            else:
+                all_nodes = []
+                _collect_native_nodes(tree, all_nodes)
+                all_nodes = [n for n in all_nodes if n.get("face_ids")]
         else:
             all_nodes = []
             _collect_native_leaves(tree, all_nodes)
@@ -518,6 +589,7 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
             # LOD parameters for this node
             dec_ratio = 1.0
             lod_image = None
+            rebake_atlas_sz = None
             if lod_mode and lod_config and not is_leaf:
                 level = node["depth"]
                 levels_cfg = lod_config.get("lod_levels", [])
@@ -525,7 +597,9 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
                     if lc["depth"] == level:
                         dec_ratio = lc["decimation_ratio"]
                         atlas_sz = lc["atlas_size"]
-                        if lod_image_cache and atlas_sz in lod_image_cache:
+                        if lod_strategy == 'REBAKE':
+                            rebake_atlas_sz = atlas_sz
+                        elif lod_image_cache and atlas_sz in lod_image_cache:
                             lod_image = lod_image_cache[atlas_sz]
                         break
 
@@ -534,6 +608,10 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
                 force_unlit=force_unlit, export_yup=True,
                 decimation_ratio=dec_ratio, preserve_borders=preserve_borders,
                 lod_image=lod_image,
+                lod_strategy=lod_strategy,
+                rebake_atlas_size=rebake_atlas_sz,
+                rebake_margin_px=rebake_margin,
+                scene=scene,
             )
             if not ok:
                 return False, f"Failed exporting tile {prefix}{tile_id}."
@@ -595,6 +673,8 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
             f.write("GLB export Y-up: True\n")
             f.write(f"Hierarchy layout: {scene.cesium_native_hierarchy_layout}\n")
             f.write(f"LOD mode: {bool(lod_mode)}\n")
+            if lod_mode:
+                f.write(f"LOD strategy: {lod_strategy}\n")
             f.write(f"Min depth: {min_depth}\n")
             f.write(f"Max depth: {max_depth}\n")
             if scene.cesium_native_hierarchy_layout == 'EXTERNAL_SUBTILESETS':
@@ -618,19 +698,21 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
 
         return True, f"Native split completed ({len(all_nodes)} tiles, LOD={bool(lod_mode)})."
     finally:
-        try:
-            mesh_data = base_obj.data
-        except Exception:
-            mesh_data = None
-        try:
-            bpy.data.objects.remove(base_obj, do_unlink=True)
-        except Exception:
-            pass
-        try:
-            if mesh_data is not None and mesh_data.users == 0:
-                bpy.data.meshes.remove(mesh_data, do_unlink=True)
-        except Exception:
-            pass
-        if lod_image_cache:
-            _cleanup_lod_image_cache(lod_image_cache)
-        _cleanup_native_bake_assets(bake_info)
+        # DEBUG: cleanup disabled – keep base_obj and bake assets for inspection
+        pass
+        # try:
+        #     mesh_data = base_obj.data
+        # except Exception:
+        #     mesh_data = None
+        # try:
+        #     bpy.data.objects.remove(base_obj, do_unlink=True)
+        # except Exception:
+        #     pass
+        # try:
+        #     if mesh_data is not None and mesh_data.users == 0:
+        #         bpy.data.meshes.remove(mesh_data, do_unlink=True)
+        # except Exception:
+        #     pass
+        # if lod_image_cache:
+        #     _cleanup_lod_image_cache(lod_image_cache)
+        # _cleanup_native_bake_assets(bake_info)

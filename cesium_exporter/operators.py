@@ -153,6 +153,7 @@ class OBJECT_OT_apply_cesium_preset(bpy.types.Operator):
             scene.cesium_native_hierarchy_layout = 'IMPLICIT_TILING'
             scene.cesium_lod_mode = True
             scene.cesium_lod_auto_params = True
+            scene.cesium_lod_strategy = 'REBAKE'
             scene.cesium_native_bake_texture_size = 2048
             scene.cesium_force_unlit_materials = False
         elif preset == 'BALANCED':
@@ -294,6 +295,16 @@ class OBJECT_OT_export_cesium_tiles(bpy.types.Operator):
         scene.cesium_progress_last_stats = ""
         _update_cesium_progress(context, task="Initializing...", current_mesh=0, total_meshes=total_jobs, elapsed=0.0)
         _add_to_cesium_log(context, f"Starting Cesium export for {total_jobs} mesh(es)")
+
+        # Switch viewport to wireframe to save memory and speed up bake
+        _add_to_cesium_log(context, "Switching viewport to wireframe for performance...")
+        for area in context.screen.areas:
+            if area.type == 'VIEW_3D':
+                for space in area.spaces:
+                    if space.type == 'VIEW_3D':
+                        space.shading.type = 'WIREFRAME'
+        _redraw_3d_view(context)
+
         _add_to_cesium_log(context, "Backend: NATIVE_SPLIT")
         _add_to_cesium_log(context, "TEMP folder not used (direct-to-output mode).")
         if getattr(scene, "cesium_native_bake_texture_atlas", True):

@@ -6,7 +6,7 @@ Implementation has been split across dedicated modules for maintainability.
 from .glb_unlit import _patch_glb_to_unlit, _patch_output_glbs_to_unlit, _strip_glb_unlit, _strip_output_glbs_unlit
 from .implicit import _bitarray_set_once, _implicit_level_offset, _implicit_morton_index, _implicit_total_nodes, _write_subtree_file
 from .lod import _cleanup_lod_image_cache, _compute_lod_parameters, _pow2_round, _prepare_lod_image_cache
-from .native_bake import _cleanup_native_bake_assets, _native_bake_basecolor_texture, _prepare_base_mesh_object
+from .native_bake import _cleanup_native_bake_assets, _native_bake_basecolor_texture, _prepare_base_mesh_object, _rebake_node_texture
 from .native_export import _export_node_glb, _native_tree_to_tileset_node, _run_native_implicit_layout, _run_native_split_backend
 from .native_tree import _build_face_spatial_data, _build_native_tree, _child_split_bbox, _collect_native_leaves, _collect_native_nodes, _collect_nodes_at_depth, _split_face_ids
 from .shared import _add_to_cesium_log, _crs_requires_proj_db, _export_obj, _find_proj_data_dir, _normalize_crs_input, _preserve_selection, _redraw_3d_view, _resolve_coordinates_config, _sanitize_name, _update_cesium_progress
@@ -47,6 +47,7 @@ __all__ = [
     "_prepare_base_mesh_object",
     "_cleanup_native_bake_assets",
     "_native_bake_basecolor_texture",
+    "_rebake_node_texture",
     "_build_face_spatial_data",
     "_split_face_ids",
     "_child_split_bbox",

@@ -109,6 +109,17 @@ def register():
         default=True,
         description="Protect non-manifold edges from decimation (prevents tile seams)",
     )
+    S.cesium_lod_strategy = bpy.props.EnumProperty(
+        name="LOD Strategy",
+        items=[
+            ('REBAKE', 'Re-bake per level',
+             'Decimate + re-UV + re-bake texture from source mesh (correct, recommended)'),
+            ('LEAF_ONLY', 'Leaf-only tiles',
+             'Only leaf nodes get content; faster but no progressive LOD geometry'),
+        ],
+        default='REBAKE',
+        description="How internal (non-leaf) LOD nodes handle texture mapping",
+    )
 
     # Texture
     S.cesium_native_bake_texture_atlas = bpy.props.BoolProperty(
@@ -229,6 +240,7 @@ def unregister():
         "cesium_lod_leaf_atlas_size",
         "cesium_lod_root_atlas_size",
         "cesium_lod_preserve_borders",
+        "cesium_lod_strategy",
         "cesium_native_bake_texture_atlas",
         "cesium_native_bake_texture_size",
         "cesium_native_bake_margin",
