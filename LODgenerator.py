@@ -118,6 +118,45 @@ def tex_res_for_current_lod(lod, context):
         tex_res = context.scene.LOD4_tex_res
     return tex_res
 
+def object_has_alpha_texture(obj):
+    if obj is None or obj.type != 'MESH':
+        return False
+    for mat_slot in obj.material_slots:
+        mat = mat_slot.material
+        if mat is None or not mat.use_nodes or mat.node_tree is None:
+            continue
+        for node in mat.node_tree.nodes:
+            if node.type == 'TEX_IMAGE' and getattr(node, "image", None) is not None:
+                image = node.image
+                if getattr(image, "channels", 0) >= 4:
+                    return True
+    return False
+
+def should_preserve_alpha(scene, source_obj):
+    if scene.lod_ignore_source_alpha:
+        return False
+    if scene.use_alpha:
+        return True
+    if not scene.lod_auto_preserve_alpha:
+        return False
+    return object_has_alpha_texture(source_obj)
+
+def configure_material_alpha(mat, bsdf, texImage, scene, use_alpha):
+    if not use_alpha:
+        mat.blend_method = 'OPAQUE'
+        return
+
+    if bsdf.inputs['Alpha'].is_linked:
+        for link in list(bsdf.inputs['Alpha'].links):
+            mat.node_tree.links.remove(link)
+    mat.node_tree.links.new(texImage.outputs['Alpha'], bsdf.inputs['Alpha'])
+    mat.blend_method = scene.lod_alpha_mode
+    if scene.lod_alpha_mode == 'CLIP':
+        mat.alpha_threshold = scene.lod_alpha_clip_threshold
+
+def workflow_uses_normal_maps(scene):
+    return scene.lod_generate_normal_maps or scene.lod_workflow_preset == 'CLASSIC_NORMAL'
+
 def update_lod_progress(context, task="", current_obj=0, total_obj=0, current_lod=0, total_lod=0, elapsed=0.0):
     """Update LOD generation progress information"""
     scene = context.scene
@@ -179,6 +218,79 @@ def _get_addon_preferences(context):
 
 
 LOD_BASE_PRESET_NAME = "Base"
+LOD_CLASSIC_PRESET_NAME = "Classic LOD"
+LOD_CLASSIC_NORMAL_PRESET_NAME = "Classic LOD + Normal Maps"
+LOD_VEGETATION_PRESET_NAME = "Vegetation Alpha Clip"
+LOD_CESIUM_ATLAS_PRESET_NAME = "LOD0 Atlas Bake (Cesium)"
+
+WORKFLOW_PRESET_LEGACY_NAMES = {
+    LOD_CLASSIC_PRESET_NAME: ["LOD classico"],
+    LOD_CLASSIC_NORMAL_PRESET_NAME: ["LOD classico con normal map"],
+    LOD_VEGETATION_PRESET_NAME: [],
+    LOD_CESIUM_ATLAS_PRESET_NAME: ["Bake Atlas LOD0 (Cesium)"]
+}
+
+def _apply_workflow_preset_defaults(preset, workflow_name):
+    preset.lod_workflow_preset = workflow_name
+    preset.lod_generate_normal_maps = workflow_name == 'CLASSIC_NORMAL'
+    preset.lod_normal_map_max_level = max(1, preset.lod_normal_map_max_level)
+    # Alpha must stay opt-in by default.
+    preset.lod_auto_preserve_alpha = False
+    preset.lod_ignore_source_alpha = False
+    preset.lod_alpha_mode = 'BLEND'
+    preset.lod_alpha_clip_threshold = 0.5
+
+    if workflow_name == 'VEGETATION_ALPHA':
+        preset.lod_texture_format = 'PNG'
+        preset.lod_use_alpha = True
+        preset.lod_auto_preserve_alpha = True
+        preset.lod_alpha_mode = 'CLIP'
+        preset.lod_alpha_clip_threshold = 0.35
+        preset.lod_decimate_borders = True
+
+    if workflow_name == 'CESIUM_ATLAS':
+        preset.lod_num = 1
+        preset.lod1_dec_ratio = 1.0
+        preset.lod_atlas_uv_recalc = True
+        preset.lod_texture_format = 'PNG'
+        preset.lod_use_alpha = False
+
+def apply_scene_workflow_defaults(scene, workflow_name):
+    scene.lod_generate_normal_maps = workflow_name == 'CLASSIC_NORMAL'
+    scene.lod_normal_map_max_level = max(1, min(scene.lod_normal_map_max_level, scene.LODnum))
+    scene.lod_auto_preserve_alpha = False
+    scene.lod_ignore_source_alpha = False
+    scene.lod_alpha_mode = 'BLEND'
+    scene.lod_alpha_clip_threshold = 0.5
+
+    if workflow_name == 'VEGETATION_ALPHA':
+        scene.texture_format = 'PNG'
+        scene.use_alpha = True
+        scene.lod_auto_preserve_alpha = True
+        scene.lod_alpha_mode = 'CLIP'
+        scene.lod_alpha_clip_threshold = 0.35
+        scene.decimate_borders = True
+
+    if workflow_name == 'CESIUM_ATLAS':
+        scene.LODnum = 1
+        scene.LOD1_dec_ratio = 1.0
+        scene.atlas_uv_recalc = True
+        scene.texture_format = 'PNG'
+        scene.use_alpha = False
+        scene.lod_generate_normal_maps = False
+
+def on_lod_workflow_preset_update(scene, context):
+    if scene is None:
+        return
+    required_attrs = (
+        "LODnum", "LOD1_dec_ratio", "atlas_uv_recalc", "texture_format",
+        "use_alpha", "lod_generate_normal_maps", "lod_normal_map_max_level",
+        "lod_auto_preserve_alpha", "lod_ignore_source_alpha",
+        "lod_alpha_mode", "lod_alpha_clip_threshold", "decimate_borders"
+    )
+    if not all(hasattr(scene, attr) for attr in required_attrs):
+        return
+    apply_scene_workflow_defaults(scene, scene.lod_workflow_preset)
 
 
 def _copy_scene_to_preset(scene, preset):
@@ -191,6 +303,13 @@ def _copy_scene_to_preset(scene, preset):
     preset.lod2_tex_res = scene.LOD2_tex_res
     preset.lod3_tex_res = scene.LOD3_tex_res
     preset.lod4_tex_res = scene.LOD4_tex_res
+    preset.lod_workflow_preset = scene.lod_workflow_preset
+    preset.lod_generate_normal_maps = scene.lod_generate_normal_maps
+    preset.lod_normal_map_max_level = scene.lod_normal_map_max_level
+    preset.lod_auto_preserve_alpha = scene.lod_auto_preserve_alpha
+    preset.lod_ignore_source_alpha = scene.lod_ignore_source_alpha
+    preset.lod_alpha_mode = scene.lod_alpha_mode
+    preset.lod_alpha_clip_threshold = scene.lod_alpha_clip_threshold
     preset.lod_pad_on = scene.LOD_pad_on
     preset.lod_use_scene_settings = scene.LOD_use_scene_settings
     preset.lod_atlas_uv_recalc = scene.atlas_uv_recalc
@@ -210,6 +329,13 @@ def _copy_preset_to_scene(scene, preset):
     scene.LOD2_tex_res = preset.lod2_tex_res
     scene.LOD3_tex_res = preset.lod3_tex_res
     scene.LOD4_tex_res = preset.lod4_tex_res
+    scene.lod_workflow_preset = preset.lod_workflow_preset
+    scene.lod_generate_normal_maps = preset.lod_generate_normal_maps
+    scene.lod_normal_map_max_level = preset.lod_normal_map_max_level
+    scene.lod_auto_preserve_alpha = preset.lod_auto_preserve_alpha
+    scene.lod_ignore_source_alpha = preset.lod_ignore_source_alpha
+    scene.lod_alpha_mode = preset.lod_alpha_mode
+    scene.lod_alpha_clip_threshold = preset.lod_alpha_clip_threshold
     scene.LOD_pad_on = preset.lod_pad_on
     scene.LOD_use_scene_settings = preset.lod_use_scene_settings
     scene.atlas_uv_recalc = preset.lod_atlas_uv_recalc
@@ -229,6 +355,13 @@ def _copy_legacy_defaults_to_preset(prefs, preset):
     preset.lod2_tex_res = prefs.lod2_tex_res
     preset.lod3_tex_res = prefs.lod3_tex_res
     preset.lod4_tex_res = prefs.lod4_tex_res
+    preset.lod_workflow_preset = prefs.lod_workflow_preset
+    preset.lod_generate_normal_maps = prefs.lod_generate_normal_maps
+    preset.lod_normal_map_max_level = prefs.lod_normal_map_max_level
+    preset.lod_auto_preserve_alpha = prefs.lod_auto_preserve_alpha
+    preset.lod_ignore_source_alpha = prefs.lod_ignore_source_alpha
+    preset.lod_alpha_mode = prefs.lod_alpha_mode
+    preset.lod_alpha_clip_threshold = prefs.lod_alpha_clip_threshold
     preset.lod_pad_on = prefs.lod_pad_on
     preset.lod_use_scene_settings = prefs.lod_use_scene_settings
     preset.lod_atlas_uv_recalc = prefs.lod_atlas_uv_recalc
@@ -275,9 +408,32 @@ def _ensure_base_preset(prefs):
     _copy_legacy_defaults_to_preset(prefs, base_preset)
     return base_preset
 
+def _ensure_workflow_preset(prefs, preset_name, workflow_name):
+    existing = _find_preset_by_name(prefs, preset_name)
+    if existing is not None:
+        return existing
+
+    for legacy_name in WORKFLOW_PRESET_LEGACY_NAMES.get(preset_name, []):
+        legacy_preset = _find_preset_by_name(prefs, legacy_name)
+        if legacy_preset is not None:
+            legacy_preset.name = preset_name
+            if not legacy_preset.lod_workflow_preset:
+                legacy_preset.lod_workflow_preset = workflow_name
+            return legacy_preset
+
+    preset = prefs.lod_presets.add()
+    preset.name = preset_name
+    _copy_legacy_defaults_to_preset(prefs, preset)
+    _apply_workflow_preset_defaults(preset, workflow_name)
+    return preset
+
 
 def _get_active_preset(prefs):
     _ensure_base_preset(prefs)
+    _ensure_workflow_preset(prefs, LOD_CLASSIC_PRESET_NAME, 'CLASSIC')
+    _ensure_workflow_preset(prefs, LOD_CLASSIC_NORMAL_PRESET_NAME, 'CLASSIC_NORMAL')
+    _ensure_workflow_preset(prefs, LOD_VEGETATION_PRESET_NAME, 'VEGETATION_ALPHA')
+    _ensure_workflow_preset(prefs, LOD_CESIUM_ATLAS_PRESET_NAME, 'CESIUM_ATLAS')
     active_name = (prefs.lod_active_preset or "").strip()
     active_preset = _find_preset_by_name(prefs, active_name)
     if active_preset is None:
@@ -295,8 +451,17 @@ class OBJECT_OT_LOD(bpy.types.Operator):
         start_time = time.time()
         context = bpy.context
         selected_objects = context.selected_objects
+        if not selected_objects:
+            self.report({'WARNING'}, "No objects selected")
+            return {'CANCELLED'}
+
         ob_tot = len(selected_objects)
-        LODnum = context.scene.LODnum
+        workflow_preset = context.scene.lod_workflow_preset
+        is_cesium_atlas_workflow = workflow_preset == 'CESIUM_ATLAS'
+        LODnum = 1 if is_cesium_atlas_workflow else context.scene.LODnum
+        normal_maps_enabled = workflow_uses_normal_maps(context.scene) and not is_cesium_atlas_workflow
+        normal_map_max_level = min(context.scene.lod_normal_map_max_level, LODnum)
+        atlas_recalc_enabled = context.scene.atlas_uv_recalc or is_cesium_atlas_workflow
         i_lodbake_counter = 1
 
         # Initialize progress tracking
@@ -313,10 +478,16 @@ class OBJECT_OT_LOD(bpy.types.Operator):
 
         print("Number of LOD(s) to be created is: " + str(LODnum))
         add_to_lod_log(context, f"Starting LOD generation: {LODnum} LOD(s) for {ob_tot} object(s)")
+        add_to_lod_log(context, f"Workflow preset: {workflow_preset}")
+        if is_cesium_atlas_workflow and not context.scene.atlas_uv_recalc:
+            add_to_lod_log(context, "INFO: Cesium workflow forces Atlas UV recalculation")
         last_margin_val = context.scene.render.bake.margin
         
         while i_lodbake_counter <= LODnum:
-            currentLOD = 'LOD' + str(i_lodbake_counter)
+            if is_cesium_atlas_workflow:
+                currentLOD = 'LOD0_ATLAS'
+            else:
+                currentLOD = 'LOD' + str(i_lodbake_counter)
             subfolder = currentLOD
 
             # Update progress for current LOD level
@@ -404,13 +575,13 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                     create_double_UV(obj_LODnew)
 
                 # Mesh decimation
-                if ratio_for_current_lod(i_lodbake_counter, context) < 1:           
+                if not is_cesium_atlas_workflow and ratio_for_current_lod(i_lodbake_counter, context) < 1:
                     decimate_mesh(context, obj_LODnew, ratio_for_current_lod(i_lodbake_counter, context), currentLOD, context.scene.decimate_borders)
 
                 obj_LOD0.data.uv_layers["MultiTex"].active_render = True
 
                 # Se l'opzione è attiva, ricalcola l'UV mapping dell'Atlas usando l'algoritmo scelto
-                if context.scene.atlas_uv_recalc:
+                if atlas_recalc_enabled:
                     print("Recalculating Atlas UV mapping using algorithm: " + context.scene.atlas_uv_algorithm)
                     if "Atlas" in obj_LODnew.data.uv_layers:
                         obj_LODnew.data.uv_layers.active = obj_LODnew.data.uv_layers["Atlas"]
@@ -440,8 +611,15 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 print('Creating new texture atlas for ' + currentLOD + '....')
                 tex_res = tex_res_for_current_lod(i_lodbake_counter, context)
                 tex_LODnew_name = "T_" + obj_clean_name + "_" + currentLOD
-                if context.scene.texture_format == 'PNG':
-                    tempimage = bpy.data.images.new(name=tex_LODnew_name, width=tex_res, height=tex_res, alpha=context.scene.use_alpha)
+                preserve_source_alpha = should_preserve_alpha(context.scene, obj_LOD0)
+                effective_texture_format = 'PNG' if preserve_source_alpha else context.scene.texture_format
+                effective_use_alpha = effective_texture_format == 'PNG' and (context.scene.use_alpha or preserve_source_alpha)
+
+                if preserve_source_alpha and context.scene.texture_format != 'PNG':
+                    add_to_lod_log(context, f"INFO: forcing PNG for {obj_LODnew.name} to preserve alpha")
+
+                if effective_texture_format == 'PNG':
+                    tempimage = bpy.data.images.new(name=tex_LODnew_name, width=tex_res, height=tex_res, alpha=effective_use_alpha)
                     tempimage.filepath_raw = "//" + subfolder + '/' + tex_LODnew_name + ".png"
                     tempimage.file_format = 'PNG'
                 else:
@@ -466,8 +644,7 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 context.scene.render.bake.cage_extrusion = 0.1
 
                 if context.scene.LOD_pad_on:
-                    custommargin = "context.scene.render.bake.margin = context.scene.LOD" + str(i_lodbake_counter) + "_tex_res"
-                    exec(custommargin)
+                    context.scene.render.bake.margin = tex_res_for_current_lod(i_lodbake_counter, context)
                 
                 if not context.scene.LOD_use_scene_settings:
                     to_restore_samples = context.scene.cycles.samples
@@ -487,16 +664,62 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 obj_LODnew.select_set(True)
                 obj_LOD0.select_set(True)
                 context.view_layer.objects.active = obj_LODnew
+                mat.node_tree.nodes.active = texImage
                 bpy.ops.object.bake(type='DIFFUSE')
                 tempimage.save()
+
+                if bsdf.inputs['Base Color'].is_linked:
+                    for link in list(bsdf.inputs['Base Color'].links):
+                        mat.node_tree.links.remove(link)
+                mat.node_tree.links.new(texImage.outputs['Color'], bsdf.inputs['Base Color'])
+                configure_material_alpha(mat, bsdf, texImage, context.scene, effective_use_alpha)
+
+                bake_normal_for_this_lod = normal_maps_enabled and i_lodbake_counter <= normal_map_max_level
+                if bake_normal_for_this_lod:
+                    print('Baking normal map for ' + currentLOD + '...')
+                    normal_map_name = "N_" + obj_clean_name + "_" + currentLOD
+                    normal_image = bpy.data.images.new(name=normal_map_name, width=tex_res, height=tex_res, alpha=False)
+                    normal_image.filepath_raw = "//" + subfolder + '/' + normal_map_name + ".png"
+                    normal_image.file_format = 'PNG'
+                    try:
+                        normal_image.colorspace_settings.name = 'Non-Color'
+                    except Exception:
+                        pass
+
+                    normal_tex = mat.node_tree.nodes.new('ShaderNodeTexImage')
+                    normal_tex.image = normal_image
+                    normal_tex.name = "LOD_NormalMap"
+                    normal_tex.label = "LOD Normal"
+                    normal_tex.interpolation = 'Linear'
+
+                    normal_map_node = mat.node_tree.nodes.new('ShaderNodeNormalMap')
+                    normal_map_node.name = "LOD_NormalMap_Node"
+                    normal_map_node.label = "LOD Normal Map"
+
+                    mat.node_tree.links.new(normal_tex.outputs['Color'], normal_map_node.inputs['Color'])
+                    if bsdf.inputs['Normal'].is_linked:
+                        for link in list(bsdf.inputs['Normal'].links):
+                            mat.node_tree.links.remove(link)
+                    mat.node_tree.links.new(normal_map_node.outputs['Normal'], bsdf.inputs['Normal'])
+
+                    mat.node_tree.nodes.active = normal_tex
+                    context.scene.cycles.bake_type = 'NORMAL'
+                    context.scene.render.bake.use_selected_to_active = True
+                    context.scene.render.bake.cage_extrusion = 0.1
+                    try:
+                        context.scene.render.bake.normal_space = 'TANGENT'
+                    except Exception:
+                        pass
+
+                    bpy.ops.object.bake(type='NORMAL')
+                    normal_image.save()
+                    add_to_lod_log(context, f"INFO: normal map baked for {obj_LODnew.name}")
 
                 if not context.scene.LOD_use_scene_settings:
                     context.scene.cycles.diffuse_bounces = to_restore_bounces
                     context.scene.cycles.samples = to_restore_samples
                     
                 context.scene.render.engine = to_be_restored_render_engine
-
-                mat.node_tree.links.new(bsdf.inputs['Base Color'], texImage.outputs['Color'])
 
                 # Set proper mesh data name using clean name (without OB_ prefix)
                 obj_LODnew.data.name = 'ME_' + obj_clean_name + "_" + currentLOD
@@ -792,7 +1015,7 @@ class OBJECT_OT_open_linked_file(bpy.types.Operator):
         return {'FINISHED'}
 
 class ToolsPanelLODmanager:
-    bl_label = "LOD manager"
+    bl_label = "LOD Manager"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_options = {'DEFAULT_CLOSED'}
@@ -808,14 +1031,14 @@ class ToolsPanelLODmanager:
         col = split.column()
         col.prop(scene, 'setLODnum', icon='BLENDER', toggle=True)
         col = split.column(align=True)
-        col.operator("change.lod", text='set LOD')
+        col.operator("change.lod", text='Set Object LOD')
         col = split.column(align=True)
-        col.operator("object.change_lod", text='set mesh LOD')
+        col.operator("object.change_lod", text='Set Mesh LOD')
         row = layout.row()
-        row.operator("object.open_linked_file", text='Open linked source')
+        row.operator("object.open_linked_file", text='Open Linked Source')
 
 class ToolsPanelLODgenerator:
-    bl_label = "LOD generator"
+    bl_label = "LOD Generator"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_options = {'DEFAULT_CLOSED'}
@@ -864,94 +1087,103 @@ class ToolsPanelLODgenerator:
                     box.label(text=line)
 
         if context.object:
-            self.layout.operator("lod0.creation", icon="MESH_UVSPHERE", text='LOD 0 (set as)')
-            row = layout.row()
-            split = layout.split()
-            col = split.column(align=True)
-            col.prop(scene, 'LOD_pad_on', text="UV Pad")
-            col = split.column(align=True)
-            col.prop(scene, 'decimate_borders', text="Preserve Borders")
-            split = layout.split()
-            col = split.column(align=True)
-            col.prop(scene, 'LOD_use_scene_settings', text="Use scene lights")
-            #split = layout.split()
-            col = split.column()
-            col.prop(scene, "atlas_uv_recalc", text="Recalculate Atlas")
+            step1_box = layout.box()
+            step1_box.label(text="Step 1 - Data Preparation", icon='MODIFIER')
+            step1_box.label(text="Prepare selected meshes as LOD0 source objects.")
+            step1_box.operator("lod0.creation", icon="MESH_UVSPHERE", text='Set as LOD0')
 
-            if scene.atlas_uv_recalc:
-                split = layout.split()
-                col = split.column(align=True)
-                col.prop(scene, "atlas_uv_algorithm", text="Alghoritm")
-            row = layout.row()
-            split = layout.split()
-            col = split.column()
-            col.label(text="Texture Format:")
-            col = split.column()
-            col.prop(scene, "texture_format", text="")
-            if scene.texture_format == 'PNG':
-                col.prop(scene, "use_alpha", text="Use Alpha Channel")
-            #layout.separator()
-            split = layout.split()
-            col = split.column()
-            col.prop(scene, 'LODnum', icon='BLENDER', toggle=True)
+            step2_box = layout.box()
+            step2_box.label(text="Step 2 - Presets & Settings", icon='PREFERENCES')
 
-            if scene.LODnum >= 1:
-                col.label(text="LOD 1")
-                col = split.column()
-                col.label(text="Geometry")
-                col.prop(scene, 'LOD1_dec_ratio', icon='BLENDER', toggle=True, text="")
-                col = split.column()
-                col.label(text="Texture")
-                col.prop(scene, 'LOD1_tex_res', icon='BLENDER', toggle=True, text="")
-                if scene.LODnum >= 2:
-                    split = layout.split()
-                    col = split.column()
-                    col.label(text="LOD 2")
-                    col = split.column()
-                    col.prop(scene, 'LOD2_dec_ratio', icon='BLENDER', toggle=True, text="")
-                    col = split.column()
-                    col.prop(scene, 'LOD2_tex_res', icon='BLENDER', toggle=True, text="")
-                    if scene.LODnum >= 3:
-                        split = layout.split()
-                        col = split.column()
-                        col.label(text="LOD 3")
-                        col = split.column()
-                        col.prop(scene, 'LOD3_dec_ratio', icon='BLENDER', toggle=True, text="")
-                        col = split.column()
-                        col.prop(scene, 'LOD3_tex_res', icon='BLENDER', toggle=True, text="")
-                        if scene.LODnum >= 4:
-                            split = layout.split()
-                            col = split.column()
-                            col.label(text="LOD 4")
-                            col = split.column()
-                            col.prop(scene, 'LOD4_dec_ratio', icon='BLENDER', toggle=True, text="")
-                            col = split.column()
-                            col.prop(scene, 'LOD4_tex_res', icon='BLENDER', toggle=True, text="")
-            
-            row = layout.row()            
-            row.operator("lod.creation", text='-->    generate LODs    <--')
-            row = layout.row()
-            row.label(text="LOD clusters")
-            split = layout.split()
-            col = split.column()
-            col.operator("create.grouplod", icon="PRESET", text='')
-            col = split.column(align=True)
-            col.operator("remove.grouplod", icon="CANCEL", text='')
-            row = layout.row()
-            row.label(text="LOD cluster(s) export:")
-            row = layout.row()
-            row.prop(context.scene, 'model_export_dir', toggle=True, text='folder')
-            self.layout.operator("exportfbx.grouplod", icon="MESH_GRID", text='FBX')
+            # Macro section A: workflow preset
+            workflow_macro = step2_box.box()
+            workflow_macro.label(text="Macro A - Workflow Preset", icon='PRESET')
+            workflow_macro.prop(scene, "lod_workflow_preset", text="Workflow")
 
-            layout.separator()
-            row = layout.row(align=True)
+            # Macro section B: LOD settings preset
+            preset_macro = step2_box.box()
+            preset_macro.label(text="Macro B - LOD Settings Preset", icon='PRESET')
+            preset_row = preset_macro.row(align=True)
             prefs = _get_addon_preferences(context)
             if prefs is None:
-                row.label(text="Preset: unavailable", icon='ERROR')
+                preset_row.label(text="Preset: unavailable", icon='ERROR')
             else:
                 active_preset = _get_active_preset(prefs)
                 active_name = active_preset.name if active_preset else LOD_BASE_PRESET_NAME
-                row.menu("LOD_MT_presets_menu", text=f"Preset: {active_name}", icon='DOWNARROW_HLT')
+                preset_row.menu("LOD_MT_presets_menu", text=f"Preset: {active_name}", icon='DOWNARROW_HLT')
+                preset_row.operator("lod.preset_apply", text="Apply", icon='IMPORT')
+
+            options_box = step2_box.box()
+            options_box.label(text="Bake & Material Options", icon='MATERIAL')
+            top_opts_row = options_box.row(align=True)
+            top_opts_row.prop(scene, 'LOD_pad_on', text="UV Pad")
+            top_opts_row.prop(scene, 'decimate_borders', text="Preserve Borders")
+            top_opts_row.prop(scene, 'LOD_use_scene_settings', text="Use Scene Lighting")
+
+            uv_row = options_box.row(align=True)
+            uv_row.prop(scene, "atlas_uv_recalc", text="Recalculate Atlas UV")
+            if scene.atlas_uv_recalc:
+                uv_row.prop(scene, "atlas_uv_algorithm", text="Algorithm")
+
+            tex_row = options_box.row(align=True)
+            tex_row.prop(scene, "texture_format", text="Texture Format")
+            if scene.texture_format == 'PNG':
+                tex_row.prop(scene, "use_alpha", text="Use Alpha Channel")
+
+            normal_row = options_box.row(align=True)
+            normal_row.prop(scene, "lod_generate_normal_maps", text="Generate Normal Maps")
+            if workflow_uses_normal_maps(scene):
+                normal_row.prop(scene, "lod_normal_map_max_level", text="Max LOD")
+
+            alpha_row = options_box.row(align=True)
+            alpha_row.label(text="Alpha:")
+            alpha_row.prop(scene, "lod_auto_preserve_alpha", text="Auto Preserve")
+            alpha_row.prop(scene, "lod_ignore_source_alpha", text="Ignore Source")
+            if not scene.lod_ignore_source_alpha:
+                alpha_row.prop(scene, "lod_alpha_mode", text="")
+                if scene.lod_alpha_mode == 'CLIP':
+                    alpha_row.prop(scene, "lod_alpha_clip_threshold", text="Clip")
+
+            lod_details_box = step2_box.box()
+            lod_details_box.label(text="LOD Details", icon='MOD_SIMPLIFY')
+            lod_count_row = lod_details_box.row(align=True)
+            lod_count_row.prop(scene, 'LODnum', icon='BLENDER', toggle=True)
+
+            if scene.LODnum >= 1:
+                row = lod_details_box.row(align=True)
+                row.label(text="LOD 1")
+                row.prop(scene, 'LOD1_dec_ratio', icon='BLENDER', toggle=True, text="Geometry")
+                row.prop(scene, 'LOD1_tex_res', icon='BLENDER', toggle=True, text="Texture")
+            if scene.LODnum >= 2:
+                row = lod_details_box.row(align=True)
+                row.label(text="LOD 2")
+                row.prop(scene, 'LOD2_dec_ratio', icon='BLENDER', toggle=True, text="Geometry")
+                row.prop(scene, 'LOD2_tex_res', icon='BLENDER', toggle=True, text="Texture")
+            if scene.LODnum >= 3:
+                row = lod_details_box.row(align=True)
+                row.label(text="LOD 3")
+                row.prop(scene, 'LOD3_dec_ratio', icon='BLENDER', toggle=True, text="Geometry")
+                row.prop(scene, 'LOD3_tex_res', icon='BLENDER', toggle=True, text="Texture")
+            if scene.LODnum >= 4:
+                row = lod_details_box.row(align=True)
+                row.label(text="LOD 4")
+                row.prop(scene, 'LOD4_dec_ratio', icon='BLENDER', toggle=True, text="Geometry")
+                row.prop(scene, 'LOD4_tex_res', icon='BLENDER', toggle=True, text="Texture")
+
+            step3_box = layout.box()
+            step3_box.label(text="Step 3 - Create LODs", icon='OUTLINER_OB_MESH')
+            step3_box.operator("lod.creation", text='Generate LODs', icon='PLAY')
+
+            step4_box = layout.box()
+            step4_box.label(text="Step 4 - Cluster & Export", icon='EXPORT')
+            cluster_row = step4_box.row(align=True)
+            cluster_row.operator("create.grouplod", icon="PRESET", text='Create Clusters')
+            cluster_row.operator("remove.grouplod", icon="CANCEL", text='Remove Clusters')
+            export_row = step4_box.row()
+            export_row.label(text="Cluster Export Folder:")
+            export_row = step4_box.row()
+            export_row.prop(context.scene, 'model_export_dir', toggle=True, text='Folder')
+            step4_box.operator("exportfbx.grouplod", icon="MESH_GRID", text='Export FBX')
 
 
 class LOD_MT_presets_menu(Menu):
@@ -1146,6 +1378,13 @@ class OBJECT_OT_lod_preset_duplicate_active(Operator):
         new_preset.lod2_tex_res = preset.lod2_tex_res
         new_preset.lod3_tex_res = preset.lod3_tex_res
         new_preset.lod4_tex_res = preset.lod4_tex_res
+        new_preset.lod_workflow_preset = preset.lod_workflow_preset
+        new_preset.lod_generate_normal_maps = preset.lod_generate_normal_maps
+        new_preset.lod_normal_map_max_level = preset.lod_normal_map_max_level
+        new_preset.lod_auto_preserve_alpha = preset.lod_auto_preserve_alpha
+        new_preset.lod_ignore_source_alpha = preset.lod_ignore_source_alpha
+        new_preset.lod_alpha_mode = preset.lod_alpha_mode
+        new_preset.lod_alpha_clip_threshold = preset.lod_alpha_clip_threshold
         new_preset.lod_pad_on = preset.lod_pad_on
         new_preset.lod_use_scene_settings = preset.lod_use_scene_settings
         new_preset.lod_atlas_uv_recalc = preset.lod_atlas_uv_recalc
@@ -1295,6 +1534,53 @@ def register():
         default=False,
         description="Use scene bake settings for the LOD"
     )
+    bpy.types.Scene.lod_workflow_preset = bpy.props.EnumProperty(
+        name="LOD Workflow Preset",
+        items=[
+            ('CLASSIC', "Classic LOD", "Classic LOD generation"),
+            ('CLASSIC_NORMAL', "Classic LOD + Normal Maps", "Classic LOD generation with normal maps"),
+            ('VEGETATION_ALPHA', "Vegetation Alpha Clip", "LOD workflow for vegetation/foliage alpha materials"),
+            ('CESIUM_ATLAS', "LOD0 Atlas Bake (Cesium)", "Prepare a LOD0 atlas for Cesium export")
+        ],
+        default='CLASSIC',
+        update=on_lod_workflow_preset_update,
+        description="Preset workflow for LOD generation"
+    )
+    bpy.types.Scene.lod_generate_normal_maps = bpy.props.BoolProperty(
+        name="Generate Normal Maps",
+        default=False,
+        description="Bake normal maps from LOD0 down to lower LOD levels"
+    )
+    bpy.types.Scene.lod_normal_map_max_level = bpy.props.IntProperty(
+        name="Normal Map Max LOD",
+        default=2,
+        min=1,
+        max=5,
+        description="Generate normal maps up to this LOD level"
+    )
+    bpy.types.Scene.lod_auto_preserve_alpha = bpy.props.BoolProperty(
+        name="Auto Preserve Source Alpha",
+        default=False,
+        description="Detect alpha in source textures and preserve it in baked textures"
+    )
+    bpy.types.Scene.lod_ignore_source_alpha = bpy.props.BoolProperty(
+        name="Ignore Source Alpha",
+        default=False,
+        description="Ignore alpha detected in source textures"
+    )
+    bpy.types.Scene.lod_alpha_mode = bpy.props.EnumProperty(
+        name="Alpha Mode",
+        items=[('BLEND', "Blend", ""), ('CLIP', "Clip", "")],
+        default='BLEND',
+        description="Alpha mode for generated materials (glTF compatible)"
+    )
+    bpy.types.Scene.lod_alpha_clip_threshold = bpy.props.FloatProperty(
+        name="Alpha Clip Threshold",
+        default=0.5,
+        min=0.0,
+        max=1.0,
+        description="Alpha threshold used when alpha mode is Clip"
+    )
     # Nuove proprietà per il ricalcolo UV Atlas
     bpy.types.Scene.atlas_uv_recalc = bpy.props.BoolProperty(
         name="Recalculate Atlas UV", default=False,
@@ -1392,6 +1678,13 @@ def unregister():
     del bpy.types.Scene.LOD4_dec_ratio
     del bpy.types.Scene.LOD_pad_on
     del bpy.types.Scene.LOD_use_scene_settings
+    del bpy.types.Scene.lod_workflow_preset
+    del bpy.types.Scene.lod_generate_normal_maps
+    del bpy.types.Scene.lod_normal_map_max_level
+    del bpy.types.Scene.lod_auto_preserve_alpha
+    del bpy.types.Scene.lod_ignore_source_alpha
+    del bpy.types.Scene.lod_alpha_mode
+    del bpy.types.Scene.lod_alpha_clip_threshold
     del bpy.types.Scene.atlas_uv_recalc
     del bpy.types.Scene.atlas_uv_algorithm
     del bpy.types.Scene.texture_format
