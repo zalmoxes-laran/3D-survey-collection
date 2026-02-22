@@ -1,5 +1,6 @@
 import bpy
 import os
+import re
 import time
 from .functions import *
 from mathutils import Vector
@@ -218,17 +219,28 @@ def _get_addon_preferences(context):
     return addon.preferences
 
 
-LOD_BASE_PRESET_NAME = "Base"
+LEGACY_BASE_PRESET_NAME = "Base"
 LOD_CLASSIC_PRESET_NAME = "Classic LOD"
 LOD_CLASSIC_NORMAL_PRESET_NAME = "Classic LOD + Normal Maps"
 LOD_VEGETATION_PRESET_NAME = "Vegetation Alpha Clip"
-LOD_CESIUM_ATLAS_PRESET_NAME = "LOD0 Atlas Bake (Cesium)"
+LOD_CESIUM_ATLAS_PRESET_NAME = "Same Geometry Atlas (Cesium)"
+LOD_DEFAULT_PRESET_NAME = LOD_CLASSIC_PRESET_NAME
+LOD_LOCKED_PRESET_NAMES = {
+    LOD_CLASSIC_PRESET_NAME,
+    LOD_CLASSIC_NORMAL_PRESET_NAME,
+    LOD_VEGETATION_PRESET_NAME,
+    LOD_CESIUM_ATLAS_PRESET_NAME,
+}
 
 WORKFLOW_PRESET_LEGACY_NAMES = {
     LOD_CLASSIC_PRESET_NAME: ["LOD classico"],
     LOD_CLASSIC_NORMAL_PRESET_NAME: ["LOD classico con normal map"],
     LOD_VEGETATION_PRESET_NAME: [],
-    LOD_CESIUM_ATLAS_PRESET_NAME: ["Bake Atlas LOD0 (Cesium)"]
+    LOD_CESIUM_ATLAS_PRESET_NAME: [
+        "LOD0 Atlas Bake (Cesium)",
+        "Bake Atlas LOD0 (Cesium)",
+        "same geometry - one Atlas (good for cesium export)",
+    ],
 }
 
 def _apply_workflow_preset_defaults(preset, workflow_name):
@@ -390,15 +402,27 @@ def _make_unique_preset_name(prefs, requested_name):
         idx += 1
 
 
-def _ensure_base_preset(prefs):
-    base_preset = _find_preset_by_name(prefs, LOD_BASE_PRESET_NAME)
-    if base_preset is not None:
-        return base_preset
+def _remove_preset_by_name(prefs, preset_name):
+    for idx, preset in enumerate(prefs.lod_presets):
+        if preset.name == preset_name:
+            prefs.lod_presets.remove(idx)
+            return True
+    return False
 
-    base_preset = prefs.lod_presets.add()
-    base_preset.name = LOD_BASE_PRESET_NAME
-    _copy_legacy_defaults_to_preset(prefs, base_preset)
-    return base_preset
+
+def _migrate_legacy_base_preset(prefs):
+    legacy_base = _find_preset_by_name(prefs, LEGACY_BASE_PRESET_NAME)
+    if legacy_base is None:
+        return
+
+    classic = _find_preset_by_name(prefs, LOD_CLASSIC_PRESET_NAME)
+    if classic is None:
+        legacy_base.name = LOD_CLASSIC_PRESET_NAME
+        if not legacy_base.lod_workflow_preset:
+            legacy_base.lod_workflow_preset = 'CLASSIC'
+        return
+
+    _remove_preset_by_name(prefs, LEGACY_BASE_PRESET_NAME)
 
 def _ensure_workflow_preset(prefs, preset_name, workflow_name):
     existing = _find_preset_by_name(prefs, preset_name)
@@ -421,16 +445,21 @@ def _ensure_workflow_preset(prefs, preset_name, workflow_name):
 
 
 def _get_active_preset(prefs):
-    _ensure_base_preset(prefs)
+    _migrate_legacy_base_preset(prefs)
     _ensure_workflow_preset(prefs, LOD_CLASSIC_PRESET_NAME, 'CLASSIC')
     _ensure_workflow_preset(prefs, LOD_CLASSIC_NORMAL_PRESET_NAME, 'CLASSIC_NORMAL')
     _ensure_workflow_preset(prefs, LOD_VEGETATION_PRESET_NAME, 'VEGETATION_ALPHA')
     _ensure_workflow_preset(prefs, LOD_CESIUM_ATLAS_PRESET_NAME, 'CESIUM_ATLAS')
+
     active_name = (prefs.lod_active_preset or "").strip()
+    if active_name in ("", LEGACY_BASE_PRESET_NAME):
+        active_name = LOD_DEFAULT_PRESET_NAME
+        prefs.lod_active_preset = active_name
+
     active_preset = _find_preset_by_name(prefs, active_name)
     if active_preset is None:
-        prefs.lod_active_preset = LOD_BASE_PRESET_NAME
-        active_preset = _find_preset_by_name(prefs, LOD_BASE_PRESET_NAME)
+        prefs.lod_active_preset = LOD_DEFAULT_PRESET_NAME
+        active_preset = _find_preset_by_name(prefs, LOD_DEFAULT_PRESET_NAME)
     return active_preset
 
 class OBJECT_OT_LOD(bpy.types.Operator):
@@ -458,6 +487,7 @@ class OBJECT_OT_LOD(bpy.types.Operator):
 
         # Initialize progress tracking
         context.scene.lod_progress_active = True
+        context.scene.lod_progress_show_log = True
         context.scene.lod_progress_log = ""
         update_lod_progress(context, task="Initializing LOD generation...",
                           current_obj=0, total_obj=ob_tot,
@@ -768,6 +798,104 @@ def rimuovi_prefisso_ob(stringa):
         return stringa[3:]
     return stringa
 
+# Accept Blender duplicate suffixes (e.g. ".001") while keeping LOD family parsing stable.
+LOD_NAME_PATTERN = re.compile(r"^(?P<base>.+)_LOD(?P<level>\d+)(?:\.\d+)?$")
+
+def parse_lod_object_name(obj_name):
+    match = LOD_NAME_PATTERN.match(obj_name or "")
+    if not match:
+        return None
+    return match.group("base"), int(match.group("level"))
+
+def _collect_lod_groups(context, cluster_source):
+    scene_meshes = [obj for obj in context.scene.objects if obj.type == 'MESH']
+
+    if cluster_source == 'ALL_SCENE':
+        source_objects = scene_meshes
+    elif cluster_source == 'SELECTED_WITH_SIBLINGS':
+        selected_meshes = [obj for obj in context.selected_objects if obj.type == 'MESH']
+        selected_bases = set()
+        for obj in selected_meshes:
+            parsed = parse_lod_object_name(obj.name)
+            if parsed is not None:
+                selected_bases.add(parsed[0])
+        if not selected_bases:
+            return {}
+        source_objects = []
+        for obj in scene_meshes:
+            parsed = parse_lod_object_name(obj.name)
+            if parsed is None:
+                continue
+            if parsed[0] in selected_bases:
+                source_objects.append(obj)
+    else:  # SELECTED_ONLY
+        source_objects = [obj for obj in context.selected_objects if obj.type == 'MESH']
+
+    grouped = {}
+    for obj in source_objects:
+        parsed = parse_lod_object_name(obj.name)
+        if parsed is None:
+            continue
+        base_name, lod_level = parsed
+        if base_name not in grouped:
+            grouped[base_name] = {}
+        grouped[base_name][lod_level] = obj
+
+    ordered_groups = {}
+    for base_name, lod_map in grouped.items():
+        ordered_groups[base_name] = [lod_map[level] for level in sorted(lod_map.keys())]
+    return ordered_groups
+
+def _bbox_world_center(obj):
+    local_bbox_center = 0.125 * sum((Vector(b) for b in obj.bound_box), Vector())
+    return obj.matrix_world @ local_bbox_center
+
+def _reference_lod_object(lod_objects):
+    for obj in lod_objects:
+        if obj.name.endswith("_LOD0"):
+            return obj
+    return lod_objects[0] if lod_objects else None
+
+def _clear_parent_keep_world(obj):
+    world_matrix = obj.matrix_world.copy()
+    obj.parent = None
+    obj.matrix_world = world_matrix
+
+def _set_parent_keep_world(child, parent):
+    world_matrix = child.matrix_world.copy()
+    child.parent = parent
+    child.matrix_world = world_matrix
+
+def _set_layer_collection_path_visible(layer_collection, target_collection):
+    if layer_collection.collection == target_collection:
+        layer_collection.exclude = False
+        layer_collection.hide_viewport = False
+        return True
+    for child in layer_collection.children:
+        if _set_layer_collection_path_visible(child, target_collection):
+            layer_collection.exclude = False
+            layer_collection.hide_viewport = False
+            return True
+    return False
+
+def _ensure_collection_visible_selectable(context, collection):
+    if collection is None:
+        return
+    _set_layer_collection_path_visible(context.view_layer.layer_collection, collection)
+    collection.hide_viewport = False
+    collection.hide_select = False
+
+def _ensure_object_visible_selectable(context, obj):
+    for collection in obj.users_collection:
+        _ensure_collection_visible_selectable(context, collection)
+
+    obj.hide_viewport = False
+    obj.hide_select = False
+    try:
+        obj.hide_set(False)
+    except Exception:
+        pass
+
 #_______________________________________________________________________________________________
 
 class OBJECT_OT_ExportGroupsLOD(bpy.types.Operator):
@@ -844,38 +972,63 @@ class OBJECT_OT_CreateGroupsLOD(bpy.types.Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
-        listobjects = bpy.context.selected_objects
-        for obj in listobjects:
-            bpy.ops.object.select_all(action='DESELECT')
-            obj.select_set(True)
-            bpy.context.view_layer.objects.active = obj
-            baseobjwithlod = obj.name
-            if '_LOD0' in baseobjwithlod:
-                baseobj = baseobjwithlod.replace("_LOD0", "")
-                print('Found LOD0 object:' + baseobjwithlod)
-                local_bbox_center = 0.125 * sum((Vector(b) for b in obj.bound_box), Vector())
-                global_bbox_center = obj.matrix_world @ local_bbox_center
-                emptyofname = 'GLOD_' + baseobj
-                obempty = bpy.data.objects.new(emptyofname, None)
-                bpy.context.collection.objects.link(obempty)
-                obempty.empty_display_size = 2
-                obempty.empty_display_type = 'PLAIN_AXES'
-                obempty.location = global_bbox_center
-                bpy.ops.object.select_all(action='DESELECT')
-                obempty.select_set(True)
-                bpy.context.view_layer.objects.active = obempty
-                obempty['fbx_type'] = 'LodGroup'
-                num = 0
-                child = selectLOD(listobjects, num, baseobj)
-                print(child)
-                print(baseobj)
-                print(str(num))
-                while child is not None:
-                    child.parent = obempty
-                    child.matrix_parent_inverse = obempty.matrix_world.inverted()
-                    num += 1
-                    print(str(num))
-                    child = selectLOD(listobjects, num, baseobj)
+        source_mode = context.scene.lod_cluster_source
+        lod_groups = _collect_lod_groups(context, source_mode)
+        if not lod_groups:
+            self.report({'WARNING'}, "No valid mesh LOD names found with the current cluster source")
+            return {'CANCELLED'}
+
+        # Ensure all target meshes are actually reachable/editable from current view layer.
+        for lod_objects in lod_groups.values():
+            for lod_obj in lod_objects:
+                _ensure_object_visible_selectable(context, lod_obj)
+
+        created_count = 0
+        updated_count = 0
+        skipped_count = 0
+        for base_name, lod_objects in sorted(lod_groups.items()):
+            if not lod_objects:
+                continue
+
+            group_name = "GLOD_" + base_name
+            empty = bpy.data.objects.get(group_name)
+            if empty is not None and empty.type != 'EMPTY':
+                print(f'Skipping "{group_name}": object exists and is not an Empty')
+                skipped_count += 1
+                continue
+
+            if empty is None:
+                empty = bpy.data.objects.new(group_name, None)
+                context.scene.collection.objects.link(empty)
+                created_count += 1
+            else:
+                updated_count += 1
+
+            _ensure_object_visible_selectable(context, empty)
+            empty.empty_display_size = 2
+            empty.empty_display_type = 'PLAIN_AXES'
+            empty['fbx_type'] = 'LodGroup'
+
+            previous_children = [ob for ob in context.scene.objects if ob.parent == empty]
+            for child in previous_children:
+                _ensure_object_visible_selectable(context, child)
+                _clear_parent_keep_world(child)
+
+            reference_obj = _reference_lod_object(lod_objects)
+            if reference_obj is not None:
+                empty.location = _bbox_world_center(reference_obj)
+            context.view_layer.update()
+
+            # Rebuild parent links so the cluster always reflects the current source mode.
+            for lod_obj in lod_objects:
+                _set_parent_keep_world(lod_obj, empty)
+            context.view_layer.update()
+
+        total_groups = created_count + updated_count
+        self.report(
+            {'INFO'},
+            f'Clusters ready: {total_groups} group(s) ({created_count} created, {updated_count} updated, {skipped_count} skipped)'
+        )
         return {'FINISHED'}
 
 class OBJECT_OT_changeLOD(bpy.types.Operator):
@@ -1073,22 +1226,10 @@ class ToolsPanelLODgenerator:
 
             col.separator()
 
-        # Recent operations log box (collapsible)
-        if scene.lod_progress_log:
-            box = layout.box()
-            row = box.row()
-            row.label(text="Recent Operations", icon='TEXT')
-
-            log_lines = scene.lod_progress_log.split('\n')
-            # Show last 5 log entries
-            for line in log_lines[-5:]:
-                if line.strip():
-                    box.label(text=line)
-
         if context.object:
             step1_box = layout.box()
             step1_box.label(text="Step 1 - Data Preparation", icon='MODIFIER')
-            step1_box.label(text="Prepare selected meshes as LOD0 source objects.")
+            step1_box.label(text="Prepare selected meshes as LOD0 source objects (and moved into LOD0 collection).")
             step1_box.operator("lod0.creation", icon="MESH_UVSPHERE", text='Set as LOD0')
 
             step2_box = layout.box()
@@ -1102,7 +1243,7 @@ class ToolsPanelLODgenerator:
                 preset_row.label(text="Preset: unavailable", icon='ERROR')
             else:
                 active_preset = _get_active_preset(prefs)
-                active_name = active_preset.name if active_preset else LOD_BASE_PRESET_NAME
+                active_name = active_preset.name if active_preset else LOD_DEFAULT_PRESET_NAME
                 preset_row.menu("LOD_MT_presets_menu", text=f"Preset: {active_name}", icon='DOWNARROW_HLT')
                 preset_row.operator("lod.preset_apply", text="Apply", icon='IMPORT')
 
@@ -1172,9 +1313,20 @@ class ToolsPanelLODgenerator:
             step3_box = layout.box()
             step3_box.label(text="Step 3 - Create LODs", icon='OUTLINER_OB_MESH')
             step3_box.operator("lod.creation", text='Generate LODs', icon='PLAY')
+            if scene.lod_progress_log:
+                log_box = step3_box.box()
+                log_header = log_box.row()
+                icon = 'TRIA_DOWN' if scene.lod_progress_show_log else 'TRIA_RIGHT'
+                log_header.prop(scene, "lod_progress_show_log", text="Recent Operations", icon=icon, emboss=False)
+                if scene.lod_progress_show_log:
+                    for line in scene.lod_progress_log.split('\n')[-8:]:
+                        if line.strip():
+                            log_box.label(text=line)
 
             step4_box = layout.box()
             step4_box.label(text="Step 4 - Cluster & Export", icon='EXPORT')
+            source_row = step4_box.row()
+            source_row.prop(scene, "lod_cluster_source", text="Cluster Source")
             cluster_row = step4_box.row(align=True)
             cluster_row.operator("create.grouplod", icon="PRESET", text='Create Clusters')
             cluster_row.operator("remove.grouplod", icon="CANCEL", text='Remove Clusters')
@@ -1197,7 +1349,7 @@ class LOD_MT_presets_menu(Menu):
             return
 
         active_preset = _get_active_preset(prefs)
-        active_name = active_preset.name if active_preset else LOD_BASE_PRESET_NAME
+        active_name = active_preset.name if active_preset else LOD_DEFAULT_PRESET_NAME
 
         layout.label(text="Select Preset", icon='PRESET')
         for preset in prefs.lod_presets:
@@ -1214,7 +1366,7 @@ class LOD_MT_presets_menu(Menu):
         layout.operator("lod.preset_duplicate_active", icon='DUPLICATE')
 
         delete_row = layout.row()
-        delete_row.enabled = active_name != LOD_BASE_PRESET_NAME
+        delete_row.enabled = active_name not in LOD_LOCKED_PRESET_NAMES
         delete_row.operator("lod.preset_delete_active", icon='TRASH')
 
 
@@ -1336,8 +1488,8 @@ class OBJECT_OT_lod_preset_rename_active(Operator):
         if preset is None:
             self.report({'ERROR'}, "No active preset available")
             return {'CANCELLED'}
-        if preset.name == LOD_BASE_PRESET_NAME:
-            self.report({'WARNING'}, 'Preset "Base" cannot be renamed')
+        if preset.name in LOD_LOCKED_PRESET_NAMES:
+            self.report({'WARNING'}, f'Preset "{preset.name}" is built-in and cannot be renamed')
             return {'CANCELLED'}
 
         unique_name = _make_unique_preset_name(prefs, self.new_name)
@@ -1413,8 +1565,8 @@ class OBJECT_OT_lod_preset_delete_active(Operator):
         if preset is None:
             self.report({'ERROR'}, "No active preset available")
             return {'CANCELLED'}
-        if preset.name == LOD_BASE_PRESET_NAME:
-            self.report({'WARNING'}, 'Preset "Base" cannot be deleted')
+        if preset.name in LOD_LOCKED_PRESET_NAMES:
+            self.report({'WARNING'}, f'Preset "{preset.name}" is built-in and cannot be deleted')
             return {'CANCELLED'}
 
         idx_to_remove = None
@@ -1429,8 +1581,7 @@ class OBJECT_OT_lod_preset_delete_active(Operator):
 
         removed_name = preset.name
         prefs.lod_presets.remove(idx_to_remove)
-        _ensure_base_preset(prefs)
-        prefs.lod_active_preset = LOD_BASE_PRESET_NAME
+        prefs.lod_active_preset = LOD_DEFAULT_PRESET_NAME
         bpy.ops.wm.save_userpref()
         self.report({'INFO'}, f'Preset "{removed_name}" deleted')
         return {'FINISHED'}
@@ -1537,7 +1688,7 @@ def register():
             ('CLASSIC', "Classic LOD", "Classic LOD generation"),
             ('CLASSIC_NORMAL', "Classic LOD + Normal Maps", "Classic LOD generation with normal maps"),
             ('VEGETATION_ALPHA', "Vegetation Alpha Clip", "LOD workflow for vegetation/foliage alpha materials"),
-            ('CESIUM_ATLAS', "LOD0 Atlas Bake (Cesium)", "Prepare a LOD0 atlas for Cesium export")
+            ('CESIUM_ATLAS', "Same Geometry Atlas (Cesium)", "Keep source geometry and bake one 0-1 atlas for Cesium export")
         ],
         default='CLASSIC',
         update=on_lod_workflow_preset_update,
@@ -1608,6 +1759,16 @@ def register():
         default=True,
         description="If disabled it will not preserve the borders of the mesh"
     )
+    bpy.types.Scene.lod_cluster_source = bpy.props.EnumProperty(
+        name="Cluster Source",
+        items=[
+            ('ALL_SCENE', "All Scene LODs", "Search all scene mesh objects and auto-group every LOD family"),
+            ('SELECTED_WITH_SIBLINGS', "Selected + Auto Siblings", "Use selected mesh LODs as seeds and include all sibling LODs found in scene"),
+            ('SELECTED_ONLY', "Selected Mesh LODs Only", "Create clusters using only the currently selected mesh LOD objects"),
+        ],
+        default='SELECTED_WITH_SIBLINGS',
+        description="Choose how LOD meshes are collected before creating clusters"
+    )
 
     # Progress tracking properties
     bpy.types.Scene.lod_progress_active = bpy.props.BoolProperty(
@@ -1650,6 +1811,11 @@ def register():
         default="",
         description="Log of completed operations"
     )
+    bpy.types.Scene.lod_progress_show_log = bpy.props.BoolProperty(
+        name="Show Recent Operations",
+        default=True,
+        description="Show or hide the recent operations list in Step 3"
+    )
 
     # Apply saved defaults immediately after enabling the addon.
     load_lod_defaults(None)
@@ -1683,6 +1849,7 @@ def unregister():
     del bpy.types.Scene.atlas_uv_algorithm
     del bpy.types.Scene.texture_format
     del bpy.types.Scene.decimate_borders
+    del bpy.types.Scene.lod_cluster_source
     # Progress tracking properties
     del bpy.types.Scene.lod_progress_active
     del bpy.types.Scene.lod_progress_current_task
@@ -1692,6 +1859,7 @@ def unregister():
     del bpy.types.Scene.lod_progress_total_lods
     del bpy.types.Scene.lod_progress_elapsed_time
     del bpy.types.Scene.lod_progress_log
+    del bpy.types.Scene.lod_progress_show_log
 
 if __name__ == "__main__":
     register()

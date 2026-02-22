@@ -122,7 +122,7 @@ class LODPresetItem(PropertyGroup):
 
     name: StringProperty(
         name="Preset Name",
-        default="Base"
+        default="Classic LOD"
     ) # type: ignore
     lod_num: IntProperty(
         name="Number of LODs",
@@ -166,7 +166,7 @@ class LODPresetItem(PropertyGroup):
             ('CLASSIC', "Classic LOD", "Classic LOD generation"),
             ('CLASSIC_NORMAL', "Classic LOD + Normal Maps", "Classic LOD generation with normal maps"),
             ('VEGETATION_ALPHA', "Vegetation Alpha Clip", "LOD workflow for vegetation/foliage alpha materials"),
-            ('CESIUM_ATLAS', "LOD0 Atlas Bake (Cesium)", "Prepare LOD0 atlas for Cesium export")
+            ('CESIUM_ATLAS', "Same Geometry Atlas (Cesium)", "Keep source geometry and bake one 0-1 atlas for Cesium export")
         ],
         default='CLASSIC'
     ) # type: ignore
@@ -329,7 +329,7 @@ class DemPreferences(bpy.types.AddonPreferences):
             ('CLASSIC', "Classic LOD", "Classic LOD generation"),
             ('CLASSIC_NORMAL', "Classic LOD + Normal Maps", "Classic LOD generation with normal maps"),
             ('VEGETATION_ALPHA', "Vegetation Alpha Clip", "LOD workflow for vegetation/foliage alpha materials"),
-            ('CESIUM_ATLAS', "LOD0 Atlas Bake (Cesium)", "Prepare LOD0 atlas for Cesium export")
+            ('CESIUM_ATLAS', "Same Geometry Atlas (Cesium)", "Keep source geometry and bake one 0-1 atlas for Cesium export")
         ],
         default='CLASSIC'
     ) # type: ignore
@@ -407,7 +407,7 @@ class DemPreferences(bpy.types.AddonPreferences):
     ) # type: ignore
     lod_active_preset : bpy.props.StringProperty(
         name="Active LOD Preset",
-        default="Base"
+        default="Classic LOD"
     ) # type: ignore
     show_lod_defaults : bpy.props.BoolProperty(
         name="Show LOD Defaults",
