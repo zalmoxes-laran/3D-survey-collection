@@ -217,7 +217,7 @@ class ToolsPanelExport:
                 )
                 op.url = "3DSCstructure.html#exporters"
                 row = box.row()
-                row.prop(scene, 'instanced_export', text="Enable instanced_export (only FBX)")
+                row.prop(scene, 'instanced_export', text="Enable instanced_export")
                 row = box.row()
                 row.prop(scene, 'collgerarchy_to_foldtree', text="Use collection gerarchy")
 
