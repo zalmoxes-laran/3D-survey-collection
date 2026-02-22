@@ -1081,10 +1081,12 @@ def _native_bake_basecolor_texture(context, scene, base_obj, atlas_size, margin_
 #  Spatial data + tree building
 # ---------------------------------------------------------------------------
 
-def _build_face_spatial_data(mesh, to_gltf_yup=True):
+def _build_face_spatial_data(mesh, to_gltf_yup=False):
     """Build per-face centroids and bounding boxes.
 
-    to_gltf_yup is always True (GLTF_FRAME enforced).
+    to_gltf_yup=False: bounding volumes stay in Blender Z-up frame
+    (required by 3D Tiles spec). GLB Y-up conversion is handled by
+    Blender's glTF exporter (export_yup=True) at export time.
     """
     verts = []
     for v in mesh.vertices:
@@ -1849,11 +1851,11 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
     base_obj, temp_collection = _prepare_base_mesh_object(context, active_obj, coords_cfg["offset"])
     lod_image_cache = None
     try:
-        _add_to_cesium_log(context, f"[NATIVE] {active_obj.name}: bbox=GLTF_FRAME, GLB export_yup=ON")
+        _add_to_cesium_log(context, f"[NATIVE] {active_obj.name}: bbox=Z_UP, GLB export_yup=ON")
 
-        # Always compute in GLTF Y-up frame
+        # Compute in Blender Z-up frame (3D Tiles expects Z-up bounding volumes)
         face_ids, centroids, face_mins, face_maxs = _build_face_spatial_data(
-            base_obj.data, to_gltf_yup=True,
+            base_obj.data, to_gltf_yup=False,
         )
         if not face_ids:
             return False, "Active mesh has no faces."
