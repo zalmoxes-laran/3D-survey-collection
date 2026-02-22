@@ -132,14 +132,13 @@ def object_has_alpha_texture(obj):
                     return True
     return False
 
-def should_preserve_alpha(scene, source_obj):
-    if scene.lod_ignore_source_alpha:
-        return False
-    if scene.use_alpha:
+def should_use_alpha(scene, source_obj):
+    alpha_source = getattr(scene, "lod_alpha_source", 'OFF')
+    if alpha_source == 'FORCE':
         return True
-    if not scene.lod_auto_preserve_alpha:
-        return False
-    return object_has_alpha_texture(source_obj)
+    if alpha_source == 'AUTO':
+        return object_has_alpha_texture(source_obj)
+    return False
 
 def configure_material_alpha(mat, bsdf, texImage, scene, use_alpha):
     if not use_alpha:
@@ -156,6 +155,20 @@ def configure_material_alpha(mat, bsdf, texImage, scene, use_alpha):
 
 def workflow_uses_normal_maps(scene):
     return scene.lod_generate_normal_maps or scene.lod_workflow_preset == 'CLASSIC_NORMAL'
+
+def enforce_alpha_texture_format(scene):
+    if getattr(scene, "lod_alpha_source", 'OFF') != 'OFF' and getattr(scene, "texture_format", 'PNG') != 'PNG':
+        scene.texture_format = 'PNG'
+
+def on_lod_alpha_source_update(scene, context):
+    if scene is None:
+        return
+    enforce_alpha_texture_format(scene)
+
+def on_lod_texture_format_update(scene, context):
+    if scene is None:
+        return
+    enforce_alpha_texture_format(scene)
 
 def update_lod_progress(context, task="", current_obj=0, total_obj=0, current_lod=0, total_lod=0, elapsed=0.0):
     """Update LOD generation progress information"""
@@ -222,16 +235,14 @@ def _apply_workflow_preset_defaults(preset, workflow_name):
     preset.lod_workflow_preset = workflow_name
     preset.lod_generate_normal_maps = workflow_name == 'CLASSIC_NORMAL'
     preset.lod_normal_map_max_level = max(1, preset.lod_normal_map_max_level)
-    # Alpha must stay opt-in by default.
-    preset.lod_auto_preserve_alpha = False
-    preset.lod_ignore_source_alpha = False
+    preset.lod_decimate_borders = True
+    preset.lod_alpha_source = 'OFF'
     preset.lod_alpha_mode = 'BLEND'
     preset.lod_alpha_clip_threshold = 0.5
 
     if workflow_name == 'VEGETATION_ALPHA':
         preset.lod_texture_format = 'PNG'
-        preset.lod_use_alpha = True
-        preset.lod_auto_preserve_alpha = True
+        preset.lod_alpha_source = 'AUTO'
         preset.lod_alpha_mode = 'CLIP'
         preset.lod_alpha_clip_threshold = 0.35
         preset.lod_decimate_borders = True
@@ -241,20 +252,18 @@ def _apply_workflow_preset_defaults(preset, workflow_name):
         preset.lod1_dec_ratio = 1.0
         preset.lod_atlas_uv_recalc = True
         preset.lod_texture_format = 'PNG'
-        preset.lod_use_alpha = False
 
 def apply_scene_workflow_defaults(scene, workflow_name):
     scene.lod_generate_normal_maps = workflow_name == 'CLASSIC_NORMAL'
     scene.lod_normal_map_max_level = max(1, min(scene.lod_normal_map_max_level, scene.LODnum))
-    scene.lod_auto_preserve_alpha = False
-    scene.lod_ignore_source_alpha = False
+    scene.decimate_borders = True
+    scene.lod_alpha_source = 'OFF'
     scene.lod_alpha_mode = 'BLEND'
     scene.lod_alpha_clip_threshold = 0.5
 
     if workflow_name == 'VEGETATION_ALPHA':
         scene.texture_format = 'PNG'
-        scene.use_alpha = True
-        scene.lod_auto_preserve_alpha = True
+        scene.lod_alpha_source = 'AUTO'
         scene.lod_alpha_mode = 'CLIP'
         scene.lod_alpha_clip_threshold = 0.35
         scene.decimate_borders = True
@@ -264,16 +273,17 @@ def apply_scene_workflow_defaults(scene, workflow_name):
         scene.LOD1_dec_ratio = 1.0
         scene.atlas_uv_recalc = True
         scene.texture_format = 'PNG'
-        scene.use_alpha = False
         scene.lod_generate_normal_maps = False
+
+    enforce_alpha_texture_format(scene)
 
 def on_lod_workflow_preset_update(scene, context):
     if scene is None:
         return
     required_attrs = (
         "LODnum", "LOD1_dec_ratio", "atlas_uv_recalc", "texture_format",
-        "use_alpha", "lod_generate_normal_maps", "lod_normal_map_max_level",
-        "lod_auto_preserve_alpha", "lod_ignore_source_alpha",
+        "lod_generate_normal_maps", "lod_normal_map_max_level",
+        "lod_alpha_source",
         "lod_alpha_mode", "lod_alpha_clip_threshold", "decimate_borders"
     )
     if not all(hasattr(scene, attr) for attr in required_attrs):
@@ -294,8 +304,7 @@ def _copy_scene_to_preset(scene, preset):
     preset.lod_workflow_preset = scene.lod_workflow_preset
     preset.lod_generate_normal_maps = scene.lod_generate_normal_maps
     preset.lod_normal_map_max_level = scene.lod_normal_map_max_level
-    preset.lod_auto_preserve_alpha = scene.lod_auto_preserve_alpha
-    preset.lod_ignore_source_alpha = scene.lod_ignore_source_alpha
+    preset.lod_alpha_source = scene.lod_alpha_source
     preset.lod_alpha_mode = scene.lod_alpha_mode
     preset.lod_alpha_clip_threshold = scene.lod_alpha_clip_threshold
     preset.lod_pad_on = scene.LOD_pad_on
@@ -303,7 +312,6 @@ def _copy_scene_to_preset(scene, preset):
     preset.lod_atlas_uv_recalc = scene.atlas_uv_recalc
     preset.lod_atlas_uv_algorithm = scene.atlas_uv_algorithm
     preset.lod_texture_format = scene.texture_format
-    preset.lod_use_alpha = scene.use_alpha
     preset.lod_decimate_borders = scene.decimate_borders
 
 
@@ -320,8 +328,7 @@ def _copy_preset_to_scene(scene, preset):
     scene.lod_workflow_preset = preset.lod_workflow_preset
     scene.lod_generate_normal_maps = preset.lod_generate_normal_maps
     scene.lod_normal_map_max_level = preset.lod_normal_map_max_level
-    scene.lod_auto_preserve_alpha = preset.lod_auto_preserve_alpha
-    scene.lod_ignore_source_alpha = preset.lod_ignore_source_alpha
+    scene.lod_alpha_source = preset.lod_alpha_source
     scene.lod_alpha_mode = preset.lod_alpha_mode
     scene.lod_alpha_clip_threshold = preset.lod_alpha_clip_threshold
     scene.LOD_pad_on = preset.lod_pad_on
@@ -329,7 +336,6 @@ def _copy_preset_to_scene(scene, preset):
     scene.atlas_uv_recalc = preset.lod_atlas_uv_recalc
     scene.atlas_uv_algorithm = preset.lod_atlas_uv_algorithm
     scene.texture_format = preset.lod_texture_format
-    scene.use_alpha = preset.lod_use_alpha
     scene.decimate_borders = preset.lod_decimate_borders
 
 
@@ -346,8 +352,7 @@ def _copy_legacy_defaults_to_preset(prefs, preset):
     preset.lod_workflow_preset = prefs.lod_workflow_preset
     preset.lod_generate_normal_maps = prefs.lod_generate_normal_maps
     preset.lod_normal_map_max_level = prefs.lod_normal_map_max_level
-    preset.lod_auto_preserve_alpha = prefs.lod_auto_preserve_alpha
-    preset.lod_ignore_source_alpha = prefs.lod_ignore_source_alpha
+    preset.lod_alpha_source = prefs.lod_alpha_source
     preset.lod_alpha_mode = prefs.lod_alpha_mode
     preset.lod_alpha_clip_threshold = prefs.lod_alpha_clip_threshold
     preset.lod_pad_on = prefs.lod_pad_on
@@ -355,7 +360,6 @@ def _copy_legacy_defaults_to_preset(prefs, preset):
     preset.lod_atlas_uv_recalc = prefs.lod_atlas_uv_recalc
     preset.lod_atlas_uv_algorithm = prefs.lod_atlas_uv_algorithm
     preset.lod_texture_format = prefs.lod_texture_format
-    preset.lod_use_alpha = prefs.lod_use_alpha
     preset.lod_decimate_borders = prefs.lod_decimate_borders
 
 
@@ -601,12 +605,12 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 print('Creating new texture atlas for ' + currentLOD + '....')
                 tex_res = tex_res_for_current_lod(i_lodbake_counter, context)
                 tex_LODnew_name = "T_" + obj_clean_name + "_" + currentLOD
-                preserve_source_alpha = should_preserve_alpha(context.scene, obj_LOD0)
-                effective_texture_format = 'PNG' if preserve_source_alpha else context.scene.texture_format
-                effective_use_alpha = effective_texture_format == 'PNG' and (context.scene.use_alpha or preserve_source_alpha)
+                use_alpha_for_output = should_use_alpha(context.scene, obj_LOD0)
+                effective_texture_format = 'PNG' if use_alpha_for_output else context.scene.texture_format
+                effective_use_alpha = effective_texture_format == 'PNG' and use_alpha_for_output
 
-                if preserve_source_alpha and context.scene.texture_format != 'PNG':
-                    add_to_lod_log(context, f"INFO: forcing PNG for {obj_LODnew.name} to preserve alpha")
+                if use_alpha_for_output and context.scene.texture_format != 'PNG':
+                    add_to_lod_log(context, f"INFO: forcing PNG for {obj_LODnew.name} because alpha is enabled")
 
                 if effective_texture_format == 'PNG':
                     tempimage = bpy.data.images.new(name=tex_LODnew_name, width=tex_res, height=tex_res, alpha=effective_use_alpha)
@@ -1104,34 +1108,40 @@ class ToolsPanelLODgenerator:
 
             options_box = step2_box.box()
             options_box.label(text="Bake & Material Options", icon='MATERIAL')
-            top_opts_row = options_box.row(align=True)
-            top_opts_row.prop(scene, 'LOD_pad_on', text="UV Pad")
-            top_opts_row.prop(scene, 'decimate_borders', text="Preserve Borders")
-            top_opts_row.prop(scene, 'LOD_use_scene_settings', text="Use Scene Lighting")
+            lighting_row = options_box.row(align=True)
+            lighting_row.prop(scene, 'LOD_use_scene_settings', text="Include Scene Lighting in Baking LODs")
 
-            uv_row = options_box.row(align=True)
-            uv_row.prop(scene, "atlas_uv_recalc", text="Recalculate Atlas UV")
+            uv_box = options_box.box()
+            uv_box.label(text="UV Settings", icon='UV')
+            uv_main_row = uv_box.row(align=True)
+            uv_main_row.prop(scene, 'LOD_pad_on', text="Pad")
+            uv_main_row.prop(scene, 'decimate_borders', text="Preserve Borders")
+            uv_atlas_row = uv_box.row(align=True)
+            uv_atlas_row.prop(scene, "atlas_uv_recalc", text="Recalc Atlas")
             if scene.atlas_uv_recalc:
-                uv_row.prop(scene, "atlas_uv_algorithm", text="Algorithm")
+                uv_atlas_row.prop(scene, "atlas_uv_algorithm", text="Algorithm")
 
-            tex_row = options_box.row(align=True)
-            tex_row.prop(scene, "texture_format", text="Texture Format")
-            if scene.texture_format == 'PNG':
-                tex_row.prop(scene, "use_alpha", text="Use Alpha Channel")
-
-            normal_row = options_box.row(align=True)
-            normal_row.prop(scene, "lod_generate_normal_maps", text="Generate Normal Maps")
+            normal_box = options_box.box()
+            normal_box.label(text="Normal Maps", icon='NORMALS_FACE')
+            normal_row = normal_box.row(align=True)
+            normal_row.prop(scene, "lod_generate_normal_maps", text="Bake")
             if workflow_uses_normal_maps(scene):
                 normal_row.prop(scene, "lod_normal_map_max_level", text="Max LOD")
 
-            alpha_row = options_box.row(align=True)
-            alpha_row.label(text="Alpha:")
-            alpha_row.prop(scene, "lod_auto_preserve_alpha", text="Auto Preserve")
-            alpha_row.prop(scene, "lod_ignore_source_alpha", text="Ignore Source")
-            if not scene.lod_ignore_source_alpha:
-                alpha_row.prop(scene, "lod_alpha_mode", text="")
+            alpha_box = options_box.box()
+            alpha_box.label(text="Alpha Settings", icon='IMAGE_ALPHA')
+            alpha_row = alpha_box.row(align=True)
+            alpha_row.prop(scene, "lod_alpha_source", text="Source")
+            if scene.lod_alpha_source != 'OFF':
+                alpha_row.prop(scene, "lod_alpha_mode", text="Mode")
                 if scene.lod_alpha_mode == 'CLIP':
                     alpha_row.prop(scene, "lod_alpha_clip_threshold", text="Clip")
+
+            image_row = alpha_box.row(align=True)
+            image_row.prop(scene, "texture_format", text="Image")
+            if scene.lod_alpha_source != 'OFF':
+                image_row.enabled = False
+                alpha_box.label(text="Image format is locked to PNG while alpha is enabled.")
 
             lod_details_box = step2_box.box()
             lod_details_box.label(text="LOD Details", icon='MOD_SIMPLIFY')
@@ -1370,8 +1380,7 @@ class OBJECT_OT_lod_preset_duplicate_active(Operator):
         new_preset.lod_workflow_preset = preset.lod_workflow_preset
         new_preset.lod_generate_normal_maps = preset.lod_generate_normal_maps
         new_preset.lod_normal_map_max_level = preset.lod_normal_map_max_level
-        new_preset.lod_auto_preserve_alpha = preset.lod_auto_preserve_alpha
-        new_preset.lod_ignore_source_alpha = preset.lod_ignore_source_alpha
+        new_preset.lod_alpha_source = preset.lod_alpha_source
         new_preset.lod_alpha_mode = preset.lod_alpha_mode
         new_preset.lod_alpha_clip_threshold = preset.lod_alpha_clip_threshold
         new_preset.lod_pad_on = preset.lod_pad_on
@@ -1379,7 +1388,6 @@ class OBJECT_OT_lod_preset_duplicate_active(Operator):
         new_preset.lod_atlas_uv_recalc = preset.lod_atlas_uv_recalc
         new_preset.lod_atlas_uv_algorithm = preset.lod_atlas_uv_algorithm
         new_preset.lod_texture_format = preset.lod_texture_format
-        new_preset.lod_use_alpha = preset.lod_use_alpha
         new_preset.lod_decimate_borders = preset.lod_decimate_borders
 
         prefs.lod_active_preset = new_preset.name
@@ -1547,15 +1555,16 @@ def register():
         max=5,
         description="Generate normal maps up to this LOD level"
     )
-    bpy.types.Scene.lod_auto_preserve_alpha = bpy.props.BoolProperty(
-        name="Auto Preserve Source Alpha",
-        default=False,
-        description="Detect alpha in source textures and preserve it in baked textures"
-    )
-    bpy.types.Scene.lod_ignore_source_alpha = bpy.props.BoolProperty(
-        name="Ignore Source Alpha",
-        default=False,
-        description="Ignore alpha detected in source textures"
+    bpy.types.Scene.lod_alpha_source = bpy.props.EnumProperty(
+        name="Alpha Source",
+        items=[
+            ('OFF', "Disabled", "Never bake/use alpha"),
+            ('FORCE', "Always", "Always bake/use alpha"),
+            ('AUTO', "Auto Detect", "Use alpha only if detected in source textures")
+        ],
+        default='OFF',
+        update=on_lod_alpha_source_update,
+        description="How alpha is determined for baked textures"
     )
     bpy.types.Scene.lod_alpha_mode = bpy.props.EnumProperty(
         name="Alpha Mode",
@@ -1591,15 +1600,12 @@ def register():
         name="Texture Format",
         items=[('JPG', "JPG", ""), ('PNG', "PNG", "")],
         default='JPG',
+        update=on_lod_texture_format_update,
         description="Choose texture file format"
-    )
-    bpy.types.Scene.use_alpha = bpy.props.BoolProperty(
-        name="Use Alpha", default=False,
-        description="If enabled, PNG textures will include an alpha channel"
     )
     bpy.types.Scene.decimate_borders = bpy.props.BoolProperty(
         name="Preserve borders",
-        default=False,
+        default=True,
         description="If disabled it will not preserve the borders of the mesh"
     )
 
@@ -1667,17 +1673,15 @@ def unregister():
     del bpy.types.Scene.LOD4_dec_ratio
     del bpy.types.Scene.LOD_pad_on
     del bpy.types.Scene.LOD_use_scene_settings
+    del bpy.types.Scene.lod_alpha_source
     del bpy.types.Scene.lod_workflow_preset
     del bpy.types.Scene.lod_generate_normal_maps
     del bpy.types.Scene.lod_normal_map_max_level
-    del bpy.types.Scene.lod_auto_preserve_alpha
-    del bpy.types.Scene.lod_ignore_source_alpha
     del bpy.types.Scene.lod_alpha_mode
     del bpy.types.Scene.lod_alpha_clip_threshold
     del bpy.types.Scene.atlas_uv_recalc
     del bpy.types.Scene.atlas_uv_algorithm
     del bpy.types.Scene.texture_format
-    del bpy.types.Scene.use_alpha
     del bpy.types.Scene.decimate_borders
     # Progress tracking properties
     del bpy.types.Scene.lod_progress_active

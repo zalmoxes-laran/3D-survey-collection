@@ -103,6 +103,16 @@ from .importer import import_dxf, import_linked_lod
 
 from . import TSM
 
+def _prefs_enforce_alpha_texture_format(owner):
+    if getattr(owner, "lod_alpha_source", 'OFF') != 'OFF' and getattr(owner, "lod_texture_format", 'PNG') != 'PNG':
+        owner.lod_texture_format = 'PNG'
+
+def _prefs_on_lod_alpha_source_update(owner, context):
+    _prefs_enforce_alpha_texture_format(owner)
+
+def _prefs_on_lod_texture_format_update(owner, context):
+    _prefs_enforce_alpha_texture_format(owner)
+
 # demo bare-bones preferences
 @addon_updater_ops.make_annotations
 
@@ -168,13 +178,14 @@ class LODPresetItem(PropertyGroup):
         name="Normal Map Max LOD",
         default=2, min=1, max=5
     ) # type: ignore
-    lod_auto_preserve_alpha: BoolProperty(
-        name="Auto Preserve Source Alpha",
-        default=False
-    ) # type: ignore
-    lod_ignore_source_alpha: BoolProperty(
-        name="Ignore Source Alpha",
-        default=False
+    lod_alpha_source: EnumProperty(
+        name="Alpha Source",
+        items=[
+            ('OFF', "Disabled", "Never bake/use alpha"),
+            ('FORCE', "Always", "Always bake/use alpha"),
+            ('AUTO', "Auto Detect", "Use alpha only if detected in source textures")
+        ],
+        default='OFF'
     ) # type: ignore
     lod_alpha_mode: EnumProperty(
         name="Alpha Mode",
@@ -191,10 +202,6 @@ class LODPresetItem(PropertyGroup):
         items=[('JPG', 'JPEG', 'JPEG format'), ('PNG', 'PNG', 'PNG format')],
         default='JPG'
     ) # type: ignore
-    lod_use_alpha: BoolProperty(
-        name="Use Alpha",
-        default=False
-    ) # type: ignore
     lod_pad_on: BoolProperty(
         name="Padding On",
         default=True
@@ -205,7 +212,7 @@ class LODPresetItem(PropertyGroup):
     ) # type: ignore
     lod_decimate_borders: BoolProperty(
         name="Decimate Borders",
-        default=False
+        default=True
     ) # type: ignore
     lod_atlas_uv_recalc: BoolProperty(
         name="Atlas UV Recalculate",
@@ -336,15 +343,16 @@ class DemPreferences(bpy.types.AddonPreferences):
         description="Generate normal maps up to this LOD level",
         default=2, min=1, max=5
     ) # type: ignore
-    lod_auto_preserve_alpha : bpy.props.BoolProperty(
-        name="Auto Preserve Source Alpha",
-        description="Detect alpha in source textures and preserve it",
-        default=False
-    ) # type: ignore
-    lod_ignore_source_alpha : bpy.props.BoolProperty(
-        name="Ignore Source Alpha",
-        description="Ignore alpha found in source textures",
-        default=False
+    lod_alpha_source : bpy.props.EnumProperty(
+        name="Alpha Source",
+        description="How alpha is determined for baked textures",
+        items=[
+            ('OFF', "Disabled", "Never bake/use alpha"),
+            ('FORCE', "Always", "Always bake/use alpha"),
+            ('AUTO', "Auto Detect", "Use alpha only if detected in source textures")
+        ],
+        default='OFF',
+        update=_prefs_on_lod_alpha_source_update
     ) # type: ignore
     lod_alpha_mode : bpy.props.EnumProperty(
         name="Alpha Mode",
@@ -362,12 +370,8 @@ class DemPreferences(bpy.types.AddonPreferences):
         name="Texture Format",
         description="Default texture format for LOD generation",
         items=[('JPG', 'JPEG', 'JPEG format'), ('PNG', 'PNG', 'PNG format')],
-        default='JPG'
-    ) # type: ignore
-    lod_use_alpha : bpy.props.BoolProperty(
-        name="Use Alpha",
-        description="Default use alpha channel",
-        default=False
+        default='JPG',
+        update=_prefs_on_lod_texture_format_update
     ) # type: ignore
     lod_pad_on : bpy.props.BoolProperty(
         name="Padding On",
@@ -382,7 +386,7 @@ class DemPreferences(bpy.types.AddonPreferences):
     lod_decimate_borders : bpy.props.BoolProperty(
         name="Decimate Borders",
         description="Default decimate border edges",
-        default=False
+        default=True
     ) # type: ignore
     lod_atlas_uv_recalc : bpy.props.BoolProperty(
         name="Atlas UV Recalculate",
@@ -412,6 +416,7 @@ class DemPreferences(bpy.types.AddonPreferences):
     ) # type: ignore
 
     def draw(self, context):
+        _prefs_enforce_alpha_texture_format(self)
         layout = self.layout
         # col = layout.column() # works best if a column, or even just self.layout
         mainrow = layout.row()
@@ -488,12 +493,16 @@ class DemPreferences(bpy.types.AddonPreferences):
             col.prop(self, "lod_workflow_preset")
             col.prop(self, "lod_generate_normal_maps")
             col.prop(self, "lod_normal_map_max_level")
-            col.prop(self, "lod_auto_preserve_alpha")
-            col.prop(self, "lod_ignore_source_alpha")
-            col.prop(self, "lod_alpha_mode")
-            col.prop(self, "lod_alpha_clip_threshold")
-            col.prop(self, "lod_texture_format")
-            col.prop(self, "lod_use_alpha")
+            col.prop(self, "lod_alpha_source")
+            if self.lod_alpha_source != 'OFF':
+                col.prop(self, "lod_alpha_mode")
+                if self.lod_alpha_mode == 'CLIP':
+                    col.prop(self, "lod_alpha_clip_threshold")
+            format_row = col.row(align=True)
+            format_row.prop(self, "lod_texture_format")
+            if self.lod_alpha_source != 'OFF':
+                format_row.enabled = False
+                col.label(text="Texture format is locked to PNG while alpha is enabled.")
             col.prop(self, "lod_pad_on")
             col.prop(self, "lod_use_scene_settings")
             col.prop(self, "lod_decimate_borders")
