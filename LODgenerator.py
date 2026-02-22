@@ -177,12 +177,6 @@ def update_lod_progress(context, task="", current_obj=0, total_obj=0, current_lo
             if area.type == 'VIEW_3D':
                 area.tag_redraw()
 
-    # Force immediate update with redraw timer
-    try:
-        bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
-    except:
-        pass
-
 def add_to_lod_log(context, message):
     """Add a message to the LOD progress log"""
     scene = context.scene
@@ -201,12 +195,6 @@ def add_to_lod_log(context, message):
         for area in window.screen.areas:
             if area.type == 'VIEW_3D':
                 area.tag_redraw()
-
-    # Force immediate update with redraw timer
-    try:
-        bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
-    except:
-        pass
 
 
 def _get_addon_preferences(context):
@@ -450,7 +438,7 @@ class OBJECT_OT_LOD(bpy.types.Operator):
     def execute(self, context):
         start_time = time.time()
         context = bpy.context
-        selected_objects = context.selected_objects
+        selected_objects = list(context.selected_objects)
         if not selected_objects:
             self.report({'WARNING'}, "No objects selected")
             return {'CANCELLED'}
@@ -482,6 +470,8 @@ class OBJECT_OT_LOD(bpy.types.Operator):
         if is_cesium_atlas_workflow and not context.scene.atlas_uv_recalc:
             add_to_lod_log(context, "INFO: Cesium workflow forces Atlas UV recalculation")
         last_margin_val = context.scene.render.bake.margin
+        original_render_engine = context.scene.render.engine
+        context.scene.render.engine = 'CYCLES'
         
         while i_lodbake_counter <= LODnum:
             if is_cesium_atlas_workflow:
@@ -627,9 +617,7 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                     tempimage.filepath_raw = "//" + subfolder + '/' + tex_LODnew_name + ".jpg"
                     tempimage.file_format = 'JPEG'
 
-                # Annotate current cycles render settings
-                to_be_restored_render_engine = context.scene.render.engine
-                context.scene.render.engine = 'CYCLES'
+                # Bake settings (Cycles)
                 context.scene.cycles.bake_type = 'DIFFUSE'
 
                 if context.scene.LOD_use_scene_settings:
@@ -667,6 +655,7 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 mat.node_tree.nodes.active = texImage
                 bpy.ops.object.bake(type='DIFFUSE')
                 tempimage.save()
+                print(f'Saved diffuse texture: {bpy.path.abspath(tempimage.filepath_raw)}')
 
                 if bsdf.inputs['Base Color'].is_linked:
                     for link in list(bsdf.inputs['Base Color'].links):
@@ -691,6 +680,9 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                     normal_tex.name = "LOD_NormalMap"
                     normal_tex.label = "LOD Normal"
                     normal_tex.interpolation = 'Linear'
+                    for node in mat.node_tree.nodes:
+                        node.select = False
+                    normal_tex.select = True
 
                     normal_map_node = mat.node_tree.nodes.new('ShaderNodeNormalMap')
                     normal_map_node.name = "LOD_NormalMap_Node"
@@ -700,7 +692,6 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                     if bsdf.inputs['Normal'].is_linked:
                         for link in list(bsdf.inputs['Normal'].links):
                             mat.node_tree.links.remove(link)
-                    mat.node_tree.links.new(normal_map_node.outputs['Normal'], bsdf.inputs['Normal'])
 
                     mat.node_tree.nodes.active = normal_tex
                     context.scene.cycles.bake_type = 'NORMAL'
@@ -713,14 +704,16 @@ class OBJECT_OT_LOD(bpy.types.Operator):
 
                     bpy.ops.object.bake(type='NORMAL')
                     normal_image.save()
-                    add_to_lod_log(context, f"INFO: normal map baked for {obj_LODnew.name}")
+                    print(f'Saved normal texture: {bpy.path.abspath(normal_image.filepath_raw)}')
+
+                    # Connect baked normal map only after bake to avoid circular dependency warnings
+                    mat.node_tree.links.new(normal_map_node.outputs['Normal'], bsdf.inputs['Normal'])
+                    print(f'Normal map connected on material: {mat.name}')
 
                 if not context.scene.LOD_use_scene_settings:
                     context.scene.cycles.diffuse_bounces = to_restore_bounces
                     context.scene.cycles.samples = to_restore_samples
                     
-                context.scene.render.engine = to_be_restored_render_engine
-
                 # Set proper mesh data name using clean name (without OB_ prefix)
                 obj_LODnew.data.name = 'ME_' + obj_clean_name + "_" + currentLOD
 
@@ -731,6 +724,7 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 print('Saving on obj/mtl file for ' + currentLOD + '...')
                 activename = bpy.path.clean_name(obj_LODnew.name)
                 fn = os.path.join(basedir, subfolder, activename)
+                print(f'Export path: {fn}.obj')
                 bpy.ops.wm.obj_export(filepath=fn + ".obj", export_animation=False, forward_axis='Y', up_axis='Z', global_scale=1.0, apply_modifiers=True, export_eval_mode='DAG_EVAL_VIEWPORT', export_selected_objects=True, export_uv=True, export_normals=True, export_materials=True, export_pbr_extensions=False, path_mode='RELATIVE', export_triangulated_mesh=False, export_curves_as_nurbs=False, export_object_groups=False, export_material_groups=False, export_vertex_groups=False, export_smooth_groups=False, smooth_group_bitflags=False)
 
                 obj_time = time.time() - start_time_ob
@@ -743,6 +737,7 @@ class OBJECT_OT_LOD(bpy.types.Operator):
         # Finalize progress tracking
         end_time = time.time() - start_time
         context.scene.render.bake.margin = last_margin_val
+        context.scene.render.engine = original_render_engine
 
         # Final log entry
         print('<<<<<<< Process done >>>>>>')
@@ -1095,14 +1090,8 @@ class ToolsPanelLODgenerator:
             step2_box = layout.box()
             step2_box.label(text="Step 2 - Presets & Settings", icon='PREFERENCES')
 
-            # Macro section A: workflow preset
-            workflow_macro = step2_box.box()
-            workflow_macro.label(text="Macro A - Workflow Preset", icon='PRESET')
-            workflow_macro.prop(scene, "lod_workflow_preset", text="Workflow")
-
-            # Macro section B: LOD settings preset
             preset_macro = step2_box.box()
-            preset_macro.label(text="Macro B - LOD Settings Preset", icon='PRESET')
+            preset_macro.label(text="Detailed Preset (Workflow Included)", icon='PRESET')
             preset_row = preset_macro.row(align=True)
             prefs = _get_addon_preferences(context)
             if prefs is None:
