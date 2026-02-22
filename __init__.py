@@ -77,7 +77,7 @@ else:
             multimesh_manager,
             realitycapture,
             cesium_preprocessing,
-            cesium_vtk_exporter,
+            cesium_exporter,
             orthogonal_render,
             #mets_exporter,
             camera_unreal_exporter,
@@ -149,6 +149,42 @@ class LODPresetItem(PropertyGroup):
     lod4_tex_res: IntProperty(
         name="LOD4 Texture Resolution",
         default=64, min=64, max=8192
+    ) # type: ignore
+    lod_workflow_preset: EnumProperty(
+        name="LOD Workflow Preset",
+        items=[
+            ('CLASSIC', "Classic LOD", "Classic LOD generation"),
+            ('CLASSIC_NORMAL', "Classic LOD + Normal Maps", "Classic LOD generation with normal maps"),
+            ('VEGETATION_ALPHA', "Vegetation Alpha Clip", "LOD workflow for vegetation/foliage alpha materials"),
+            ('CESIUM_ATLAS', "LOD0 Atlas Bake (Cesium)", "Prepare LOD0 atlas for Cesium export")
+        ],
+        default='CLASSIC'
+    ) # type: ignore
+    lod_generate_normal_maps: BoolProperty(
+        name="Generate Normal Maps",
+        default=False
+    ) # type: ignore
+    lod_normal_map_max_level: IntProperty(
+        name="Normal Map Max LOD",
+        default=2, min=1, max=5
+    ) # type: ignore
+    lod_auto_preserve_alpha: BoolProperty(
+        name="Auto Preserve Source Alpha",
+        default=False
+    ) # type: ignore
+    lod_ignore_source_alpha: BoolProperty(
+        name="Ignore Source Alpha",
+        default=False
+    ) # type: ignore
+    lod_alpha_mode: EnumProperty(
+        name="Alpha Mode",
+        items=[('BLEND', 'Blend', 'Use alpha blending'),
+               ('CLIP', 'Clip', 'Use alpha clipping')],
+        default='BLEND'
+    ) # type: ignore
+    lod_alpha_clip_threshold: FloatProperty(
+        name="Alpha Clip Threshold",
+        default=0.5, min=0.0, max=1.0
     ) # type: ignore
     lod_texture_format: EnumProperty(
         name="Texture Format",
@@ -279,6 +315,49 @@ class DemPreferences(bpy.types.AddonPreferences):
         description="Default texture resolution for LOD4",
         default=64, min=64, max=8192
     ) # type: ignore
+    lod_workflow_preset : bpy.props.EnumProperty(
+        name="LOD Workflow Preset",
+        description="Default workflow preset for LOD generation",
+        items=[
+            ('CLASSIC', "Classic LOD", "Classic LOD generation"),
+            ('CLASSIC_NORMAL', "Classic LOD + Normal Maps", "Classic LOD generation with normal maps"),
+            ('VEGETATION_ALPHA', "Vegetation Alpha Clip", "LOD workflow for vegetation/foliage alpha materials"),
+            ('CESIUM_ATLAS', "LOD0 Atlas Bake (Cesium)", "Prepare LOD0 atlas for Cesium export")
+        ],
+        default='CLASSIC'
+    ) # type: ignore
+    lod_generate_normal_maps : bpy.props.BoolProperty(
+        name="Generate Normal Maps",
+        description="Default bake of normal maps from LOD0 to lower LODs",
+        default=False
+    ) # type: ignore
+    lod_normal_map_max_level : bpy.props.IntProperty(
+        name="Normal Map Max LOD",
+        description="Generate normal maps up to this LOD level",
+        default=2, min=1, max=5
+    ) # type: ignore
+    lod_auto_preserve_alpha : bpy.props.BoolProperty(
+        name="Auto Preserve Source Alpha",
+        description="Detect alpha in source textures and preserve it",
+        default=False
+    ) # type: ignore
+    lod_ignore_source_alpha : bpy.props.BoolProperty(
+        name="Ignore Source Alpha",
+        description="Ignore alpha found in source textures",
+        default=False
+    ) # type: ignore
+    lod_alpha_mode : bpy.props.EnumProperty(
+        name="Alpha Mode",
+        description="Default alpha mode for generated materials",
+        items=[('BLEND', 'Blend', 'Use alpha blending'),
+               ('CLIP', 'Clip', 'Use alpha clipping')],
+        default='BLEND'
+    ) # type: ignore
+    lod_alpha_clip_threshold : bpy.props.FloatProperty(
+        name="Alpha Clip Threshold",
+        description="Default alpha threshold when using clip mode",
+        default=0.5, min=0.0, max=1.0
+    ) # type: ignore
     lod_texture_format : bpy.props.EnumProperty(
         name="Texture Format",
         description="Default texture format for LOD generation",
@@ -406,6 +485,13 @@ class DemPreferences(bpy.types.AddonPreferences):
             col.separator()
 
             col.label(text="Options:")
+            col.prop(self, "lod_workflow_preset")
+            col.prop(self, "lod_generate_normal_maps")
+            col.prop(self, "lod_normal_map_max_level")
+            col.prop(self, "lod_auto_preserve_alpha")
+            col.prop(self, "lod_ignore_source_alpha")
+            col.prop(self, "lod_alpha_mode")
+            col.prop(self, "lod_alpha_clip_threshold")
             col.prop(self, "lod_texture_format")
             col.prop(self, "lod_use_alpha")
             col.prop(self, "lod_pad_on")
@@ -686,7 +772,7 @@ def register():
     alignment_orientation_tool.register()
     #mets_exporter.register()
     TSM.register()
-    cesium_vtk_exporter.register()
+    cesium_exporter.register()
     
 
 
@@ -904,7 +990,7 @@ def unregister():
     import_linked_lod.unregister()
     orthogonal_render.unregister()
     alignment_orientation_tool.unregister()
-    cesium_vtk_exporter.unregister()
+    cesium_exporter.unregister()
     operators.help_popup.unregister()
     #mets_exporter.unregister()
 
