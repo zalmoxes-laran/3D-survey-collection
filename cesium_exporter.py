@@ -1383,13 +1383,13 @@ def _cleanup_lod_image_cache(cache, keep_source=True):
     if not cache:
         return
     for sz, img in list(cache.items()):
-        if keep_source and not img.name.startswith("__CesiumLOD_"):
-            continue
-        if img is not None and img.users == 0:
-            try:
+        try:
+            if keep_source and not img.name.startswith("__CesiumLOD_"):
+                continue
+            if img is not None and img.users == 0:
                 bpy.data.images.remove(img, do_unlink=True)
-            except Exception:
-                pass
+        except Exception:
+            pass
 
 
 # ===========================================================================
@@ -2107,9 +2107,9 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
                 bpy.data.meshes.remove(mesh_data, do_unlink=True)
         except Exception:
             pass
-        _cleanup_native_bake_assets(bake_info)
         if lod_image_cache:
             _cleanup_lod_image_cache(lod_image_cache)
+        _cleanup_native_bake_assets(bake_info)
 
 
 # ===========================================================================

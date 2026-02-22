@@ -84,7 +84,7 @@ else:
             lod_shortcuts
             )
     
-    from .exporter_cesium import export_tile_model
+    #from .exporter_cesium import export_tile_model  # Legacy: removed
 
 from .external_modules_install import check_external_modules
 from .utils import mesh_cleaner

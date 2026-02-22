@@ -84,15 +84,13 @@ class OBJECT_OT_install_3dsc_missing_modules(bpy.types.Operator):
                 list_modules = kml_modules()
             elif self.list_modules_to_install == "ezdxf":
                 list_modules = ezdxf_modules()
-            elif self.list_modules_to_install == "vtk_cesium":
-                list_modules = vtk_cesium_modules()
             elif self.list_modules_to_install == "pyproj_cesium":
                 list_modules = pyproj_cesium_modules()
             else:
                 self.report({'ERROR'}, f"Unknown module type: {self.list_modules_to_install}")
                 return {'CANCELLED'}
 
-            if self.list_modules_to_install in {"vtk_cesium", "pyproj_cesium"}:
+            if self.list_modules_to_install in {"pyproj_cesium"}:
                 log_path = os.path.join(tempfile.gettempdir(), "3dsc_vtk_pip.log")
                 action = "install" if self.is_install else "uninstall"
                 pid = _start_background_pip(action, list_modules, log_path)
@@ -203,15 +201,6 @@ def kml_modules():
     )
 
     return list_of_modules 
-
-
-def vtk_cesium_modules():
-    """Strict dependency set for Cesium conversion via VTK."""
-    list_of_modules = [
-        "vtk>=9.2.0,<10.0.0",
-        "pyproj>=3.6.0,<4.0.0",
-    ]
-    return list_of_modules
 
 
 def pyproj_cesium_modules():
