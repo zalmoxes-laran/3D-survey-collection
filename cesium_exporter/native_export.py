@@ -106,6 +106,8 @@ def _export_node_glb(
 
             # 2b) Re-bake texture onto decimated mesh (LODgenerator pattern)
             if lod_strategy == 'REBAKE' and rebake_atlas_size is not None and scene is not None:
+                print(f"[REBAKE] {tile_obj.name}: decimated to {len(tile_obj.data.polygons)} faces, "
+                      f"rebaking at {rebake_atlas_size}px from {base_obj.name}")
                 ok_rb, rb_img, rb_mat = _rebake_node_texture(
                     context, scene, base_obj, tile_obj,
                     atlas_size=rebake_atlas_size,
@@ -121,6 +123,13 @@ def _export_node_glb(
                     tile_obj.data.update()
                     # Skip step 3 (texture swap) — we have a fresh bake
                     lod_image = None
+                    print(f"[REBAKE] {tile_obj.name}: OK -> mat={rb_mat.name}, img={rb_img.name if rb_img else 'None'}")
+                else:
+                    print(f"[REBAKE] {tile_obj.name}: FAILED (ok={ok_rb}, mat={rb_mat})")
+            else:
+                if decimation_ratio < 0.999:
+                    print(f"[REBAKE] {tile_obj.name}: SKIPPED rebake (strategy={lod_strategy}, "
+                          f"atlas_size={rebake_atlas_size}, scene={scene is not None})")
 
         # 3) Swap texture to LOD-sized atlas if provided (legacy path, skipped if REBAKE succeeded)
         if lod_image is not None:
@@ -290,6 +299,7 @@ def _run_native_implicit_layout(
         dec_ratio = 1.0
         lod_image = None
         rebake_atlas_sz = None
+        print(f"[TILE] {tile_label}: is_leaf={is_leaf}, faces={len(node['face_ids'])}, depth={level}")
         if lod_mode and lod_config and not is_leaf:
             # Find config for this level
             levels_cfg = lod_config.get("lod_levels", [])
