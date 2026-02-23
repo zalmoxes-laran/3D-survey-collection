@@ -152,7 +152,12 @@ def _native_bake_basecolor_texture(context, scene, base_obj, atlas_size, margin_
         with _preserve_selection(context):
             if getattr(context, "mode", "OBJECT") != 'OBJECT':
                 bpy.ops.object.mode_set(mode='OBJECT')
-            bpy.ops.object.select_all(action='DESELECT')
+            # Bulletproof deselection
+            for obj in bpy.data.objects:
+                try:
+                    obj.select_set(False)
+                except Exception:
+                    pass
             base_obj.hide_set(False)
             base_obj.hide_viewport = False
             base_obj.hide_render = False
@@ -336,7 +341,12 @@ def _rebake_node_texture(context, scene, base_obj, tile_obj, atlas_size, margin_
         with _preserve_selection(context):
             if getattr(context, "mode", "OBJECT") != 'OBJECT':
                 bpy.ops.object.mode_set(mode='OBJECT')
-            bpy.ops.object.select_all(action='DESELECT')
+            # Bulletproof deselection
+            for obj in bpy.data.objects:
+                try:
+                    obj.select_set(False)
+                except Exception:
+                    pass
             tile_obj.select_set(True)
             context.view_layer.objects.active = tile_obj
 
@@ -424,18 +434,25 @@ def _rebake_node_texture(context, scene, base_obj, tile_obj, atlas_size, margin_
         with _preserve_selection(context):
             if getattr(context, "mode", "OBJECT") != 'OBJECT':
                 bpy.ops.object.mode_set(mode='OBJECT')
-            bpy.ops.object.select_all(action='DESELECT')
 
-            # Ensure both objects are visible
+            # Bulletproof deselection: loop over ALL objects, not just
+            # the operator which may skip hidden/non-selectable ones.
+            for obj in bpy.data.objects:
+                try:
+                    obj.select_set(False)
+                except Exception:
+                    pass
+
+            # Ensure ONLY base_obj and tile_obj are visible and selected
             for obj in (base_obj, tile_obj):
                 obj.hide_set(False)
                 obj.hide_viewport = False
                 obj.hide_render = False
 
             # Select source (base_obj) and set target (tile_obj) as active
-            # LODgenerator pattern: lines 685-688
-            tile_obj.select_set(True)
+            # EXACTLY 2 objects: base_obj=selected source, tile_obj=active target
             base_obj.select_set(True)
+            tile_obj.select_set(True)
             context.view_layer.objects.active = tile_obj
 
             result = bpy.ops.object.bake(

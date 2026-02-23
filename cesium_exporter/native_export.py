@@ -71,7 +71,12 @@ def _export_node_glb(
         # 2) Apply decimation if ratio < 1.0 (LOD internal node)
         if decimation_ratio < 0.999 and len(tile_obj.data.polygons) > 10:
             with _preserve_selection(context):
-                bpy.ops.object.select_all(action='DESELECT')
+                # Bulletproof deselection
+                for obj in bpy.data.objects:
+                    try:
+                        obj.select_set(False)
+                    except Exception:
+                        pass
                 tile_obj.select_set(True)
                 context.view_layer.objects.active = tile_obj
 
@@ -130,7 +135,12 @@ def _export_node_glb(
         # 4) Export as GLB
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
         with _preserve_selection(context):
-            bpy.ops.object.select_all(action='DESELECT')
+            # Bulletproof deselection — only tile_obj must be exported
+            for obj in bpy.data.objects:
+                try:
+                    obj.select_set(False)
+                except Exception:
+                    pass
             tile_obj.select_set(True)
             context.view_layer.objects.active = tile_obj
             result = bpy.ops.export_scene.gltf(
