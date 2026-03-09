@@ -322,6 +322,18 @@ class ToolsPanelQuickUtils:
         op.text = "Convert legacy diffuse-like materials into Principled BSDF in batch."
         op.url = "3DSCstructure.html#quick-utils"
 
+        box.separator()
+        row = box.row(align=True)
+        row.operator("tiff2png.relink", icon="FILE_REFRESH", text='Convert & Relink Textures')
+        op = row.operator("e3dsc.help_popup", text="", icon='QUESTION')
+        op.title = "Quick Utils - Texture Format Convert + Relink"
+        op.text = (
+            "Inspect materials on selected objects, convert texture files "
+            "from a source format to a target format, and relink image nodes. "
+            "Converted files are written into tex_<format> next to the .blend file."
+        )
+        op.url = "3DSCstructure.html#quick-utils"
+
 
 class ToolsPanel_ccTool:
     bl_label = "Color Correction"
