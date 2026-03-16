@@ -181,6 +181,8 @@ class ToolsPanelExport:
                 op.title = "Single FBX Export"
                 op.text = "Export the active object as a single FBX file."
                 op.url = "3DSCstructure.html#exporters"
+                row = box.row()
+                row.prop(scene, 'fbx_convert_to_cm', text="Convert m\u2192cm for Unreal Engine")
             if active_obj is not None:
                 box.label(text=f"-> {active_obj.name}.{format_id.lower()}")
             else:
@@ -220,6 +222,8 @@ class ToolsPanelExport:
                 row.prop(scene, 'instanced_export', text="Enable instanced_export")
                 row = box.row()
                 row.prop(scene, 'collgerarchy_to_foldtree', text="Use collection gerarchy")
+                row = box.row()
+                row.prop(scene, 'fbx_convert_to_cm', text="Convert m\u2192cm for Unreal Engine")
 
             elif format_id == 'GLTF':
                 op_gltf = row.operator("model.exportbatch", icon="DUPLICATE", text='Export glTF Batch')
@@ -255,84 +259,33 @@ class ToolsPanelQuickUtils:
 
     def draw(self, context):
         layout = self.layout
-        # Quick Utils (miscellanea) tools at root level
         box = layout.box()
-        row = box.row(align=True)
-        row.operator("mesh.merge_by_distance_custom", icon="PROP_OFF", text='Vertex Merge by Distance')
-        op = row.operator("e3dsc.help_popup", text="", icon='QUESTION')
-        op.title = "Quick Utils - Vertex Merge by Distance"
-        op.text = "Merge vertices that are closer than a threshold to clean selected meshes."
-        op.url = "3DSCstructure.html#quick-utils"
 
+        # Mesh utilities
         row = box.row(align=True)
-        row.operator("rename.ge", icon="FILE_TEXT", text='Rename 4 GameEngines')
-        op = row.operator("e3dsc.help_popup", text="", icon='QUESTION')
-        op.title = "Quick Utils - Rename 4 GameEngines"
-        op.text = "Apply a game-engine oriented naming convention to selected objects."
-        op.url = "3DSCstructure.html#quick-utils"
+        row.operator("mesh.merge_by_distance_custom", icon="PROP_OFF", text='Merge Verts')
+        row.operator("invert.coordinates", icon="DECORATE_DRIVER", text='Invert X/Y')
+        row.operator("rename.ge", icon="FILE_TEXT", text='Rename 4 GE')
 
+        # Suffix removal
         row = box.row(align=True)
-        row.operator("invert.coordinates", icon="DECORATE_DRIVER", text='Invert x and y')
-        op = row.operator("e3dsc.help_popup", text="", icon='QUESTION')
-        op.title = "Quick Utils - Invert x and y"
-        op.text = (
-            "Swap X and Y coordinates of selected objects, preserving Z. "
-            "Useful when total-station points are imported with swapped XY axes."
-        )
-        op.url = "3DSCstructure.html#quick-utils"
-        box.label(text="Useful for total-station points imported with swapped XY.", icon='INFO')
-
-        box.separator()
-        row = box.row()
-        row.label(text="Remove selected suffix (if any):")
-        row = box.row(align=True)
-        op = row.operator("remove.suffixnumber", icon="CANCEL", text='')
+        op = row.operator("remove.suffixnumber", icon="CANCEL", text='Remove suffix')
         op.suffix = context.window_manager.suffix_num.suffixnum
         row.prop(context.window_manager.suffix_num, 'suffixnum', expand=True)
-        help_row = box.row(align=True)
-        op = help_row.operator("e3dsc.help_popup", text="", icon='QUESTION')
-        op.title = "Quick Utils - Remove Selected Suffix"
-        op.text = "Remove selected suffixes (.001/.002/.003) from object names in batch."
-        op.url = "3DSCstructure.html#quick-utils"
 
-        box.separator()
+        # Material blend mode + PBR
         row = box.row(align=True)
-        op = row.operator("setmaterial.blend", icon="MESH_CUBE", text='opaque')
+        op = row.operator("setmaterial.blend", icon="MESH_CUBE", text='Opaque')
         op.blendmode = "OPAQUE"
-        op = row.operator("setmaterial.blend", icon="CUBE", text='transparent')
+        op = row.operator("setmaterial.blend", icon="CUBE", text='Transparent')
         op.blendmode = "BLEND"
-        row = box.row()
-        row.operator("set.roughness", icon="DECORATE_DRIVER", text='Roughness 1')
-        row = box.row()
-        row.operator("set.metalness", icon="DECORATE_DRIVER", text='Metalness 0')
-        help_row = box.row(align=True)
-        op = help_row.operator("e3dsc.help_popup", text="", icon='QUESTION')
-        op.title = "Quick Utils - Batch Material Settings"
-        op.text = (
-            "Batch update blend mode and PBR values (roughness/metalness) "
-            "for materials on selected meshes."
-        )
-        op.url = "3DSCstructure.html#quick-utils"
+        row.operator("set.roughness", icon="SHADING_RENDERED", text='Rough=1')
+        row.operator("set.metalness", icon="MATSPHERE", text='Metal=0')
 
-        box.separator()
+        # Material conversion + texture tools
         row = box.row(align=True)
-        row.operator("diffuse.principled", icon="DECORATE_DRIVER", text='Diffuse 2 Principled')
-        op = row.operator("e3dsc.help_popup", text="", icon='QUESTION')
-        op.title = "Quick Utils - Legacy Material Conversion"
-        op.text = "Convert legacy diffuse-like materials into Principled BSDF in batch."
-        op.url = "3DSCstructure.html#quick-utils"
-
-        box.separator()
-        row = box.row(align=True)
-        row.operator("tiff2png.relink", icon="FILE_REFRESH", text='Convert & Relink Textures')
-        op = row.operator("e3dsc.help_popup", text="", icon='QUESTION')
-        op.title = "Quick Utils - Texture Format Convert + Relink"
-        op.text = (
-            "Inspect materials on selected objects, convert texture files "
-            "from a source format to a target format, and relink image nodes. "
-            "Converted files are written into tex_<format> next to the .blend file."
-        )
-        op.url = "3DSCstructure.html#quick-utils"
+        row.operator("diffuse.principled", icon="MATERIAL", text='Diffuse\u2192Principled')
+        row.operator("tiff2png.relink", icon="FILE_REFRESH", text='Convert & Relink Tex')
 
 
 class ToolsPanel_ccTool:

@@ -857,6 +857,12 @@ def register():
         description="Enable instances export: select a group of objects and it will generate a single file [name]-inst.txt using the name of the active object."
     )
 
+    bpy.types.Scene.fbx_convert_to_cm = BoolProperty(
+        name="Convert m→cm for Unreal Engine",
+        default=True,
+        description="Apply a x100 scale on FBX export to convert Blender meters into Unreal Engine centimeters. Disable only if your target app expects meters."
+    )
+
     bpy.types.Scene.info_log = []
 
 # panoramic
@@ -1034,6 +1040,7 @@ def unregister():
     del bpy.types.Scene.e3dsc_export_multi_format
     del bpy.types.Scene.instanced_export
     del bpy.types.Scene.collgerarchy_to_foldtree
+    del bpy.types.Scene.fbx_convert_to_cm
     del bpy.types.Scene.e3dsc_enable_experimental
     del bpy.types.Scene.e3dsc_stats_strict
     del bpy.types.Scene.e3dsc_stats_prompt_export
