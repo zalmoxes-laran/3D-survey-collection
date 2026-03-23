@@ -902,10 +902,11 @@ def register():
     )
 
 
-    bpy.types.Scene.TILE_square_meters = IntProperty(
-    name="Tile square meters",
-    default=100,
-    description="Define the area of the tiles",
+    bpy.types.Scene.TILE_side_length = IntProperty(
+    name="Tile side (m)",
+    default=10,
+    min=1,
+    description="Side length of each square tile in meters",
     )
 
     bpy.types.Scene.e3dsc_segmentation_preclean = BoolProperty(
@@ -1029,7 +1030,7 @@ def unregister():
     del bpy.types.Scene.analysis_list
     del bpy.types.Scene.statistics_list
     del bpy.types.Scene.model_export_dir
-    del bpy.types.Scene.TILE_square_meters
+    del bpy.types.Scene.TILE_side_length
     del bpy.types.Scene.e3dsc_segmentation_preclean
     del bpy.types.Scene.SHIFT_OBJ_on
     del bpy.types.Scene.author_sign_model

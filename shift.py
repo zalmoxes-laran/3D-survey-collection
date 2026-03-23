@@ -50,10 +50,10 @@ class ImportCoordinateShift_dsc(Operator, ImportHelper):
         arr = f.readlines()
         print(str(arr))
         data_coordinates = arr[0].split(' ')
-        scene['BL_x_shift'] = float(data_coordinates[1])
-        scene['BL_y_shift'] = float(data_coordinates[2])
-        scene['BL_z_shift'] = float(data_coordinates[3])
-        scene['BL_epsg'] = data_coordinates[0].replace('EPSG::', '')
+        scene.BL_x_shift = float(data_coordinates[1])
+        scene.BL_y_shift = float(data_coordinates[2])
+        scene.BL_z_shift = float(data_coordinates[3])
+        scene.BL_epsg = data_coordinates[0].replace('EPSG::', '')
         return {'FINISHED'}
 
 ########### 3DSC and Blender GIS interoperability ##############
@@ -117,13 +117,13 @@ class OBJECT_OT_ExecuteAfterConfirmation_3dsc_BGIS(bpy.types.Operator):
             prefs = bpy.context.preferences.addons[addon_name].preferences
 
             # Set the new value of predefCrs
-            new_crs = 'EPSG:'+scene['BL_epsg']
+            new_crs = 'EPSG:' + scene.BL_epsg
             prefs.predefCrs = new_crs
             #bpy.ops.geoscene.set_crs('INVOKE_DEFAULT', new_crs=new_crs)
 
             bpy.data.window_managers['WinMan'].geoscnProps.displayOriginPrj = True
-            bpy.data.window_managers["WinMan"].geoscnProps.crsx = scene['BL_x_shift']
-            bpy.data.window_managers["WinMan"].geoscnProps.crsy = scene['BL_y_shift']
+            bpy.data.window_managers["WinMan"].geoscnProps.crsx = scene.BL_x_shift
+            bpy.data.window_managers["WinMan"].geoscnProps.crsy = scene.BL_y_shift
 
             print("Executing action after user confirmation")
             # Make sure to reset the flag for future verification
@@ -215,11 +215,11 @@ class ExportCoordinateShift_dsc(Operator, ExportHelper):
 
     def write_shift_data(self, context, filepath):
         scene = context.scene
-        epsg = scene.get('BL_epsg', 'NotSet')
-        x_shift = scene.get('BL_x_shift', 0.0)
-        y_shift = scene.get('BL_y_shift', 0.0)
-        z_shift = scene.get('BL_z_shift', 0.0)
-        
+        epsg = scene.BL_epsg
+        x_shift = scene.BL_x_shift
+        y_shift = scene.BL_y_shift
+        z_shift = scene.BL_z_shift
+
         with open(filepath, 'w') as f:
             f.write(f"EPSG::{epsg} {x_shift} {y_shift} {z_shift}\n")
         

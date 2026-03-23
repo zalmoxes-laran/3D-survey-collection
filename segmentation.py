@@ -150,7 +150,7 @@ class OBJECT_OT_setcutter(bpy.types.Operator):
             bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
 
         scene = context.scene
-        side = int(math.sqrt(scene.TILE_square_meters))
+        side = scene.TILE_side_length
         objects_before = set(bpy.data.objects.keys())
         create_cutter_series("cutter", side, side)
         created = [
@@ -255,7 +255,11 @@ class OBJECT_OT_projectsegmentationinversed(bpy.types.Operator):
             return {'CANCELLED'}
 
         if _should_preclean(context.scene):
-            _preprocess_mesh_topology(context, ob_to_cut)
+            try:
+                _preprocess_mesh_topology(context, ob_to_cut)
+            except RuntimeError as e:
+                self.report({'WARNING'}, f"Pre-clean skipped on '{ob_to_cut.name}' (linked mesh, not editable): cutting on original mesh.")
+
         ob_tot = len(cutters)
         for ob in cutters:
             start_time_ob = time.time()

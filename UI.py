@@ -88,7 +88,8 @@ class VIEW3D_PT_segmentation_pan(Panel, View3DSegmentationPanel):
         # Cutter setup
         row = layout.row(align=True)
         row.operator("set.cutter", icon="SCULPTMODE_HLT", text='Cutter set')
-        row.prop(scene, 'TILE_square_meters', icon='BLENDER', toggle=True, text="m2:")
+        row.prop(scene, 'TILE_side_length', text="Side (m)")
+        row.label(text=f"{scene.TILE_side_length ** 2} m²")
         op = row.operator("e3dsc.help_popup", text="", icon='QUESTION')
         op.title = "Segmentation - Cutter Set"
         op.text = (
