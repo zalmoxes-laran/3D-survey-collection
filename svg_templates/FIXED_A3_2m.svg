@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="420mm"
+   height="297mm"
+   viewBox="0 0 420 297"
+   id="svg_root"
+   version="1.1"
+   inkscape:version="1.2.1 (9c6d41e410, 2022-07-14)"
+   sodipodi:docname="FIXED_A3_2m.svg"
+   xml:space="preserve"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <defs id="defs_clips">
+    <clipPath id="clip_view1" clipPathUnits="userSpaceOnUse">
+      <rect x="185" y="100" width="80" height="80"/>
+    </clipPath>
+    <clipPath id="clip_view2" clipPathUnits="userSpaceOnUse">
+      <rect x="15" y="100" width="80" height="80"/>
+    </clipPath>
+    <clipPath id="clip_view3" clipPathUnits="userSpaceOnUse">
+      <rect x="270" y="100" width="80" height="80"/>
+    </clipPath>
+    <clipPath id="clip_view4" clipPathUnits="userSpaceOnUse">
+      <rect x="100" y="100" width="80" height="80"/>
+    </clipPath>
+    <clipPath id="clip_view5" clipPathUnits="userSpaceOnUse">
+      <rect x="185" y="15" width="80" height="80"/>
+    </clipPath>
+    <clipPath id="clip_view6" clipPathUnits="userSpaceOnUse">
+      <rect x="185" y="185" width="80" height="80"/>
+    </clipPath>
+  </defs>
+  <sodipodi:namedview
+     id="namedview"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:pageopacity="0.0"
+     inkscape:pageshadow="2"
+     inkscape:document-units="mm"
+     inkscape:current-layer="layer_images"
+     showgrid="true"
+     units="mm">
+    <inkscape:grid
+       type="xygrid"
+       id="grid1"
+       empspacing="5"
+       visible="true"
+       enabled="true"
+       snapvisiblegridlinesonly="true"
+       spacingx="1"
+       spacingy="1"
+       units="mm"/>
+  </sodipodi:namedview>
+  <metadata id="metadata">
+    <rdf:RDF>
+      <cc:Work rdf:about="">
+        <dc:format>image/svg+xml</dc:format>
+        <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+  <g inkscape:groupmode="layer" id="layer_bg" inkscape:label="Sfondo" style="display:inline">
+    <rect x="0" y="0" width="420" height="297"
+          style="fill:#333132;fill-opacity:1;stroke:none"/>
+  </g>
+  <g inkscape:groupmode="layer" id="layer_frames" inkscape:label="Cornici" style="display:inline">
+    <rect x="185" y="100" width="80" height="80" style="fill:none;stroke:#ffffff;stroke-width:0.5"/>
+    <rect x="15" y="100" width="80" height="80" style="fill:none;stroke:#ffffff;stroke-width:0.5"/>
+    <rect x="270" y="100" width="80" height="80" style="fill:none;stroke:#ffffff;stroke-width:0.5"/>
+    <rect x="100" y="100" width="80" height="80" style="fill:none;stroke:#ffffff;stroke-width:0.5"/>
+    <rect x="185" y="15" width="80" height="80" style="fill:none;stroke:#ffffff;stroke-width:0.5"/>
+    <rect x="185" y="185" width="80" height="80" style="fill:none;stroke:#ffffff;stroke-width:0.5"/>
+  </g>
+  <g inkscape:groupmode="layer" id="layer_images" inkscape:label="Immagini" style="display:inline">
+    <image
+       xlink:href="_ref_image1"
+       x="185" y="100"
+       width="80" height="80"
+       clip-path="url(#clip_view1)"
+       preserveAspectRatio="xMidYMid meet"
+       id="image_view1"/>
+    <image
+       xlink:href="_ref_image2"
+       x="15" y="100"
+       width="80" height="80"
+       clip-path="url(#clip_view2)"
+       preserveAspectRatio="xMidYMid meet"
+       id="image_view2"/>
+    <image
+       xlink:href="_ref_image3"
+       x="270" y="100"
+       width="80" height="80"
+       clip-path="url(#clip_view3)"
+       preserveAspectRatio="xMidYMid meet"
+       id="image_view3"/>
+    <image
+       xlink:href="_ref_image4"
+       x="100" y="100"
+       width="80" height="80"
+       clip-path="url(#clip_view4)"
+       preserveAspectRatio="xMidYMid meet"
+       id="image_view4"/>
+    <image
+       xlink:href="_ref_image5"
+       x="185" y="15"
+       width="80" height="80"
+       clip-path="url(#clip_view5)"
+       preserveAspectRatio="xMidYMid meet"
+       id="image_view5"/>
+    <image
+       xlink:href="_ref_image6"
+       x="185" y="185"
+       width="80" height="80"
+       clip-path="url(#clip_view6)"
+       preserveAspectRatio="xMidYMid meet"
+       id="image_view6"/>
+  </g>
+  <g inkscape:groupmode="layer" id="layer_labels" inkscape:label="Etichette" style="display:inline">
+    <text x="225" y="98.5" style="font-family:sans-serif;font-size:3px;fill:#fffefe;text-anchor:middle">Front (FR)</text>
+    <text x="55" y="98.5" style="font-family:sans-serif;font-size:3px;fill:#fffefe;text-anchor:middle">Back (BA)</text>
+    <text x="310" y="98.5" style="font-family:sans-serif;font-size:3px;fill:#fffefe;text-anchor:middle">Right (RI)</text>
+    <text x="140" y="98.5" style="font-family:sans-serif;font-size:3px;fill:#fffefe;text-anchor:middle">Left (LE)</text>
+    <text x="225" y="13.5" style="font-family:sans-serif;font-size:3px;fill:#fffefe;text-anchor:middle">Top (TO)</text>
+    <text x="225" y="183.5" style="font-family:sans-serif;font-size:3px;fill:#fffefe;text-anchor:middle">Bottom (BO)</text>
+  </g>
+  <g inkscape:groupmode="layer" id="layer_scale" inkscape:label="Scala" style="display:inline">
+    <rect x="170" y="269" width="16" height="3" style="fill:#ffffff;stroke:#ffffff;stroke-width:0.3"/>
+    <rect x="186" y="269" width="16" height="3" style="fill:none;stroke:#ffffff;stroke-width:0.3"/>
+    <rect x="202" y="269" width="16" height="3" style="fill:#ffffff;stroke:#ffffff;stroke-width:0.3"/>
+    <rect x="218" y="269" width="16" height="3" style="fill:none;stroke:#ffffff;stroke-width:0.3"/>
+    <rect x="234" y="269" width="16" height="3" style="fill:#ffffff;stroke:#ffffff;stroke-width:0.3"/>
+    <text x="170" y="275" style="font-family:sans-serif;font-size:2.5px;fill:#fffefe;text-anchor:start">0</text>
+    <text x="186" y="275" style="font-family:sans-serif;font-size:2.5px;fill:#fffefe;text-anchor:middle">0.4</text>
+    <text x="202" y="275" style="font-family:sans-serif;font-size:2.5px;fill:#fffefe;text-anchor:middle">0.8</text>
+    <text x="218" y="275" style="font-family:sans-serif;font-size:2.5px;fill:#fffefe;text-anchor:middle">1.2</text>
+    <text x="234" y="275" style="font-family:sans-serif;font-size:2.5px;fill:#fffefe;text-anchor:middle">1.6</text>
+    <text x="250" y="275" style="font-family:sans-serif;font-size:2.5px;fill:#fffefe;text-anchor:end">2 m</text>
+    <text x="210" y="279" style="font-family:sans-serif;font-size:3px;fill:#fffefe;text-anchor:middle">Scala 1:25</text>
+  </g>
+  <g inkscape:groupmode="layer" id="layer_titleblock" inkscape:label="Cartiglio" style="display:inline">
+    <rect x="15" y="269" width="390" height="26" style="fill:none;stroke:#ffffff;stroke-width:0.5"/>
+    <image xlink:href="_ref_logo" x="17" y="272" width="20" height="20" preserveAspectRatio="xMidYMid meet"/>
+    <text x="42" y="274.5" style="font-family:sans-serif;font-size:3.5px;fill:#fffefe">_3dsctitolo</text>
+    <text x="42" y="280.5" style="font-family:sans-serif;font-size:3px;fill:#fffefe;font-weight:bold">_3dscnomeblocco</text>
+    <text x="42" y="286" style="font-family:sans-serif;font-size:2.5px;fill:#fffefe">_3dscmisure</text>
+    <text x="402" y="274.5" style="font-family:sans-serif;font-size:3.5px;fill:#fffefe;text-anchor:end">Scala 1:25</text>
+    <text x="402" y="280" style="font-family:sans-serif;font-size:2.5px;fill:#fffefe;text-anchor:end">A3</text>
+  </g>
+</svg>

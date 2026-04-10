@@ -30,6 +30,19 @@ RESOLUTION_PRESETS = [
 ]
 
 
+def compute_render_resolution(obj_m, family='FIXED_SHEET', scale_denom=10, dpi=300):
+    """Compute optimal render resolution in pixels for a given template configuration.
+
+    For FIXED_SHEET: uses 1:10 equivalent resolution (high-res for on-screen zoom).
+    For FIXED_SCALE: uses the actual declared scale at the given DPI.
+    """
+    if family == 'FIXED_SHEET':
+        image_mm = obj_m * 1000 / 10  # Always 1:10 equivalent
+    else:
+        image_mm = obj_m * 1000 / scale_denom
+    return int(round(image_mm / 25.4 * dpi))
+
+
 def get_text_dimensions(text, font, draw=None):
     """Get text dimensions in a way that works with any PIL version"""
     try:
@@ -380,60 +393,83 @@ class RENDER_OT_create_orthogonal_svg(Operator):
     # Dinamicamente popolare la lista dei template disponibili
     def get_available_templates(self, context):
         import re
-        templates = []
         templates_dict = {}  # Per evitare duplicati
+
+        # Get the current family filter
+        family = context.scene.ortho_template_family if hasattr(context.scene, 'ortho_template_family') else 'LEGACY'
 
         # Percorsi possibili in cui cercare i template
         possible_paths = [
-            # Percorso standard all'interno dell'addon
             os.path.join(get_addon_path(), "svg_templates"),
-            # Percorso relativo al blend file
             os.path.join(os.path.dirname(bpy.data.filepath), "svg_templates") if bpy.data.filepath else None,
-            # Percorso alternativo per sviluppo/test
             os.path.join(os.path.dirname(bpy.data.filepath), "3DSC", "svg_templates") if bpy.data.filepath else None
         ]
-
-        # Filtra None values
         possible_paths = [p for p in possible_paths if p]
 
-        # Cerca in tutti i percorsi possibili
         for path in possible_paths:
             if os.path.exists(path):
                 for file in os.listdir(path):
-                    if file.endswith(".svg"):
-                        name = os.path.splitext(file)[0]
+                    if not file.endswith(".svg"):
+                        continue
+                    name = os.path.splitext(file)[0]
 
-                        # Estrai il fattore di scala dal nome usando regex
-                        # Cerca pattern come "1m", "50cm", "2m", "5m" alla fine del nome
-                        scale_match = re.search(r'(\d+(?:\.\d+)?)(m|cm|mm)$', name, re.IGNORECASE)
+                    # Determine which family this template belongs to
+                    if name.startswith('FIXED_'):
+                        tmpl_family = 'FIXED_SHEET'
+                    elif name.startswith('SCALE_'):
+                        tmpl_family = 'FIXED_SCALE'
+                    else:
+                        tmpl_family = 'LEGACY'
 
-                        if scale_match:
-                            scale_value = float(scale_match.group(1))
-                            scale_unit = scale_match.group(2).lower()
+                    # Filter by selected family
+                    if tmpl_family != family:
+                        continue
 
-                            # Converti tutto in metri per confronto
-                            if scale_unit == 'cm':
-                                scale_meters = scale_value / 100
-                            elif scale_unit == 'mm':
-                                scale_meters = scale_value / 1000
-                            else:  # metri
-                                scale_meters = scale_value
-
-                            description = f"Template with scale 1:{scale_match.group(1)}{scale_unit}"
+                    # Extract scale info for sorting and description
+                    if tmpl_family == 'FIXED_SHEET':
+                        # Pattern: FIXED_A3_50cm or FIXED_A3_50cm_compact
+                        m = re.search(r'FIXED_A3_(\d+)(cm|m)(?:_compact)?$', name)
+                        if m:
+                            val = float(m.group(1))
+                            unit = m.group(2)
+                            scale_meters = val / 100 if unit == 'cm' else val
+                            compact = '_compact' in name
+                            description = f"A3 {m.group(1)}{unit}" + (" compact" if compact else "")
                         else:
-                            scale_meters = 1.0  # Default
-                            description = f"Template: {name}"
+                            scale_meters = 1.0
+                            description = name
+                    elif tmpl_family == 'FIXED_SCALE':
+                        # Pattern: SCALE_1-10_A2_1m
+                        m = re.search(r'SCALE_1-(\d+)_A(\d)_(\d+)(cm|m)$', name)
+                        if m:
+                            denom = int(m.group(1))
+                            paper = f"A{m.group(2)}"
+                            val = float(m.group(3))
+                            unit = m.group(4)
+                            scale_meters = val / 100 if unit == 'cm' else val
+                            description = f"1:{denom} {paper} {m.group(3)}{unit}"
+                        else:
+                            scale_meters = 1.0
+                            description = name
+                    else:
+                        # Legacy: MASTER_*
+                        scale_match = re.search(r'(\d+(?:\.\d+)?)(m|cm|mm)$', name, re.IGNORECASE)
+                        if scale_match:
+                            sv = float(scale_match.group(1))
+                            su = scale_match.group(2).lower()
+                            scale_meters = sv / 100 if su == 'cm' else (sv / 1000 if su == 'mm' else sv)
+                            description = f"Legacy {scale_match.group(1)}{su}"
+                        else:
+                            scale_meters = 1.0
+                            description = f"Legacy: {name}"
 
-                        # Usa il nome come chiave per evitare duplicati
-                        if name not in templates_dict:
-                            templates_dict[name] = (name, name, description, scale_meters)
+                    if name not in templates_dict:
+                        templates_dict[name] = (name, name, description, scale_meters)
 
-        # Converti dizionario in lista e ordina per scala
+        # Sort by scale and build final list
         templates = sorted(templates_dict.values(), key=lambda x: x[3])
-        # Rimuovi il valore di scala dalla tupla finale (serve solo per ordinare)
         templates = [(t[0], t[1], t[2]) for t in templates]
 
-        # Aggiungi un template di fallback per evitare lista vuota
         if not templates:
             templates.append(("MASTER_1m", "MASTER_1m", "Default template (1:1m)"))
 
@@ -496,16 +532,35 @@ class RENDER_OT_create_orthogonal_svg(Operator):
             if obj:
                 bbox_dims = self.get_object_dimensions(obj)
                 max_dim = max(bbox_dims)
-                
-                # Seleziona il template appropriato in base alla dimensione
-                if max_dim <= 0.5:  # Oggetti piccoli (<= 50cm)
-                    self.template_select = "MASTER_50cm" if self.template_exists("MASTER_50cm") else "MASTER_1m"
-                elif max_dim <= 1.0:  # Oggetti medi (<= 1m)
-                    self.template_select = "MASTER_1m"
-                elif max_dim <= 2.0:  # Oggetti grandi (<= 2m)
-                    self.template_select = "MASTER_2m" if self.template_exists("MASTER_2m") else "MASTER_1m"
-                else:  # Oggetti molto grandi (> 2m)
-                    self.template_select = "MASTER_5m" if self.template_exists("MASTER_5m") else "MASTER_1m"
+                family = context.scene.ortho_template_family if hasattr(context.scene, 'ortho_template_family') else 'LEGACY'
+
+                if family == 'FIXED_SHEET':
+                    if max_dim <= 0.5:
+                        target = "FIXED_A3_50cm"
+                    elif max_dim <= 1.0:
+                        target = "FIXED_A3_1m"
+                    else:
+                        target = "FIXED_A3_2m"
+                    self.template_select = target if self.template_exists(target) else "MASTER_1m"
+
+                elif family == 'FIXED_SCALE':
+                    if max_dim <= 0.5:
+                        target = "SCALE_1-5_A2_50cm"
+                    elif max_dim <= 1.0:
+                        target = "SCALE_1-10_A2_1m"
+                    else:
+                        target = "SCALE_1-20_A2_2m"
+                    self.template_select = target if self.template_exists(target) else "MASTER_1m"
+
+                else:  # LEGACY
+                    if max_dim <= 0.5:
+                        self.template_select = "MASTER_50cm" if self.template_exists("MASTER_50cm") else "MASTER_1m"
+                    elif max_dim <= 1.0:
+                        self.template_select = "MASTER_1m"
+                    elif max_dim <= 2.0:
+                        self.template_select = "MASTER_2m" if self.template_exists("MASTER_2m") else "MASTER_1m"
+                    else:
+                        self.template_select = "MASTER_5m" if self.template_exists("MASTER_5m") else "MASTER_1m"
         
         return context.window_manager.invoke_props_dialog(self)
     
@@ -1060,6 +1115,7 @@ class VIEW3D_PT_orthogonal_render(Panel):
         # SVG Export section
         box = layout.box()
         box.label(text="SVG Layout Export", icon='FILE_IMAGE')
+        box.prop(scene, "ortho_template_family", text="Template")
         
         # Check if SVG template exists
         template_exists = bool(ensure_svg_templates_folder())
@@ -1231,6 +1287,17 @@ def register():
         subtype='DIR_PATH'
     )
 
+    bpy.types.Scene.ortho_template_family = EnumProperty(
+        name="Template Family",
+        description="Template family for SVG layout export",
+        items=[
+            ('FIXED_SHEET', "Fixed Sheet (A3)", "A3 paper, images fill available space"),
+            ('FIXED_SCALE', "Fixed Scale", "True metric scale, paper size varies to fit"),
+            ('LEGACY', "Legacy", "Original MASTER_*.svg templates"),
+        ],
+        default='FIXED_SHEET'
+    )
+
 
 def unregister():
     bpy.utils.unregister_class(VIEW3D_PT_orthogonal_render)
@@ -1249,6 +1316,7 @@ def unregister():
     del bpy.types.Scene.ortho_render_large_resolution
     del bpy.types.Scene.ortho_render_xlarge_resolution
     del bpy.types.Scene.ortho_render_output_path
+    del bpy.types.Scene.ortho_template_family
 
 
 if __name__ == "__main__":
