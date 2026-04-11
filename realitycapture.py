@@ -548,7 +548,6 @@ class ToolsPanel_dsc_RC:
         return platform.system() == "Windows"
 
     def draw(self, context):
-        #addon_updater_ops.check_for_update_background()
         layout = self.layout
         scene = context.scene
         obj = context.object

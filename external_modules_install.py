@@ -4,7 +4,6 @@ import os
 import re
 import bpy
 import site
-import pkg_resources
 import tempfile
 
 from bpy.props import BoolProperty, StringProperty

@@ -71,7 +71,7 @@ else:
             TexPatcher,
             PanoramaSuite,
             report_data,
-            addon_updater_ops,
+
             qualitycheck,
             external_modules_install,
             multimesh_manager,
@@ -114,9 +114,6 @@ def _prefs_on_lod_texture_format_update(owner, context):
     _prefs_enforce_alpha_texture_format(owner)
 
 # demo bare-bones preferences
-@addon_updater_ops.make_annotations
-
-
 class LODPresetItem(PropertyGroup):
     """Persistent named LOD preset stored in addon preferences."""
 
@@ -239,43 +236,10 @@ class DemPreferences(bpy.types.AddonPreferences):
         subtype='FILE_PATH'
     ) # type: ignore # type: ignore
 
-    auto_check_update : bpy.props.BoolProperty(
-        name="Auto-check for Update",
-        description="If enabled, auto-check for updates using an interval",
-        default=False
-                ) # type: ignore
     is_external_module : bpy.props.BoolProperty(
         name="Py3dtiles module (to convert cesium tiled files) is present",
         default=False
                 ) # type: ignore # type: ignore
-    updater_intrval_months : bpy.props.IntProperty(
-        name='Months',
-        description="Number of months between checking for updates",
-        default=0,
-        min=0
-                ) # type: ignore
-    updater_intrval_days : bpy.props.IntProperty(
-        name='Days',
-        description="Number of days between checking for updates",
-        default=7,
-        min=0,
-        max=31
-                ) # type: ignore
-    updater_intrval_hours : bpy.props.IntProperty(
-        name='Hours',
-        description="Number of hours between checking for updates",
-        default=0,
-        min=0,
-        max=23
-                ) # type: ignore
-    updater_intrval_minutes : bpy.props.IntProperty(
-        name='Minutes',
-        description="Number of minutes between checking for updates",
-        default=0,
-        min=0,
-        max=59
-                ) # type: ignore
-
     # LOD Generator defaults (persistent across .blend files)
     lod_num : bpy.props.IntProperty(
         name="Number of LODs",
@@ -417,22 +381,6 @@ class DemPreferences(bpy.types.AddonPreferences):
 
     def draw(self, context):
         _prefs_enforce_alpha_texture_format(self)
-        layout = self.layout
-        # col = layout.column() # works best if a column, or even just self.layout
-        mainrow = layout.row()
-        col = mainrow.column()
-        # updater draw function
-        # could also pass in col as third arg
-        addon_updater_ops.update_settings_ui(self, context)
-        # Alternate draw function, which is more condensed and can be
-        # placed within an existing draw function. Only contains:
-        #   1) check for update/update now buttons
-        #   2) toggle for auto-check (interval will be equal to what is set above)
-        # addon_updater_ops.update_settings_ui_condensed(self, context, col)
-        # Adding another column to help show the above condensed ui as one column
-        # col = mainrow.column()
-        # col.scale_y = 2
-        # col.operator("wm.url_open","Open webpage ").url=addon_updater_ops.updater.website
         layout = self.layout
         layout.label(text="Path to Obj2Tiles.exe")
         layout.prop(self, "exe_path")
@@ -740,7 +688,6 @@ classes = (
 
 def register():
 
-    addon_updater_ops.register(bl_info)
     operators.help_popup.register()
     import_3DSC.register()
     for cls in classes:
@@ -977,7 +924,6 @@ def register():
     
 def unregister():
 
-    addon_updater_ops.unregister(bl_info)
     shift.unregister()
     for cls in classes:
         try:

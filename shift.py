@@ -156,7 +156,6 @@ class ToolsPanel_dsc_SHIFT:
     #bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
-        #addon_updater_ops.check_for_update_background()
         layout = self.layout
         scene = context.scene
         obj = context.object
@@ -187,7 +186,6 @@ class ToolsPanel_dsc_SHIFT:
         row.operator("shift_from.dsc",
                      icon="URL", text='3DSC->GIS')
 
-        #addon_updater_ops.update_notice_box_ui(self, context)
 
 
 class VIEW3D_PT_dsc_Shift_ToolBar(Panel, ToolsPanel_dsc_SHIFT):
