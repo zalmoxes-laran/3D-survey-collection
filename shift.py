@@ -58,94 +58,104 @@ class ImportCoordinateShift_dsc(Operator, ImportHelper):
 
 ########### 3DSC and Blender GIS interoperability ##############
 
-# This operator is made up of three parts in order to handle the user's choice of whether or not to go ahead when explaining that this setup must be done at the beginning and with the scene empty because it may affect the objects in the scene
+# Uses BlenderGIS.geoscene.GeoScene API directly (no wm.geoscnProps).
+# With setOriginPrj(synch=False) + no updOriginPrj call, origin changes
+# never translate existing scene objects — safe on populated scenes.
+# The former "scene must be empty" confirmation dialog is no longer needed.
 
-# 1
+def _set_bgis_origin(scene, epsg, shift_x, shift_y, move_objects=False):
+    """Write CRS + projected origin into BlenderGIS via the GeoScene API.
+
+    Parameters
+    ----------
+    move_objects : bool
+        If True, translate top-level objects to follow the new origin
+        (BGIS default behaviour). Default False: origin changes without
+        touching existing geometry — the typical 3DSC workflow where
+        meshes are already imported in local (shifted) coordinates.
+    """
+    from BlenderGIS.geoscene import GeoScene
+    gs = GeoScene(scene)
+
+    # Reset to avoid the crs setter reprojecting an existing origin.
+    if gs.hasOriginGeo:
+        gs.delOriginGeo()
+    if gs.hasOriginPrj and not move_objects:
+        gs.delOriginPrj()
+
+    gs.crs = f'EPSG:{epsg}'
+
+    if move_objects and gs.hasOriginPrj:
+        gs.updOriginPrj(shift_x, shift_y, updObjLoc=True, synch=False)
+    else:
+        gs.setOriginPrj(shift_x, shift_y, synch=False)
+
+
 class OBJECT_OT_IMPORT_DSC(bpy.types.Operator):
-    """Install and/or enable Blender GIS to activate this button"""
+    """Copy 3DSC shift values to BlenderGIS (scene objects are NOT moved by default)"""
     bl_idname = "shift_from.dsc"
     bl_label = "Copy shift values to BlenderGis"
     bl_options = {"REGISTER", "UNDO"}
 
+    move_objects: bpy.props.BoolProperty(
+        name="Move objects on origin change",
+        description=(
+            "Translate existing top-level objects to follow the new "
+            "origin. OFF by default: safe on populated scenes with "
+            "already-imported shifted geometry."
+        ),
+        default=False,
+    )  # type: ignore
+
     @classmethod
     def poll(cls, context):
-        return is_addon_starting_with("BlenderGIS")[0] and context.scene.BL_epsg != "NotSet"    
-
-    def execute(self, context):
-        # Chiamata all'operatore di conferma
-        message_for_user = "Scene should be empty: do I proceed?"
-        bpy.ops.wm.confirm_window_3dsc_bgis('INVOKE_DEFAULT', message=message_for_user)
-        return {'FINISHED'}
-
-# 2
-class ConfirmWindow3DScToBGIS(bpy.types.Operator):
-    """Show a confirmation window before performing the operation"""
-    bl_idname = "wm.confirm_window_3dsc_bgis"
-    bl_label = "Transaction Confirmation"
-
-    # Proprietà per il messaggio personalizzato
-    message: bpy.props.StringProperty() # type: ignore
-
-    def execute(self, context):
-        # Chiamata all'operatore di esecuzione
-        bpy.ops.object.execute_after_confirmation_3dsc_bgis()
-        return {'FINISHED'}
-
-    def invoke(self, context, event):
-        wm = context.window_manager
-        # Mostra il dialogo personalizzato con il messaggio
-        return wm.invoke_props_dialog(self)
-
-    def draw(self, context):
-        self.layout.label(text=self.message)
-
-# 3
-class OBJECT_OT_ExecuteAfterConfirmation_3dsc_BGIS(bpy.types.Operator):
-    """Executes after user confirmation"""
-    bl_idname = "object.execute_after_confirmation_3dsc_bgis"
-    bl_label = "Execute After User Confirmation"
+        return is_addon_starting_with("BlenderGIS")[0] and context.scene.BL_epsg != "NotSet"
 
     def execute(self, context):
         scene = context.scene
-        context.window_manager.confirm_window_result_3dsc = True
-
-        if context.window_manager.confirm_window_result_3dsc:
-        # conditional to be used in conjunction with the dialogue box
-            
-            # retrieve the path to Blender GIS variables
-            addon_name = is_addon_starting_with("BlenderGIS")[1]
-            prefs = bpy.context.preferences.addons[addon_name].preferences
-
-            # Set the new value of predefCrs
-            new_crs = 'EPSG:' + scene.BL_epsg
-            prefs.predefCrs = new_crs
-            #bpy.ops.geoscene.set_crs('INVOKE_DEFAULT', new_crs=new_crs)
-
-            bpy.data.window_managers['WinMan'].geoscnProps.displayOriginPrj = True
-            bpy.data.window_managers["WinMan"].geoscnProps.crsx = scene.BL_x_shift
-            bpy.data.window_managers["WinMan"].geoscnProps.crsy = scene.BL_y_shift
-
-            print("Executing action after user confirmation")
-            # Make sure to reset the flag for future verification
-            context.window_manager.confirm_window_result_3dsc = False
-        else:
-            self.report({'INFO'}, "Operation not confirmed by the user")
+        try:
+            _set_bgis_origin(
+                scene,
+                scene.BL_epsg,
+                scene.BL_x_shift,
+                scene.BL_y_shift,
+                move_objects=self.move_objects,
+            )
+        except Exception as e:
+            self.report({'ERROR'}, f"Could not write BlenderGIS origin: {e}")
+            return {'CANCELLED'}
+        self.report({'INFO'}, "BlenderGIS origin updated from 3DSC")
         return {'FINISHED'}
 
+
 class OBJECT_OT_IMPORT_BG(bpy.types.Operator):
-    """Install and/or enable Blender GIS to activate this button"""
+    """Copy BlenderGIS origin + CRS into 3DSC shift values"""
     bl_idname = "shift_from.blendergis"
     bl_label = "Copy shift values from BlenderGis"
     bl_options = {"REGISTER", "UNDO"}
 
     @classmethod
     def poll(cls, context):
-        return is_addon_starting_with("BlenderGIS")[0]    
+        return is_addon_starting_with("BlenderGIS")[0]
 
     def execute(self, context):
         scene = context.scene
-        scene['BL_x_shift'] = bpy.data.window_managers["WinMan"].geoscnProps.crsx
-        scene['BL_y_shift'] = bpy.data.window_managers["WinMan"].geoscnProps.crsy
+        try:
+            from BlenderGIS.geoscene import GeoScene
+            gs = GeoScene(scene)
+            if gs.hasOriginPrj:
+                x, y = gs.getOriginPrj()
+                scene.BL_x_shift = float(x)
+                scene.BL_y_shift = float(y)
+            if gs.hasValidCRS:
+                crs = gs.crs or ''
+                epsg = crs.replace('EPSG:', '').strip()
+                if epsg:
+                    scene.BL_epsg = epsg
+        except Exception as e:
+            self.report({'ERROR'}, f"Could not read BlenderGIS origin: {e}")
+            return {'CANCELLED'}
+        self.report({'INFO'}, "3DSC shift values updated from BlenderGIS")
         return {'FINISHED'}
 
 ############## SHIFT Panel ###############
@@ -231,8 +241,6 @@ classes = [
     ImportCoordinateShift_dsc,
     VIEW3D_PT_dsc_Shift_ToolBar,
     ExportCoordinateShift_dsc,
-    OBJECT_OT_ExecuteAfterConfirmation_3dsc_BGIS,
-    ConfirmWindow3DScToBGIS
 ]
 
 
