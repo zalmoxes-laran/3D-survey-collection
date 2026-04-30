@@ -1,6 +1,14 @@
+import datetime
+import json
+import math
 import os
 import shutil
+import subprocess
 import time
+import uuid
+import webbrowser
+import zipfile
+from pathlib import Path
 
 import bpy
 
@@ -20,6 +28,48 @@ from .core import (
     _summarize_generated_files,
     _update_cesium_progress,
 )
+
+
+def _resolve_aton_scene_name(scene, fallback="basilica"):
+    name = (scene.cesium_aton_scene_name or "").strip()
+    if name:
+        return _sanitize_name(name)
+    obj = bpy.context.active_object
+    if obj is not None and obj.type == "MESH":
+        return _sanitize_name(obj.name)
+    return _sanitize_name(fallback)
+
+
+def _generate_scene_name():
+    """Compose a scene id in ATON style: `<YYYY-MM-DD>_<UUID8>`.
+
+    The UUID8 is the first 8 hex characters of a fresh UUID4 — collision
+    probability negligible at the volumes typical of an interactive
+    publishing workflow, and short enough to be readable in URLs.
+    """
+    date_str = datetime.date.today().strftime("%Y-%m-%d")
+    uid = uuid.uuid4().hex[:8]
+    return f"{date_str}_{uid}"
+
+
+_YUP_ROTATION_RADIANS = {
+    'NONE':   None,
+    'XNEG90': [-math.pi / 2.0, 0.0, 0.0],
+    'XPOS90': [ math.pi / 2.0, 0.0, 0.0],
+    'X180':   [ math.pi,       0.0, 0.0],
+    'Y180':   [0.0, math.pi, 0.0],
+}
+
+
+def _validate_aton_path(path):
+    if not path:
+        return False, "ATON folder not set"
+    p = Path(path)
+    if not p.is_dir():
+        return False, f"Not a folder: {p}"
+    if not (p / "package.json").exists():
+        return False, f"Not an ATON install (no package.json): {p}"
+    return True, ""
 
 
 class OBJECT_OT_clear_cesium_folder(bpy.types.Operator):
@@ -405,7 +455,301 @@ class OBJECT_OT_export_cesium_tiles(bpy.types.Operator):
             )
             _add_to_cesium_log(context, f"=== Completed: {successful_jobs}/{total_jobs} mesh(es) in {mins}m {secs}s ===")
             self.report({'INFO'}, f"Cesium export completed for {successful_jobs} mesh(es).")
+
+            # Optional zip after export
+            if getattr(scene, "cesium_zip_output", False):
+                try:
+                    bpy.ops.object.cesium_zip_output()
+                except Exception as exc:
+                    _add_to_cesium_log(context, f"[WARN] Zip step failed: {exc}")
+
             return {'FINISHED'}
         finally:
             scene.cesium_progress_active = False
             _redraw_3d_view(context)
+
+
+# ===========================================================================
+#  ATON integration operators
+# ===========================================================================
+
+class OBJECT_OT_launch_aton(bpy.types.Operator):
+    """Start the local ATON server (npm start) detached from Blender."""
+    bl_idname = "object.launch_aton"
+    bl_label = "Launch ATON server"
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        scene = context.scene
+        aton_path = bpy.path.abspath(scene.cesium_aton_path).strip()
+        ok, msg = _validate_aton_path(aton_path)
+        if not ok:
+            self.report({'ERROR'}, msg)
+            return {'CANCELLED'}
+
+        # Detach so Blender does not become the parent waiting for it.
+        try:
+            subprocess.Popen(
+                ["npm", "start"],
+                cwd=aton_path,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        except FileNotFoundError:
+            self.report({'ERROR'}, "`npm` not found in PATH. Install Node.js or set PATH for Blender.")
+            return {'CANCELLED'}
+        except Exception as exc:
+            self.report({'ERROR'}, f"Failed to launch ATON: {exc}")
+            return {'CANCELLED'}
+
+        url = (scene.cesium_aton_url or "http://localhost:8080").rstrip("/")
+        self.report({'INFO'}, f"ATON launched. It usually takes a few seconds; URL: {url}")
+        return {'FINISHED'}
+
+
+class OBJECT_OT_open_aton_browser(bpy.types.Operator):
+    """Open the configured ATON URL in the system browser."""
+    bl_idname = "object.open_aton_browser"
+    bl_label = "Open ATON in browser"
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        scene = context.scene
+        url = (scene.cesium_aton_url or "http://localhost:8080").rstrip("/")
+        webbrowser.open(url)
+        self.report({'INFO'}, f"Opened {url}")
+        return {'FINISHED'}
+
+
+class OBJECT_OT_publish_to_aton(bpy.types.Operator):
+    """Copy the produced tileset into ATON's collections folder, generate
+    a minimal scene.json, and open the scene URL in the browser."""
+    bl_idname = "object.publish_to_aton"
+    bl_label = "Publish to ATON"
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        scene = context.scene
+        aton_path = bpy.path.abspath(scene.cesium_aton_path).strip()
+        ok, msg = _validate_aton_path(aton_path)
+        if not ok:
+            self.report({'ERROR'}, msg)
+            return {'CANCELLED'}
+
+        output_root = bpy.path.abspath(scene.cesium_output_dir).strip()
+        if not output_root or not os.path.isdir(output_root):
+            self.report({'ERROR'}, "Set a valid Cesium output folder first")
+            return {'CANCELLED'}
+
+        # If output_root contains the produced tileset directly, that's
+        # what we publish. If it contains object subfolders (one per
+        # active mesh), we look for the active mesh's subfolder.
+        candidate = Path(output_root)
+        if not (candidate / "tileset.json").exists():
+            obj = context.active_object
+            if obj is not None and obj.type == "MESH":
+                sub = candidate / _sanitize_name(obj.name)
+                if (sub / "tileset.json").exists():
+                    candidate = sub
+        if not (candidate / "tileset.json").exists():
+            self.report({'ERROR'}, f"No tileset.json found under {candidate}")
+            return {'CANCELLED'}
+
+        user = (scene.cesium_aton_user or "cesium_dev").strip() or "cesium_dev"
+        scene_name = _resolve_aton_scene_name(scene)
+
+        aton_root = Path(aton_path)
+        coll_dir = aton_root / "data" / "collections" / user / scene_name
+        scene_dir = aton_root / "data" / "scenes" / user / scene_name
+
+        # Collections: tileset payload
+        if coll_dir.exists():
+            if not scene.cesium_aton_overwrite:
+                self.report({'ERROR'}, f"Already exists: {coll_dir}. Enable 'Overwrite' to replace.")
+                return {'CANCELLED'}
+            shutil.rmtree(coll_dir)
+        coll_dir.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(candidate, coll_dir)
+
+        # Scene descriptor with sensible defaults
+        scene_dir.mkdir(parents=True, exist_ok=True)
+        node = {"urls": f"{user}/{scene_name}/tileset.json"}
+        rot_choice = getattr(scene, "cesium_aton_yup_rotation", 'XNEG90')
+        rot = _YUP_ROTATION_RADIANS.get(rot_choice)
+        if rot is not None:
+            node["transform"] = {"rotation": rot}
+        scene_json = {
+            "visibility": 1,
+            "title": scene_name,
+            "environment": {
+                "mainpano": {"url": "samples/pano/defsky-grass.jpg", "rotation": 0.0},
+                "mainlightx": {"direction": [-0.1, -1, -1], "shadows": False},
+            },
+            "scenegraph": {
+                "nodes": {scene_name: node},
+                "edges": {".": [scene_name]},
+            },
+        }
+        with open(scene_dir / "scene.json", "w", encoding="utf-8") as f:
+            json.dump(scene_json, f, indent=2)
+
+        url = (scene.cesium_aton_url or "http://localhost:8080").rstrip("/")
+        full = f"{url}/s/{user}/{scene_name}"
+
+        if scene.cesium_aton_open_browser:
+            webbrowser.open(full)
+
+        msg = f"Published to {coll_dir.name}. URL: {full}"
+        _add_to_cesium_log(context, msg)
+        self.report({'INFO'}, msg)
+        return {'FINISHED'}
+
+
+class OBJECT_OT_generate_aton_scene_name(bpy.types.Operator):
+    """Generate a unique scene name (timestamp + 6-hex UUID suffix)."""
+    bl_idname = "object.generate_aton_scene_name"
+    bl_label = "Generate scene name"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        scene = context.scene
+        scene.cesium_aton_scene_name = _generate_scene_name()
+        self.report({'INFO'}, f"Generated: {scene.cesium_aton_scene_name}")
+        return {'FINISHED'}
+
+
+class OBJECT_OT_auto_compute_cesium_settings(bpy.types.Operator):
+    """Heuristic auto-tune of Cesium tiling parameters from the active mesh.
+
+    Strategy:
+      - target ~3000 polys per leaf tile (good balance for HTTP delivery)
+      - max_depth = ceil(log2(poly_count / target_leaf))
+      - QUADTREE if mesh is largely planar (vertical extent < 25% of largest
+        horizontal extent), OCTREE otherwise
+      - leaf atlas size scales with poly count: <100k→512, <1M→1024, ≥1M→2048
+      - root atlas size = leaf atlas / 4 (capped at 256 minimum)
+
+    The aim is to keep individual GLBs under ~1 MB so the asset streams
+    well over the network. The user can still override afterwards.
+    """
+    bl_idname = "object.auto_compute_cesium_settings"
+    bl_label = "Auto-tune from mesh"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    target_leaf_polys: bpy.props.IntProperty(  # type: ignore
+        name="Target polys per leaf",
+        default=3000,
+        min=200,
+        max=200000,
+    )
+
+    def execute(self, context):
+        scene = context.scene
+        obj = context.active_object
+        if obj is None or obj.type != "MESH":
+            self.report({'ERROR'}, "Select an active mesh first")
+            return {'CANCELLED'}
+
+        depsgraph = context.evaluated_depsgraph_get()
+        eval_obj = obj.evaluated_get(depsgraph)
+        mesh = eval_obj.to_mesh()
+        if mesh is None or len(mesh.polygons) == 0:
+            self.report({'ERROR'}, "Active mesh is empty")
+            return {'CANCELLED'}
+
+        try:
+            poly_count = len(mesh.polygons)
+
+            # World bbox via vertex iteration (cheap)
+            mw = obj.matrix_world
+            xs, ys, zs = [], [], []
+            for v in mesh.vertices:
+                wv = mw @ v.co
+                xs.append(wv.x); ys.append(wv.y); zs.append(wv.z)
+            ext_x = max(xs) - min(xs) if xs else 0.0
+            ext_y = max(ys) - min(ys) if ys else 0.0
+            ext_z = max(zs) - min(zs) if zs else 0.0
+            ext_horiz = max(ext_x, ext_y)
+            planar = ext_horiz > 0.0 and (ext_z / ext_horiz) < 0.25
+
+            # Depth from polys: how many octree halvings to hit target leaf
+            target = max(200, int(self.target_leaf_polys))
+            ratio = max(1.0, poly_count / float(target))
+            # OCTREE roughly halves polys per level; QUADTREE quarters them.
+            # Empirically clamp to [2, 8].
+            if planar:
+                levels = math.ceil(math.log(ratio, 4))
+            else:
+                levels = math.ceil(math.log(ratio, 2))
+            max_depth = max(2, min(int(levels), 8))
+
+            # Atlas sizes scale with poly count (not bbox — texture detail
+            # matters more than physical size for streaming density)
+            if poly_count >= 1_000_000:
+                leaf_atlas = 2048
+            elif poly_count >= 100_000:
+                leaf_atlas = 1024
+            else:
+                leaf_atlas = 512
+            root_atlas = max(256, leaf_atlas // 4)
+
+            # Apply
+            scene.cesium_features_per_tile = target
+            scene.cesium_native_min_depth = 1
+            scene.cesium_native_max_depth = max_depth
+            scene.cesium_tree_type = 'QUADTREE' if planar else 'OCTREE'
+            scene.cesium_native_bake_texture_size = leaf_atlas
+            scene.cesium_native_bake_margin = max(8, leaf_atlas // 64)
+            scene.cesium_lod_mode = True
+            scene.cesium_lod_auto_params = False
+            scene.cesium_lod_leaf_atlas_size = leaf_atlas
+            scene.cesium_lod_root_atlas_size = root_atlas
+            scene.cesium_lod_strategy = 'REBAKE'
+            scene.cesium_native_hierarchy_layout = 'IMPLICIT_TILING'
+
+            msg = (
+                f"polys={poly_count:,}, "
+                f"bbox≈{ext_x:.1f}×{ext_y:.1f}×{ext_z:.1f}m, "
+                f"{'QUADTREE' if planar else 'OCTREE'} depth={max_depth}, "
+                f"leaf_atlas={leaf_atlas}, root_atlas={root_atlas}"
+            )
+            _add_to_cesium_log(context, f"[AUTO] {msg}")
+            self.report({'INFO'}, f"Auto-tune: {msg}")
+            return {'FINISHED'}
+        finally:
+            try:
+                eval_obj.to_mesh_clear()
+            except Exception:
+                pass
+
+
+class OBJECT_OT_cesium_zip_output(bpy.types.Operator):
+    """Write a zipped copy of the Cesium output folder next to it."""
+    bl_idname = "object.cesium_zip_output"
+    bl_label = "Save zip"
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        scene = context.scene
+        output_root = bpy.path.abspath(scene.cesium_output_dir).strip()
+        if not output_root or not os.path.isdir(output_root):
+            self.report({'ERROR'}, "Set a valid Cesium output folder first")
+            return {'CANCELLED'}
+
+        src = Path(output_root)
+        zip_path = src.with_name(src.name + ".zip")
+        # Replace existing zip silently
+        if zip_path.exists():
+            zip_path.unlink()
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            for r, _, files in os.walk(src):
+                for f in files:
+                    p = Path(r) / f
+                    zf.write(p, p.relative_to(src.parent))
+
+        size_mb = zip_path.stat().st_size / (1024 * 1024)
+        msg = f"Saved {zip_path.name} ({size_mb:.1f} MB)"
+        _add_to_cesium_log(context, msg)
+        self.report({'INFO'}, msg)
+        return {'FINISHED'}

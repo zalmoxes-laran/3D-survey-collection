@@ -26,6 +26,30 @@ from .stats import _build_gltf_export_kwargs
 from .tileset_stitcher import _bbox_diag_len, _bbox_to_box, _bbox_union_from_face_ids
 
 
+# Empirically determined fix for "head-down" rendering in ATON Three.js
+# Y-up scene. The Blender Z-up data path + `export_yup=True` glTF + the
+# 3d-tiles-renderer loader's own implicit rotation compose to a net
+# offset that flips the model upside-down. A 180° rotation around the
+# X axis (column-major flat) baked into root.transform compensates for
+# this and makes the asset right-side-up out of the box.
+#
+# Encoded:
+#   X stays, Y -> -Y, Z -> -Z
+#
+# Per the geo-referencing phase, this constant will be replaced by the
+# ENU->ECEF + ECEF translation matrix derived from `EPSG:<code> X Y Z`
+# in SHIFT.txt — the current rotation will then be folded into that
+# composite transform if still empirically required.
+_LOCAL_FIX_FLIP_TRANSFORM = [
+    1.0,  0.0,  0.0, 0.0,   # col 0
+    0.0, -1.0,  0.0, 0.0,   # col 1
+    0.0,  0.0, -1.0, 0.0,   # col 2
+    0.0,  0.0,  0.0, 1.0,   # col 3
+]
+# Backwards-compat alias (older code referenced this name)
+_LOCAL_ZUP_TO_YUP_TRANSFORM = _LOCAL_FIX_FLIP_TRANSFORM
+
+
 def _export_node_glb(
     context, base_obj, temp_collection, keep_face_ids, filepath,
     force_unlit=False, export_yup=True,
@@ -47,6 +71,8 @@ def _export_node_glb(
     tile_obj_name = tile_obj.name
     tile_mesh_name = tile_obj.data.name
     temp_collection.objects.link(tile_obj)
+
+    keep_temp = bool(getattr(scene, "cesium_keep_temp_objects", False)) if scene is not None else False
 
     # Track rebake artifacts for cleanup
     _rebake_img_name = None
@@ -165,21 +191,41 @@ def _export_node_glb(
             _patch_glb_to_unlit(filepath)
         return ok
     finally:
-        # DEBUG: cleanup disabled – keep temp objects in Blender for inspection
-        pass
-        # obj = bpy.data.objects.get(tile_obj_name)
-        # if obj is not None:
-        #     try:
-        #         bpy.data.objects.remove(obj, do_unlink=True)
-        #     except Exception:
-        #         pass
-        # mesh = bpy.data.meshes.get(tile_mesh_name)
-        # if mesh is not None and mesh.users == 0:
-        #     try:
-        #         bpy.data.meshes.remove(mesh, do_unlink=True)
-        #     except Exception:
-        #         pass
-        # # Cleanup rebake artifacts (material + image created per-node)
+        # By default cleanup all per-tile temporaries from the Blender
+        # scene so the user does not see the `_cesium_native_tmp`
+        # collection bloat with thousands of objects after a multi-tile
+        # export. The `cesium_keep_temp_objects` scene property (default
+        # OFF, exposed under Advanced) keeps them around for debugging.
+        if not keep_temp:
+            obj_to_del = bpy.data.objects.get(tile_obj_name)
+            if obj_to_del is not None:
+                try:
+                    bpy.data.objects.remove(obj_to_del, do_unlink=True)
+                except Exception:
+                    pass
+            mesh_to_del = bpy.data.meshes.get(tile_mesh_name)
+            if mesh_to_del is not None and mesh_to_del.users == 0:
+                try:
+                    bpy.data.meshes.remove(mesh_to_del, do_unlink=True)
+                except Exception:
+                    pass
+            if _rebake_mat_name:
+                mat = bpy.data.materials.get(_rebake_mat_name)
+                if mat is not None and mat.users == 0:
+                    try:
+                        bpy.data.materials.remove(mat, do_unlink=True)
+                    except Exception:
+                        pass
+            if _rebake_img_name:
+                img = bpy.data.images.get(_rebake_img_name)
+                if img is not None and img.users == 0:
+                    try:
+                        bpy.data.images.remove(img, do_unlink=True)
+                    except Exception:
+                        pass
+
+        # The original fragments below are kept commented as a quick
+        # reference for what used to be debug-disabled. Do not remove.
         # if _rebake_mat_name:
         #     mat = bpy.data.materials.get(_rebake_mat_name)
         #     if mat is not None and mat.users == 0:
@@ -347,8 +393,37 @@ def _run_native_implicit_layout(
         tile_bits, tile_count, content_bits, content_count,
     )
 
-    root_error = max(_bbox_diag_len(tree["bbox"]), 1.0)
-    root_tile_error = max(root_error / (2 ** max(available_levels, 1)), 0.0)
+    # Geometric error policy
+    # ----------------------
+    # 3D Tiles spec: a tile's geometricError is "the error introduced by
+    # rendering this tile instead of its children". The viewer compares
+    # `screenSpaceError = geometricError * pixels_per_world_unit` against
+    # its `errorTarget`; when it exceeds the target, children are loaded.
+    #
+    # Two values matter for the viewer's refine behaviour:
+    #   - tileset.geometricError (top-level): below this SSE the asset is
+    #     considered "out of view"; if too low, the asset is dropped at
+    #     ordinary view distances
+    #   - tileset.root.geometricError: the SSE budget of the root tile.
+    #     For implicit tiling, every level n has implicit error
+    #     `root_error / 2^n`, so the root_error directly controls how
+    #     soon the loader starts refining downwards.
+    #
+    # Old buggy formula: `root_tile_error = bbox_diag / 2^max_depth`.
+    # That made the root error 30-100× smaller than it should be — the
+    # loader was "happy" with the root and never refined.
+    #
+    # New formula: take the bbox diagonal as a sensible "tile level 0"
+    # error in metres; divide it by 2 just so the root is a bit smaller
+    # than the bbox itself (children are then 1/4, 1/8 ... of the diag).
+    # The Basilica reference dataset hand-tuned its root error to ~10 %
+    # of bbox diag; ours is ~50 % which biases towards refining sooner,
+    # matching what an interactive ATON workflow expects.
+    bbox_diag = max(_bbox_diag_len(tree["bbox"]), 1.0)
+    root_tile_error = bbox_diag * 0.5
+    # Top-level error stays high so the asset is visible at any distance.
+    root_error = max(bbox_diag * 100.0, 10000.0)
+
     subdivision = "OCTREE" if tree_type == 'OCTREE' else "QUADTREE"
     root_box = _bbox_to_box(tree["bbox"])
     tileset = {
@@ -393,6 +468,8 @@ def _run_native_implicit_layout(
             },
         },
     }
+    if getattr(scene, "cesium_root_transform_yup_for_threejs", False):
+        tileset["root"]["transform"] = list(_LOCAL_ZUP_TO_YUP_TRANSFORM)
     with open(os.path.join(output_dir, "tileset.json"), "w", encoding="utf-8") as f:
         json.dump(tileset, f, indent=2)
 
@@ -457,7 +534,14 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
     try:
         _add_to_cesium_log(context, f"[NATIVE] {active_obj.name}: bbox=Z_UP, GLB export_yup=ON")
 
-        # Compute in Blender Z-up frame (3D Tiles expects Z-up bounding volumes)
+        # Reverted to Blender Z-up bbox frame. Empirical investigation
+        # showed the 3d-tiles-renderer (NASA-AMMOS, used by ATON) applies
+        # a rotation when loading the glTF tile content, so simply
+        # aligning bbox with content does not eliminate the apparent
+        # 90 deg rotation the user observes. The orientation correction
+        # is therefore left to the consumer scene descriptor (e.g.
+        # ATON scene.json with transform.rotation), and identified
+        # empirically per viewer.
         face_ids, centroids, face_mins, face_maxs = _build_face_spatial_data(
             base_obj.data, to_gltf_yup=False,
         )
@@ -652,12 +736,22 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
                 return False, "Failed exporting single-JSON root content tile."
             tree["uri"] = root_uri
 
-        root_error = max(_bbox_diag_len(tree["bbox"]), 1.0)
+        # Geometric error policy — same rationale as the implicit-tiling
+        # branch. `tree_root_error` is the error budget at the topmost
+        # tile, halved for each level by `_native_tree_to_tileset_node`.
+        # `top_level_error` is the file-wide cutoff; we keep it very high
+        # so the asset is visible at any view distance.
+        bbox_diag = max(_bbox_diag_len(tree["bbox"]), 1.0)
+        tree_root_error = bbox_diag * 0.5
+        top_level_error = max(bbox_diag * 100.0, 10000.0)
+
         if scene.cesium_native_hierarchy_layout == 'EXTERNAL_SUBTILESETS':
             for subtree in subtree_nodes:
-                subtree_root_error = max(_bbox_diag_len(subtree["bbox"]), 1.0)
+                sub_bbox_diag = max(_bbox_diag_len(subtree["bbox"]), 1.0)
+                sub_root_error = sub_bbox_diag * 0.5
+                sub_top_error = max(sub_bbox_diag * 100.0, 10000.0)
                 subtree_tile = _native_tree_to_tileset_node(
-                    subtree, root_error=subtree_root_error,
+                    subtree, root_error=sub_root_error,
                     base_depth=subtree["depth"], external_subtree_map=None,
                 )
                 subtree_folder = subtree_folder_map.get(id(subtree), "")
@@ -665,17 +759,20 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
                 os.makedirs(os.path.dirname(subtree_json_path), exist_ok=True)
                 with open(subtree_json_path, "w", encoding="utf-8") as subf:
                     json.dump(
-                        {"asset": {"version": "1.1"}, "geometricError": subtree_root_error, "root": subtree_tile},
+                        {"asset": {"version": "1.1"}, "geometricError": sub_top_error, "root": subtree_tile},
                         subf, indent=2,
                     )
 
+        tileset_root = _native_tree_to_tileset_node(
+            tree, root_error=tree_root_error, base_depth=0,
+            external_subtree_map=external_subtree_map,
+        )
+        if getattr(scene, "cesium_root_transform_yup_for_threejs", False):
+            tileset_root["transform"] = list(_LOCAL_ZUP_TO_YUP_TRANSFORM)
         tileset = {
             "asset": {"version": "1.1"},
-            "geometricError": root_error,
-            "root": _native_tree_to_tileset_node(
-                tree, root_error=root_error, base_depth=0,
-                external_subtree_map=external_subtree_map,
-            ),
+            "geometricError": top_level_error,
+            "root": tileset_root,
         }
 
         tileset_path = os.path.join(output_dir, "tileset.json")
@@ -718,21 +815,32 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
 
         return True, f"Native split completed ({len(all_nodes)} tiles, LOD={bool(lod_mode)})."
     finally:
-        # DEBUG: cleanup disabled – keep base_obj and bake assets for inspection
-        pass
-        # try:
-        #     mesh_data = base_obj.data
-        # except Exception:
-        #     mesh_data = None
-        # try:
-        #     bpy.data.objects.remove(base_obj, do_unlink=True)
-        # except Exception:
-        #     pass
-        # try:
-        #     if mesh_data is not None and mesh_data.users == 0:
-        #         bpy.data.meshes.remove(mesh_data, do_unlink=True)
-        # except Exception:
-        #     pass
-        # if lod_image_cache:
-        #     _cleanup_lod_image_cache(lod_image_cache)
-        # _cleanup_native_bake_assets(bake_info)
+        # End-of-job cleanup. The `cesium_keep_temp_objects` scene
+        # property (default OFF, exposed under Advanced) preserves
+        # temporaries for debugging — useful when inspecting why a bake
+        # produced unexpected output.
+        keep_temp = bool(getattr(scene, "cesium_keep_temp_objects", False))
+        if not keep_temp:
+            try:
+                mesh_data = base_obj.data
+            except Exception:
+                mesh_data = None
+            try:
+                bpy.data.objects.remove(base_obj, do_unlink=True)
+            except Exception:
+                pass
+            try:
+                if mesh_data is not None and mesh_data.users == 0:
+                    bpy.data.meshes.remove(mesh_data, do_unlink=True)
+            except Exception:
+                pass
+            if lod_image_cache:
+                _cleanup_lod_image_cache(lod_image_cache)
+            _cleanup_native_bake_assets(bake_info)
+            # Drop the temp collection itself if empty
+            try:
+                tc = bpy.data.collections.get("_cesium_native_tmp")
+                if tc is not None and len(tc.objects) == 0:
+                    bpy.data.collections.remove(tc)
+            except Exception:
+                pass

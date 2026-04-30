@@ -210,6 +210,96 @@ def register():
         default="",
         description="Optional texture base directory for OBJ-based workflows",
     )
+    # Per-section collapse toggles (numbered settings sub-panels)
+    S.cesium_show_section_source = bpy.props.BoolProperty(default=True)
+    S.cesium_show_section_output = bpy.props.BoolProperty(default=True)
+    S.cesium_show_section_quicksetup = bpy.props.BoolProperty(default=True)
+    S.cesium_show_section_tiling = bpy.props.BoolProperty(default=False)
+    S.cesium_show_section_texture = bpy.props.BoolProperty(default=False)
+    S.cesium_show_section_hierarchy = bpy.props.BoolProperty(default=False)
+    S.cesium_show_section_coordinates = bpy.props.BoolProperty(default=False)
+
+    S.cesium_keep_temp_objects = bpy.props.BoolProperty(
+        name="Keep debug temporaries",
+        default=False,
+        description=(
+            "After export, keep the per-tile copies and bake artifacts in "
+            "the Blender scene (under the `_cesium_native_tmp` collection) "
+            "for inspection. Default OFF — temporaries are cleaned up "
+            "automatically once the export completes"
+        ),
+    )
+    S.cesium_root_transform_yup_for_threejs = bpy.props.BoolProperty(
+        name="Bake Y-up rotation into root.transform",
+        default=False,
+        description=(
+            "Write a 180 deg X rotation into the produced tileset.json "
+            "root.transform so Y-up viewers (Three.js, ATON) display the "
+            "asset right-side-up out of the box. Default ON — the empirical "
+            "value compensates the 'head-down' flip caused by the Blender "
+            "Z-up + export_yup + 3d-tiles-renderer loader chain. Turn off "
+            "if you prefer to leave the tileset frame-neutral and let the "
+            "consuming scene apply its own orientation transform"
+        ),
+    )
+
+    # ATON Integration (collapsible, closed by default)
+    S.cesium_show_aton = bpy.props.BoolProperty(
+        name="Show ATON integration",
+        default=False,
+    )
+    S.cesium_aton_path = bpy.props.StringProperty(
+        name="ATON folder",
+        subtype='DIR_PATH',
+        default="",
+        description="Local install of ATON (the folder that contains package.json)",
+    )
+    S.cesium_aton_url = bpy.props.StringProperty(
+        name="ATON URL",
+        default="http://localhost:8080",
+        description="Base URL where ATON is reachable (default: http://localhost:8080)",
+    )
+    S.cesium_aton_user = bpy.props.StringProperty(
+        name="Scene user",
+        default="cesium_dev",
+        description="First path component of the ATON scene URL (e.g. 'cesium_dev' in /s/cesium_dev/<scene>)",
+    )
+    S.cesium_aton_scene_name = bpy.props.StringProperty(
+        name="Scene name",
+        default="",
+        description="Second path component of the ATON scene URL. Empty = use the active mesh name (sanitised)",
+    )
+    S.cesium_aton_open_browser = bpy.props.BoolProperty(
+        name="Open browser after publish",
+        default=True,
+        description="After copying the tileset to ATON's collections folder, open the scene URL in the system browser",
+    )
+    S.cesium_aton_overwrite = bpy.props.BoolProperty(
+        name="Overwrite existing",
+        default=True,
+        description="If a tileset with the same name already exists in ATON's collections folder, replace it",
+    )
+    S.cesium_aton_yup_rotation = bpy.props.EnumProperty(
+        name="Y-up rotation",
+        items=[
+            ('NONE',    "Identity",           "Do not add a rotation in scene.json (tileset is already viewer-ready)"),
+            ('XNEG90',  "-90° X (Z-up→Y-up)", "Rotate -π/2 around X. Standard for Blender Z-up content rendered in a Y-up scene"),
+            ('XPOS90',  "+90° X",             "Rotate +π/2 around X. Mirror of -90° X"),
+            ('X180',    "180° X (flip Y+Z)",  "Rotate π around X. Use when the model appears head-down with identity"),
+            ('Y180',    "180° Y (yaw 180°)",  "Rotate π around Y. Pure yaw flip; use after another rotation if cardinal direction is wrong"),
+        ],
+        default='XNEG90',
+        description=(
+            "Rotation written into the ATON scene.json `transform.rotation` "
+            "field for the published node. The value depends on the source "
+            "mesh convention. Most Blender Z-up workflows want -90° X"
+        ),
+    )
+    S.cesium_zip_output = bpy.props.BoolProperty(
+        name="Also save zip",
+        default=False,
+        description="After export, write a zipped copy of the output folder next to it (.zip)",
+    )
 
     # Progress
     S.cesium_progress_active = bpy.props.BoolProperty(default=False)
@@ -258,6 +348,24 @@ def unregister():
         "cesium_show_advanced",
         "cesium_force_unlit_materials",
         "cesium_texture_base_dir",
+        "cesium_root_transform_yup_for_threejs",
+        "cesium_keep_temp_objects",
+        "cesium_show_section_source",
+        "cesium_show_section_output",
+        "cesium_show_section_quicksetup",
+        "cesium_show_section_tiling",
+        "cesium_show_section_texture",
+        "cesium_show_section_hierarchy",
+        "cesium_show_section_coordinates",
+        "cesium_show_aton",
+        "cesium_aton_path",
+        "cesium_aton_url",
+        "cesium_aton_user",
+        "cesium_aton_scene_name",
+        "cesium_aton_open_browser",
+        "cesium_aton_overwrite",
+        "cesium_aton_yup_rotation",
+        "cesium_zip_output",
         "cesium_progress_active",
         "cesium_progress_task",
         "cesium_progress_current_mesh",

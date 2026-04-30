@@ -100,6 +100,23 @@ def _native_bake_basecolor_texture(context, scene, base_obj, atlas_size, margin_
     if not local_materials:
         return True, "No materials on source mesh: bake skipped.", bake_info
 
+    # Capture the source UV layer name BEFORE we override the active layer.
+    # The materials we are about to bake from sample their textures against
+    # the mesh's active UV by default; if we silently switch the active layer
+    # to __CesiumBakeUV (smart-projected), every source ShaderNodeTexImage
+    # will read at the wrong UV, baking random pixels into the atlas.
+    source_uv_name = None
+    if mesh.uv_layers and mesh.uv_layers.active:
+        candidate = mesh.uv_layers.active.name
+        if candidate != "__CesiumBakeUV":
+            source_uv_name = candidate
+    if source_uv_name is None:
+        for uv in mesh.uv_layers:
+            if uv.name != "__CesiumBakeUV":
+                source_uv_name = uv.name
+                break
+    bake_info["source_uv_layer"] = source_uv_name or ""
+
     uv_layer = mesh.uv_layers.get("__CesiumBakeUV")
     if uv_layer is None:
         uv_layer = mesh.uv_layers.new(name="__CesiumBakeUV")
@@ -115,16 +132,54 @@ def _native_bake_basecolor_texture(context, scene, base_obj, atlas_size, margin_
         alpha=True,
         float_buffer=False,
     )
-    bake_image.generated_color = (1.0, 1.0, 1.0, 1.0)
+    # Pre-fill the atlas with a neutral grey. Smart UV Project leaves gaps
+    # between UV islands; the bake margin only paints a few px around each
+    # island. If the bake operator is left with use_clear=True (default),
+    # those gaps stay pure black and any face whose UV samples fall in
+    # them appears black at render time. With a neutral grey pre-fill
+    # combined with use_clear=False below, the gap regions stay grey
+    # instead of black — much less visually intrusive when sampled.
+    _GAP_FILL = (0.5, 0.5, 0.5, 1.0)
+    bake_image.generated_color = _GAP_FILL
+    n_pixels = int(atlas_size) * int(atlas_size)
+    bake_image.pixels = list(_GAP_FILL) * n_pixels
+    try:
+        bake_image.update()
+    except Exception:
+        pass
     bake_info["baked_image"] = bake_image.name
+    bake_info["gap_fill"] = list(_GAP_FILL)
 
     target_nodes = []
+    pinned_source_tex_nodes = 0
     for mat in local_materials:
         if not mat.use_nodes:
             mat.use_nodes = True
         nt = mat.node_tree
         if nt is None:
             continue
+        # Pin every existing source ShaderNodeTexImage to the original UV
+        # layer via an explicit ShaderNodeUVMap. Otherwise, once we make
+        # __CesiumBakeUV the active layer, the source images would be
+        # sampled against smart-projected coordinates, contaminating the
+        # bake with pixels from outside the original UV islands.
+        if source_uv_name:
+            existing_image_nodes = [n for n in nt.nodes if n.type == 'TEX_IMAGE']
+            for tex_image_node in existing_image_nodes:
+                vec_in = tex_image_node.inputs.get("Vector")
+                if vec_in is None or vec_in.is_linked:
+                    continue
+                uvmap_node = nt.nodes.new("ShaderNodeUVMap")
+                uvmap_node.name = "__CesiumBakeSourceUV"
+                uvmap_node.label = "Cesium Bake Source UV"
+                uvmap_node.uv_map = source_uv_name
+                uvmap_node.location = (
+                    tex_image_node.location.x - 220,
+                    tex_image_node.location.y,
+                )
+                nt.links.new(uvmap_node.outputs["UV"], vec_in)
+                pinned_source_tex_nodes += 1
+
         for node in nt.nodes:
             node.select = False
         tex_node = nt.nodes.new("ShaderNodeTexImage")
@@ -134,6 +189,7 @@ def _native_bake_basecolor_texture(context, scene, base_obj, atlas_size, margin_
         tex_node.select = True
         nt.nodes.active = tex_node
         target_nodes.append(tex_node)
+    bake_info["pinned_source_tex_nodes"] = pinned_source_tex_nodes
 
     if not target_nodes:
         return False, "No valid material node trees available for bake.", bake_info
@@ -177,9 +233,19 @@ def _native_bake_basecolor_texture(context, scene, base_obj, atlas_size, margin_
             )
             bpy.ops.object.mode_set(mode='OBJECT')
 
+            # Scale the bake margin with atlas size: an 8 px margin on a
+            # 2048 atlas is too thin (~0.4% of side) and leaves visible
+            # black gaps between UV islands. Floor to atlas_size/64 (so
+            # 1024 -> >=16, 2048 -> >=32).
+            effective_margin = max(int(margin_px), int(atlas_size) // 64)
+            bake_info["effective_margin_px"] = effective_margin
+
             scene.render.engine = 'CYCLES'
-            scene.render.bake.margin = int(margin_px)
-            scene.render.bake.use_clear = True
+            scene.render.bake.margin = effective_margin
+            # use_clear=False keeps the grey pre-fill we wrote into
+            # bake_image.pixels in unbaked regions, so faces sampling
+            # outside UV islands render grey instead of pure black.
+            scene.render.bake.use_clear = False
             if hasattr(scene.render.bake, "margin_type"):
                 scene.render.bake.margin_type = 'ADJACENT_FACES'
             if hasattr(scene.render.bake, "use_selected_to_active"):
@@ -192,10 +258,10 @@ def _native_bake_basecolor_texture(context, scene, base_obj, atlas_size, margin_
             result = bpy.ops.object.bake(
                 type='DIFFUSE',
                 pass_filter={'COLOR'},
-                use_clear=True,
+                use_clear=False,
                 use_selected_to_active=False,
                 margin_type='ADJACENT_FACES',
-                margin=int(margin_px),
+                margin=effective_margin,
             )
             if 'FINISHED' not in result:
                 return False, "Bake operator failed.", bake_info
@@ -261,6 +327,20 @@ def _native_bake_basecolor_texture(context, scene, base_obj, atlas_size, margin_
     for poly in mesh.polygons:
         poly.material_index = 0
     mesh.update()
+
+    # The glTF exporter assigns TEXCOORD slots in storage order, NOT by
+    # active_render. If the source mesh has a pre-existing UV layer (typical
+    # for OBJ imports), it stays at index 0 and becomes TEXCOORD_0 in the
+    # GLB, while __CesiumBakeUV ends at index 1 (TEXCOORD_1). Since
+    # baseColorTexture defaults to TEXCOORD_0, the rendered atlas would be
+    # sampled with the wrong UVs (visible as "patchwork" of colours).
+    # Drop every other UV layer so __CesiumBakeUV is the sole layer.
+    extras = [uv.name for uv in mesh.uv_layers if uv.name != "__CesiumBakeUV"]
+    for uv_name in extras:
+        uv_to_remove = mesh.uv_layers.get(uv_name)
+        if uv_to_remove is not None:
+            mesh.uv_layers.remove(uv_to_remove)
+    bake_info["removed_extra_uv_layers"] = len(extras)
 
     for mat_name in list(bake_info.get("temp_materials", [])):
         mat = bpy.data.materials.get(mat_name)
