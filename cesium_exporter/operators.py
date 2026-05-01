@@ -579,6 +579,7 @@ class OBJECT_OT_publish_to_aton(bpy.types.Operator):
         rot = _YUP_ROTATION_RADIANS.get(rot_choice)
         if rot is not None:
             node["transform"] = {"rotation": rot}
+        error_target = float(getattr(scene, "cesium_aton_error_target", 5.0))
         scene_json = {
             "visibility": 1,
             "title": scene_name,
@@ -589,6 +590,15 @@ class OBJECT_OT_publish_to_aton(bpy.types.Operator):
             "scenegraph": {
                 "nodes": {scene_name: node},
                 "edges": {".": [scene_name]},
+            },
+            # ATON does not yet have a built-in scene.json parser key for
+            # the 3D Tiles loader error target. We surface the desired
+            # value here under `extras` so a future ATON hook can pick it
+            # up; meanwhile, the user can run
+            #   `ATON.MRes.setTSetsErrorTarget(<value>)`
+            # from DevTools console once the scene loads.
+            "extras": {
+                "cesium": {"errorTarget": error_target},
             },
         }
         with open(scene_dir / "scene.json", "w", encoding="utf-8") as f:
@@ -639,9 +649,17 @@ class OBJECT_OT_auto_compute_cesium_settings(bpy.types.Operator):
 
     target_leaf_polys: bpy.props.IntProperty(  # type: ignore
         name="Target polys per leaf",
-        default=3000,
+        default=10000,
         min=200,
         max=200000,
+        description="Polygon budget per leaf tile. Higher = fewer/larger tiles, less inter-tile artefacts (recommended 8k-15k)",
+    )
+    max_depth_cap: bpy.props.IntProperty(  # type: ignore
+        name="Max octree depth (cap)",
+        default=5,
+        min=2,
+        max=8,
+        description="Hard upper bound on octree depth. Lower values reduce LOD seams between tiles at the cost of less aggressive culling for very large meshes",
     )
 
     def execute(self, context):
@@ -682,7 +700,7 @@ class OBJECT_OT_auto_compute_cesium_settings(bpy.types.Operator):
                 levels = math.ceil(math.log(ratio, 4))
             else:
                 levels = math.ceil(math.log(ratio, 2))
-            max_depth = max(2, min(int(levels), 8))
+            max_depth = max(2, min(int(levels), int(self.max_depth_cap)))
 
             # Atlas sizes scale with poly count (not bbox — texture detail
             # matters more than physical size for streaming density)
@@ -708,11 +726,18 @@ class OBJECT_OT_auto_compute_cesium_settings(bpy.types.Operator):
             scene.cesium_lod_strategy = 'REBAKE'
             scene.cesium_native_hierarchy_layout = 'IMPLICIT_TILING'
 
+            # Estimate leaf tile size to warn about over-heavy tiles
+            est_leaf_kb = leaf_atlas * leaf_atlas * 4 / 1024 / 4  # rough: 1024² PNG ~256 KB
+            warn = ""
+            if est_leaf_kb > 500:
+                warn = f" [warn: leaf ~{est_leaf_kb:.0f}KB/tile, >500KB; consider smaller atlas]"
+
             msg = (
                 f"polys={poly_count:,}, "
                 f"bbox≈{ext_x:.1f}×{ext_y:.1f}×{ext_z:.1f}m, "
-                f"{'QUADTREE' if planar else 'OCTREE'} depth={max_depth}, "
-                f"leaf_atlas={leaf_atlas}, root_atlas={root_atlas}"
+                f"{'QUADTREE' if planar else 'OCTREE'} depth={max_depth} (cap {self.max_depth_cap}), "
+                f"leaf_atlas={leaf_atlas}, root_atlas={root_atlas}, "
+                f"target_polys={target}{warn}"
             )
             _add_to_cesium_log(context, f"[AUTO] {msg}")
             self.report({'INFO'}, f"Auto-tune: {msg}")

@@ -109,6 +109,23 @@ def register():
         default=True,
         description="Protect non-manifold edges from decimation (prevents tile seams)",
     )
+    S.cesium_tile_refine_mode = bpy.props.EnumProperty(
+        name="Refine mode",
+        items=[
+            ('REPLACE', 'Replace (default)',
+             "Children replace the parent when refined. Network-efficient but "
+             "produces visible gaps along tile boundaries during LOD transitions"),
+            ('ADD', 'Add (parent stays under children)',
+             "Parent tile remains rendered while children load on top. Eliminates "
+             "inter-tile gaps and 'flying triangles' but costs ~30% more bandwidth "
+             "and increases GPU overdraw"),
+        ],
+        default='REPLACE',
+        description=(
+            "How the loader transitions between LOD levels. Switch to ADD if "
+            "you see floating triangles or seams between tiles in ATON."
+        ),
+    )
     S.cesium_lod_strategy = bpy.props.EnumProperty(
         name="LOD Strategy",
         items=[
@@ -279,6 +296,18 @@ def register():
         default=True,
         description="If a tileset with the same name already exists in ATON's collections folder, replace it",
     )
+    S.cesium_aton_error_target = bpy.props.FloatProperty(
+        name="Error target (px)",
+        default=5.0,
+        min=0.5,
+        max=50.0,
+        description=(
+            "Screen-space error target for the 3D Tiles loader (lower = more "
+            "aggressive refine = more tiles fetched from network, sharper "
+            "result; higher = fewer tiles, blurrier). ATON's default is 20. "
+            "Written into scene.json so the page applies it automatically"
+        ),
+    )
     S.cesium_aton_yup_rotation = bpy.props.EnumProperty(
         name="Y-up rotation",
         items=[
@@ -330,6 +359,7 @@ def unregister():
         "cesium_lod_leaf_atlas_size",
         "cesium_lod_root_atlas_size",
         "cesium_lod_preserve_borders",
+        "cesium_tile_refine_mode",
         "cesium_lod_strategy",
         "cesium_native_bake_texture_atlas",
         "cesium_native_bake_texture_size",
@@ -365,6 +395,7 @@ def unregister():
         "cesium_aton_open_browser",
         "cesium_aton_overwrite",
         "cesium_aton_yup_rotation",
+        "cesium_aton_error_target",
         "cesium_zip_output",
         "cesium_progress_active",
         "cesium_progress_task",

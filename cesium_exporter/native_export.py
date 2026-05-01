@@ -246,7 +246,8 @@ def _export_node_glb(
 #  Tileset JSON generation
 # ---------------------------------------------------------------------------
 
-def _native_tree_to_tileset_node(node, root_error, base_depth=0, external_subtree_map=None):
+def _native_tree_to_tileset_node(node, root_error, base_depth=0, external_subtree_map=None,
+                                  refine_mode="REPLACE"):
     tile = {
         "boundingVolume": {"box": _bbox_to_box(node["bbox"])},
         "geometricError": 0.0,
@@ -256,7 +257,7 @@ def _native_tree_to_tileset_node(node, root_error, base_depth=0, external_subtre
     node_key = id(node)
     if external_subtree_map and node_key in external_subtree_map:
         tile["geometricError"] = root_error / (2 ** max(local_depth, 0))
-        tile["refine"] = "REPLACE"
+        tile["refine"] = refine_mode
         tile["content"] = {"uri": external_subtree_map[node_key]}
         return tile
 
@@ -266,13 +267,14 @@ def _native_tree_to_tileset_node(node, root_error, base_depth=0, external_subtre
 
     if node["children"]:
         tile["geometricError"] = root_error / (2 ** max(local_depth, 0))
-        tile["refine"] = "REPLACE"
+        tile["refine"] = refine_mode
         tile["children"] = [
             _native_tree_to_tileset_node(
                 child,
                 root_error=root_error,
                 base_depth=base_depth,
                 external_subtree_map=external_subtree_map,
+                refine_mode=refine_mode,
             )
             for child in node["children"]
         ]
@@ -424,6 +426,10 @@ def _run_native_implicit_layout(
     # Top-level error stays high so the asset is visible at any distance.
     root_error = max(bbox_diag * 100.0, 10000.0)
 
+    refine_mode = str(getattr(scene, "cesium_tile_refine_mode", "REPLACE")).upper()
+    if refine_mode not in ("REPLACE", "ADD"):
+        refine_mode = "REPLACE"
+
     subdivision = "OCTREE" if tree_type == 'OCTREE' else "QUADTREE"
     root_box = _bbox_to_box(tree["bbox"])
     tileset = {
@@ -458,7 +464,7 @@ def _run_native_implicit_layout(
                 "properties": {"tightBoundingBox": root_box},
             },
             "geometricError": root_tile_error,
-            "refine": "REPLACE",
+            "refine": refine_mode,
             "content": {"uri": content_uri_template},
             "implicitTiling": {
                 "subdivisionScheme": subdivision,
@@ -745,6 +751,10 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
         tree_root_error = bbox_diag * 0.5
         top_level_error = max(bbox_diag * 100.0, 10000.0)
 
+        refine_mode = str(getattr(scene, "cesium_tile_refine_mode", "REPLACE")).upper()
+        if refine_mode not in ("REPLACE", "ADD"):
+            refine_mode = "REPLACE"
+
         if scene.cesium_native_hierarchy_layout == 'EXTERNAL_SUBTILESETS':
             for subtree in subtree_nodes:
                 sub_bbox_diag = max(_bbox_diag_len(subtree["bbox"]), 1.0)
@@ -753,6 +763,7 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
                 subtree_tile = _native_tree_to_tileset_node(
                     subtree, root_error=sub_root_error,
                     base_depth=subtree["depth"], external_subtree_map=None,
+                    refine_mode=refine_mode,
                 )
                 subtree_folder = subtree_folder_map.get(id(subtree), "")
                 subtree_json_path = os.path.join(output_dir, subtree_folder, "tileset.json")
@@ -766,6 +777,7 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
         tileset_root = _native_tree_to_tileset_node(
             tree, root_error=tree_root_error, base_depth=0,
             external_subtree_map=external_subtree_map,
+            refine_mode=refine_mode,
         )
         if getattr(scene, "cesium_root_transform_yup_for_threejs", False):
             tileset_root["transform"] = list(_LOCAL_ZUP_TO_YUP_TRANSFORM)

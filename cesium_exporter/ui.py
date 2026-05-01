@@ -88,6 +88,7 @@ class VIEW3D_PT_cesium_export(bpy.types.Panel):
                        "1.4  Tiling (octree / LOD)", icon='MOD_LATTICE')
         if sec is not None:
             sec.prop(scene, "cesium_tree_type")
+            sec.prop(scene, "cesium_tile_refine_mode")
             sec.prop(scene, "cesium_lod_mode")
             if scene.cesium_lod_mode:
                 sec.prop(scene, "cesium_lod_strategy")
@@ -235,6 +236,7 @@ class VIEW3D_PT_cesium_export(bpy.types.Panel):
             row_n.operator("object.generate_aton_scene_name",
                            text="", icon='FILE_REFRESH')
             aton.prop(scene, "cesium_aton_yup_rotation")
+            aton.prop(scene, "cesium_aton_error_target")
             row_p = aton.row(align=True)
             row_p.prop(scene, "cesium_aton_open_browser", text="Open browser")
             row_p.prop(scene, "cesium_aton_overwrite", text="Overwrite")

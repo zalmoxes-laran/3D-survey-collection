@@ -42,33 +42,68 @@ def _build_face_spatial_data(mesh, to_gltf_yup=False):
 
     return face_ids, centroids, face_mins, face_maxs
 
-def _split_face_ids(face_ids, centroids, bbox, tree_type):
+def _split_face_ids(face_ids, centroids, bbox, tree_type, face_mins=None, face_maxs=None):
+    # Face overlap split: a face whose bbox crosses a bin boundary enters every
+    # bin it touches (not only the bin of its centroid). Eliminates faces that
+    # protrude outside their tile's bounding volume.
+    # Falls back to centroid-only assignment if face_mins/face_maxs are not
+    # provided (legacy callers).
     (min_x, min_y, min_z), (max_x, max_y, max_z) = bbox
     mid_x = (min_x + max_x) * 0.5
     mid_y = (min_y + max_y) * 0.5
     mid_z = (min_z + max_z) * 0.5
 
+    overlap = face_mins is not None and face_maxs is not None
     bins = {}
     groups = []
     if tree_type == 'OCTREE':
-        for fid in face_ids:
-            cx, cy, cz = centroids[fid]
-            ix = 1 if cx >= mid_x else 0
-            iy = 1 if cy >= mid_y else 0
-            iz = 1 if cz >= mid_z else 0
-            slot = ix + (iy * 2) + (iz * 4)
-            bins.setdefault(slot, []).append(fid)
+        if overlap:
+            for fid in face_ids:
+                fmin = face_mins[fid]
+                fmax = face_maxs[fid]
+                ix_lo = 0 if fmin[0] <  mid_x else 1
+                ix_hi = 1 if fmax[0] >= mid_x else 0
+                iy_lo = 0 if fmin[1] <  mid_y else 1
+                iy_hi = 1 if fmax[1] >= mid_y else 0
+                iz_lo = 0 if fmin[2] <  mid_z else 1
+                iz_hi = 1 if fmax[2] >= mid_z else 0
+                for ix in range(ix_lo, ix_hi + 1):
+                    for iy in range(iy_lo, iy_hi + 1):
+                        for iz in range(iz_lo, iz_hi + 1):
+                            slot = ix + (iy * 2) + (iz * 4)
+                            bins.setdefault(slot, []).append(fid)
+        else:
+            for fid in face_ids:
+                cx, cy, cz = centroids[fid]
+                ix = 1 if cx >= mid_x else 0
+                iy = 1 if cy >= mid_y else 0
+                iz = 1 if cz >= mid_z else 0
+                slot = ix + (iy * 2) + (iz * 4)
+                bins.setdefault(slot, []).append(fid)
         for slot in range(8):
             vals = bins.get(slot)
             if vals:
                 groups.append((slot, vals))
     else:
-        for fid in face_ids:
-            cx, cy, _ = centroids[fid]
-            ix = 1 if cx >= mid_x else 0
-            iy = 1 if cy >= mid_y else 0
-            slot = ix + (iy * 2)
-            bins.setdefault(slot, []).append(fid)
+        if overlap:
+            for fid in face_ids:
+                fmin = face_mins[fid]
+                fmax = face_maxs[fid]
+                ix_lo = 0 if fmin[0] <  mid_x else 1
+                ix_hi = 1 if fmax[0] >= mid_x else 0
+                iy_lo = 0 if fmin[1] <  mid_y else 1
+                iy_hi = 1 if fmax[1] >= mid_y else 0
+                for ix in range(ix_lo, ix_hi + 1):
+                    for iy in range(iy_lo, iy_hi + 1):
+                        slot = ix + (iy * 2)
+                        bins.setdefault(slot, []).append(fid)
+        else:
+            for fid in face_ids:
+                cx, cy, _ = centroids[fid]
+                ix = 1 if cx >= mid_x else 0
+                iy = 1 if cy >= mid_y else 0
+                slot = ix + (iy * 2)
+                bins.setdefault(slot, []).append(fid)
         for slot in range(4):
             vals = bins.get(slot)
             if vals:
@@ -122,7 +157,10 @@ def _build_native_tree(
         return node
 
     split_basis_bbox = split_bbox if split_bbox is not None else bbox
-    split_groups = _split_face_ids(face_ids, centroids, split_basis_bbox, tree_type)
+    split_groups = _split_face_ids(
+        face_ids, centroids, split_basis_bbox, tree_type,
+        face_mins=face_mins, face_maxs=face_maxs,
+    )
     if len(split_groups) <= 1:
         return node
 
