@@ -10,6 +10,11 @@ def register():
         items=[
             ('ACTIVE_MESH', 'Export active mesh', 'Export active mesh first, then convert'),
             ('EXISTING_OBJ', 'Use existing OBJ file', 'Convert an OBJ already present on disk'),
+            ('MULTI_LOD_SET', 'Multi-LOD set (LODgenerator output)',
+             'Use a pre-baked LOD set (objects named *_LOD0, *_LOD1, ...). '
+             'Skips the per-tile rebake entirely — each LOD level is clipped '
+             'into octree cells preserving its existing material/atlas. '
+             'Recommended workflow when LODgenerator was already used.'),
         ],
         default='ACTIVE_MESH',
     )
@@ -136,6 +141,38 @@ def register():
         ],
         default='REBAKE',
         description="How internal (non-leaf) LOD nodes handle texture mapping",
+    )
+    S.cesium_per_tile_bake_enabled = bpy.props.BoolProperty(
+        name="Per-tile bake (auto-sized atlas)",
+        default=True,
+        description=(
+            "Each tile gets its own focused atlas baked from the source mesh "
+            "(instead of all tiles embedding the same global atlas). Atlas size "
+            "is auto-computed from the tile's face count (~16 px/face). "
+            "This is the architecturally correct way to use 3D Tiles: small, "
+            "high-resolution per-tile textures rather than a single huge global one. "
+            "Disable for legacy global-atlas behavior."
+        ),
+    )
+    S.cesium_uv_algorithm = bpy.props.EnumProperty(
+        name="UV algorithm",
+        items=[
+            ('SMART',     'Smart UV Project',
+             'smart_project — fast but tends to create many small UV islands'),
+            ('ANGLE',     'Angle-Based unwrap',
+             'unwrap(ANGLE_BASED) — best general-purpose, fewer islands'),
+            ('CONFORMAL', 'Conformal unwrap',
+             'unwrap(CONFORMAL) — preserves angles, minimal stretch'),
+            ('MINIMUM',   'Minimum Stretch',
+             'minimize_stretch on conformal seed — best quality, slowest'),
+        ],
+        default='SMART',
+        description=(
+            "Algorithm used to lay out UV islands on the target tile mesh "
+            "before bake. Mirrors LODgenerator's choice. SMART is the safest "
+            "headless default; ANGLE_BASED often produces fewer/better islands "
+            "but can fail bpy.ops.uv.unwrap.poll() in headless contexts."
+        ),
     )
 
     # Texture

@@ -141,6 +141,12 @@ def _build_native_tree(
     path_code="", grid_x=0, grid_y=0, grid_z=0, split_bbox=None,
 ):
     bbox = _bbox_union_from_face_ids(face_ids, face_mins, face_maxs)
+    # cell_bbox is the IDEALIZED octree cell bbox (uniform subdivision of root).
+    # When the caller provides split_bbox (IMPLICIT_TILING layout) it propagates
+    # down the tree via _child_split_bbox. The real geometric clipping at
+    # export time uses cell_bbox; bbox stays as the face-union extent for
+    # 3D Tiles boundingVolume reporting (it's the tight bbox of the content).
+    cell_bbox = split_bbox if split_bbox is not None else bbox
     node = {
         "depth": depth,
         "path_code": path_code,
@@ -148,6 +154,7 @@ def _build_native_tree(
         "grid_y": int(grid_y),
         "grid_z": int(grid_z),
         "bbox": bbox,
+        "cell_bbox": cell_bbox,
         "face_ids": face_ids,
         "children": [],
     }

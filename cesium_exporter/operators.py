@@ -315,6 +315,54 @@ class OBJECT_OT_export_cesium_tiles(bpy.types.Operator):
                     "input_format": 'GLB',
                     "output_dir": output_dir,
                 })
+        elif source_mode == 'MULTI_LOD_SET':
+            # Detect LOD set from selected objects (or scene-wide if none selected)
+            from .multi_lod import detect_lod_set, run_multi_lod_export
+            candidates = list(context.selected_objects) or list(scene.objects)
+            lod_set = detect_lod_set(candidates)
+            if lod_set is None:
+                self.report(
+                    {'ERROR'},
+                    "Multi-LOD mode: no _LOD<N> object set detected. "
+                    "Select at least 2 mesh objects with names ending in _LOD0, _LOD1, ... "
+                    "(use LODgenerator to create them).",
+                )
+                return {'CANCELLED'}
+
+            # Use LOD0's base name as the tileset folder
+            sorted_levels = sorted(lod_set.keys())
+            from .multi_lod import _strip_lod_suffix
+            base_name = _strip_lod_suffix(lod_set[sorted_levels[0]].name)
+            obj_name = _sanitize_name(base_name) or "multi_lod_set"
+            output_dir = (
+                os.path.join(output_root, obj_name)
+                if scene.cesium_create_object_subdir
+                else output_root
+            )
+
+            tree_type = str(getattr(scene, "cesium_tree_type", "OCTREE"))
+            refine = str(getattr(scene, "cesium_tile_refine_mode", "REPLACE"))
+
+            os.makedirs(output_dir, exist_ok=True)
+            print(
+                f"[multi_lod] Exporting LOD set {sorted_levels} "
+                f"(base='{base_name}') -> {output_dir}"
+            )
+            ok, info = run_multi_lod_export(
+                context, scene, lod_set, output_dir,
+                tree_type=tree_type, refine=refine,
+                keep_temp=bool(getattr(scene, "cesium_keep_temp_objects", False)),
+            )
+            if not ok:
+                self.report({'ERROR'}, f"Multi-LOD export failed: {info.get('error', 'unknown')}")
+                return {'CANCELLED'}
+            self.report(
+                {'INFO'},
+                f"Multi-LOD: {info['exported_tiles']} tiles, "
+                f"{info['n_levels']} levels, root depth {info['max_depth']}",
+            )
+            return {'FINISHED'}
+
         else:
             existing_obj_path = bpy.path.abspath(scene.cesium_existing_obj_file).strip()
             if not existing_obj_path:

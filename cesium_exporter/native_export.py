@@ -1,8 +1,34 @@
 import json
+import math
 import os
 
 import bmesh
 import bpy
+
+
+def _auto_atlas_size_for_tile(face_count, target_px_per_face=16, min_size=256, max_size=4096):
+    """Pick a power-of-2 atlas size for a tile, sized to its face count.
+
+    target_px_per_face: approximate texel budget per face after margin overhead.
+    16 is a good balance — enough resolution to avoid sample bleed, low enough
+    to keep tile files small (the whole point of pulverizing the octree).
+
+    Examples (target=16):
+        face_count=  5_000 -> 256  (60k px / 12 px/face)
+        face_count= 10_000 -> 512  (262k px / 26 px/face)
+        face_count= 30_000 -> 1024 (1M px / 35 px/face)
+        face_count= 60_000 -> 1024 (1M px / 17 px/face)
+        face_count=100_000 -> 2048 (4M px / 41 px/face)
+        face_count=486_000 -> 4096 (16M px / 34 px/face)
+    """
+    if face_count <= 0:
+        return min_size
+    pixels_needed = face_count * target_px_per_face
+    side = int(math.ceil(math.sqrt(pixels_needed)))
+    size = 1
+    while size < side:
+        size *= 2
+    return max(min_size, min(max_size, size))
 
 from .glb_unlit import _patch_glb_to_unlit
 from .implicit import (
@@ -21,6 +47,7 @@ from .native_tree import (
     _collect_native_nodes,
     _collect_nodes_at_depth,
 )
+from .octree_clip import _clip_bm_to_bbox, _clip_quadtree_bm_to_bbox
 from .shared import _add_to_cesium_log, _preserve_selection
 from .stats import _build_gltf_export_kwargs
 from .tileset_stitcher import _bbox_diag_len, _bbox_to_box, _bbox_union_from_face_ids
@@ -59,6 +86,8 @@ def _export_node_glb(
     rebake_atlas_size=None,
     rebake_margin_px=8,
     scene=None,
+    cell_bbox=None,
+    tree_type='OCTREE',
 ):
     """Export a GLB for a tree node.
 
@@ -79,7 +108,12 @@ def _export_node_glb(
     _rebake_mat_name = None
 
     try:
-        # 1) Keep only faces belonging to this node
+        # 1) Keep only faces belonging to this node, then geometrically clip
+        # the result to the cell bbox so faces that protrude outside (because
+        # the octree split is by face bbox-overlap, not by geometric cutting)
+        # are split at the cell boundaries. This is the missing ingredient
+        # for a "real" octree: each tile's geometry is fully contained in
+        # its cell. Refs: Cesium Ion / 3DTilesIndex output.
         keep_set = set(keep_face_ids)
         bm = bmesh.new()
         bm.from_mesh(tile_obj.data)
@@ -87,6 +121,16 @@ def _export_node_glb(
         to_delete = [f for f in bm.faces if f.index not in keep_set]
         if to_delete:
             bmesh.ops.delete(bm, geom=to_delete, context='FACES')
+        n_before_clip = len(bm.faces)
+        if cell_bbox is not None and n_before_clip > 0:
+            if tree_type == 'QUADTREE':
+                _clip_quadtree_bm_to_bbox(bm, cell_bbox)
+            else:
+                _clip_bm_to_bbox(bm, cell_bbox)
+            n_after_clip = len(bm.faces)
+            if n_after_clip != n_before_clip:
+                print(f"[CLIP] {tile_obj.name}: {n_before_clip} -> {n_after_clip} faces "
+                      f"(geometric clip at cell bbox boundaries)")
         bm.to_mesh(tile_obj.data)
         bm.free()
         tile_obj.data.update()
@@ -130,32 +174,44 @@ def _export_node_glb(
             if len(tile_obj.data.polygons) == 0:
                 return False
 
-            # 2b) Re-bake texture onto decimated mesh (LODgenerator pattern)
-            if lod_strategy == 'REBAKE' and rebake_atlas_size is not None and scene is not None:
-                print(f"[REBAKE] {tile_obj.name}: decimated to {len(tile_obj.data.polygons)} faces, "
-                      f"rebaking at {rebake_atlas_size}px from {base_obj.name}")
-                ok_rb, rb_img, rb_mat = _rebake_node_texture(
-                    context, scene, base_obj, tile_obj,
-                    atlas_size=rebake_atlas_size,
-                    margin_px=rebake_margin_px,
-                )
-                if ok_rb and rb_mat is not None:
-                    _rebake_img_name = rb_img.name if rb_img else None
-                    _rebake_mat_name = rb_mat.name
-                    tile_obj.data.materials.clear()
-                    tile_obj.data.materials.append(rb_mat)
-                    for poly in tile_obj.data.polygons:
-                        poly.material_index = 0
-                    tile_obj.data.update()
-                    # Skip step 3 (texture swap) — we have a fresh bake
-                    lod_image = None
-                    print(f"[REBAKE] {tile_obj.name}: OK -> mat={rb_mat.name}, img={rb_img.name if rb_img else 'None'}")
-                else:
-                    print(f"[REBAKE] {tile_obj.name}: FAILED (ok={ok_rb}, mat={rb_mat})")
+        # 2b) Per-tile re-bake: each tile gets its own small atlas baked from
+        # base_obj. This is the whole point of an octree + tile system —
+        # individual tiles carry their own focused texture instead of all
+        # embedding the same global atlas. Fires for every tile (leaf or
+        # decimated) when scene.cesium_per_tile_bake_enabled is True.
+        # Independent of lod_strategy: per-tile bake is correct for both
+        # LOD-off (every leaf gets its own atlas) and LOD-on (every level
+        # gets its own atlas at its decimation density).
+        per_tile_bake = (
+            scene is not None
+            and bool(getattr(scene, "cesium_per_tile_bake_enabled", True))
+        )
+        if per_tile_bake and len(tile_obj.data.polygons) > 0:
+            actual_atlas_size = rebake_atlas_size
+            if actual_atlas_size is None or actual_atlas_size <= 0:
+                actual_atlas_size = _auto_atlas_size_for_tile(len(tile_obj.data.polygons))
+            print(f"[REBAKE] {tile_obj.name}: faces={len(tile_obj.data.polygons)}, "
+                  f"atlas={actual_atlas_size}px (auto={rebake_atlas_size is None}) "
+                  f"decimated={'yes' if decimation_ratio < 0.999 else 'no'}")
+            ok_rb, rb_img, rb_mat = _rebake_node_texture(
+                context, scene, base_obj, tile_obj,
+                atlas_size=actual_atlas_size,
+                margin_px=rebake_margin_px,
+            )
+            if ok_rb and rb_mat is not None:
+                _rebake_img_name = rb_img.name if rb_img else None
+                _rebake_mat_name = rb_mat.name
+                tile_obj.data.materials.clear()
+                tile_obj.data.materials.append(rb_mat)
+                for poly in tile_obj.data.polygons:
+                    poly.material_index = 0
+                tile_obj.data.update()
+                # Skip step 3 (texture swap) — we have a fresh bake
+                lod_image = None
+                print(f"[REBAKE] {tile_obj.name}: OK -> mat={rb_mat.name}, img={rb_img.name if rb_img else 'None'}")
             else:
-                if decimation_ratio < 0.999:
-                    print(f"[REBAKE] {tile_obj.name}: SKIPPED rebake (strategy={lod_strategy}, "
-                          f"atlas_size={rebake_atlas_size}, scene={scene is not None})")
+                print(f"[REBAKE] {tile_obj.name}: FAILED (ok={ok_rb}, mat={rb_mat}); "
+                      f"falling back to global atlas")
 
         # 3) Swap texture to LOD-sized atlas if provided (legacy path, skipped if REBAKE succeeded)
         if lod_image is not None:
@@ -373,6 +429,8 @@ def _run_native_implicit_layout(
             rebake_atlas_size=rebake_atlas_sz,
             rebake_margin_px=rebake_margin,
             scene=scene,
+            cell_bbox=node.get("cell_bbox"),
+            tree_type=tree_type,
         )
         if not ok:
             return False, f"Implicit layout: failed exporting tile {tile_label}."
@@ -722,6 +780,8 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
                 rebake_atlas_size=rebake_atlas_sz,
                 rebake_margin_px=rebake_margin,
                 scene=scene,
+                cell_bbox=node.get("cell_bbox"),
+                tree_type=tree_type,
             )
             if not ok:
                 return False, f"Failed exporting tile {prefix}{tile_id}."

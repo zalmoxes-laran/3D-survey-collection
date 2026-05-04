@@ -222,15 +222,44 @@ def _native_bake_basecolor_texture(context, scene, base_obj, atlas_size, margin_
 
             bpy.ops.object.mode_set(mode='EDIT')
             bpy.ops.mesh.select_all(action='SELECT')
-            bpy.ops.uv.smart_project(
-                angle_limit=math.radians(66),       # 66° in radianti
-                margin_method='SCALED',
-                rotate_method='AXIS_ALIGNED_Y',
-                island_margin=0.0,
-                area_weight=0.0,
-                correct_aspect=True,
-                scale_to_bounds=True,
-            )
+            # UV algorithm choice — matches LODgenerator's atlas_uv_algorithm.
+            # bpy.ops.uv.unwrap variants (ANGLE_BASED / CONFORMAL) can fail
+            # poll() in headless contexts; we try them but fall back to
+            # smart_project (always works headless) on any failure.
+            algo = 'SMART'
+            if scene is not None:
+                algo = str(getattr(scene, "cesium_uv_algorithm", "SMART")).upper()
+
+            def _unwrap_smart_fallback():
+                bpy.ops.uv.smart_project(
+                    angle_limit=math.radians(66),
+                    margin_method='SCALED',
+                    rotate_method='AXIS_ALIGNED_Y',
+                    island_margin=0.0,
+                    area_weight=0.0,
+                    correct_aspect=True,
+                    scale_to_bounds=True,
+                )
+
+            try:
+                if algo == 'ANGLE':
+                    bpy.ops.uv.unwrap(method='ANGLE_BASED')
+                elif algo == 'CONFORMAL':
+                    bpy.ops.uv.unwrap(method='CONFORMAL')
+                elif algo == 'MINIMUM':
+                    bpy.ops.uv.unwrap(method='CONFORMAL')
+                    try:
+                        bpy.ops.uv.minimize_stretch(iterations=64, blend=0.0)
+                    except Exception:
+                        pass
+                else:  # SMART
+                    _unwrap_smart_fallback()
+            except Exception as e:
+                print(f"[UV] {algo} unwrap failed ({e}); falling back to SMART")
+                try:
+                    _unwrap_smart_fallback()
+                except Exception as e2:
+                    print(f"[UV] SMART fallback also failed: {e2}")
             bpy.ops.object.mode_set(mode='OBJECT')
 
             # Scale the bake margin with atlas size: an 8 px margin on a
@@ -432,15 +461,44 @@ def _rebake_node_texture(context, scene, base_obj, tile_obj, atlas_size, margin_
 
             bpy.ops.object.mode_set(mode='EDIT')
             bpy.ops.mesh.select_all(action='SELECT')
-            bpy.ops.uv.smart_project(
-                angle_limit=math.radians(66),       # 66° in radianti
-                margin_method='SCALED',
-                rotate_method='AXIS_ALIGNED_Y',
-                island_margin=0.0,
-                area_weight=0.0,
-                correct_aspect=True,
-                scale_to_bounds=True,
-            )
+            # UV algorithm choice — matches LODgenerator's atlas_uv_algorithm.
+            # bpy.ops.uv.unwrap variants (ANGLE_BASED / CONFORMAL) can fail
+            # poll() in headless contexts; we try them but fall back to
+            # smart_project (always works headless) on any failure.
+            algo = 'SMART'
+            if scene is not None:
+                algo = str(getattr(scene, "cesium_uv_algorithm", "SMART")).upper()
+
+            def _unwrap_smart_fallback():
+                bpy.ops.uv.smart_project(
+                    angle_limit=math.radians(66),
+                    margin_method='SCALED',
+                    rotate_method='AXIS_ALIGNED_Y',
+                    island_margin=0.0,
+                    area_weight=0.0,
+                    correct_aspect=True,
+                    scale_to_bounds=True,
+                )
+
+            try:
+                if algo == 'ANGLE':
+                    bpy.ops.uv.unwrap(method='ANGLE_BASED')
+                elif algo == 'CONFORMAL':
+                    bpy.ops.uv.unwrap(method='CONFORMAL')
+                elif algo == 'MINIMUM':
+                    bpy.ops.uv.unwrap(method='CONFORMAL')
+                    try:
+                        bpy.ops.uv.minimize_stretch(iterations=64, blend=0.0)
+                    except Exception:
+                        pass
+                else:  # SMART
+                    _unwrap_smart_fallback()
+            except Exception as e:
+                print(f"[UV] {algo} unwrap failed ({e}); falling back to SMART")
+                try:
+                    _unwrap_smart_fallback()
+                except Exception as e2:
+                    print(f"[UV] SMART fallback also failed: {e2}")
             bpy.ops.object.mode_set(mode='OBJECT')
 
         # --- 2) Create blank target image ---
@@ -484,16 +542,30 @@ def _rebake_node_texture(context, scene, base_obj, tile_obj, atlas_size, margin_
         tile_mesh.update()
 
         # --- 4) Configure Cycles and bake selected-to-active ---
+        # Settings mirror LODgenerator.py (validated visually) — three key
+        # differences from the previous implementation:
+        #   - margin: was 8 px; now ≈ atlas_size (full-atlas bleed). Eliminates
+        #     visible seams along UV island borders that produced the dark
+        #     "shards" we used to see in v3..v8.
+        #   - cage_extrusion: was 0.01 (tight); now 0.1 (matches LODgen).
+        #     Lets bake rays reach the source through small displacements,
+        #     killing the purple "no_diffuse_hit" artifacts on backface-
+        #     adjacent faces.
+        #   - use_pass_color explicit, direct/indirect explicitly off.
         scene.render.engine = 'CYCLES'
-        scene.render.bake.margin = int(margin_px)
+        # Margin: full-atlas bleed (LODgen pattern). Capped to atlas size.
+        effective_margin = max(int(margin_px), int(atlas_size))
+        scene.render.bake.margin = effective_margin
         scene.render.bake.use_clear = True
         if hasattr(scene.render.bake, "margin_type"):
             scene.render.bake.margin_type = 'ADJACENT_FACES'
         if hasattr(scene.render.bake, "use_selected_to_active"):
             scene.render.bake.use_selected_to_active = True
-        # No cage, minimal extrusion (0.01) as per tested manual settings
+        # cage_extrusion 0.1 (LODgen value). Old 0.01 was too tight and
+        # caused 'no_diffuse_hit' purple/blue artifacts on faces with
+        # slightly displaced normals.
         if hasattr(scene.render.bake, "cage_extrusion"):
-            scene.render.bake.cage_extrusion = 0.01
+            scene.render.bake.cage_extrusion = 0.1
         if hasattr(scene.render.bake, "use_cage"):
             scene.render.bake.use_cage = False
         if hasattr(scene.render.bake, "max_ray_distance"):
@@ -535,16 +607,19 @@ def _rebake_node_texture(context, scene, base_obj, tile_obj, atlas_size, margin_
             tile_obj.select_set(True)
             context.view_layer.objects.active = tile_obj
 
+            # NB: explicit kwargs to bpy.ops.object.bake OVERRIDE scene
+            # settings — must mirror the scene values we set above.
+            # cage_extrusion 0.1 + margin=atlas_size (LODgenerator pattern).
             result = bpy.ops.object.bake(
                 type='DIFFUSE',
                 pass_filter={'COLOR'},
                 use_clear=True,
                 use_selected_to_active=True,
-                cage_extrusion=0.01,
+                cage_extrusion=0.1,
                 max_ray_distance=0.0,
                 use_cage=False,
                 margin_type='ADJACENT_FACES',
-                margin=int(margin_px),
+                margin=effective_margin,
             )
             if 'FINISHED' not in result:
                 return False, None, None
