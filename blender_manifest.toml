@@ -1,0 +1,62 @@
+schema_version = "1.0.0"
+
+id = "dsc_tools"
+name = "3D Survey Collection"
+version = "1.7.0-dev.1"
+tagline = "Tools for 3D survey: LOD, Cesium tiles, ortho & panorama"
+maintainer = "E. Demetrescu <emanuel.demetrescu@cnr.it>"
+type = "add-on"
+license = ["SPDX:GPL-3.0-or-later"]
+
+blender_version_min = "4.4.0"
+
+platforms = ["windows-x64", "macos-arm64", "macos-x64", "linux-x64"]
+tags = ["3D View", "Import-Export"]
+
+permissions = { files = "Import and export survey data, 3D models and textures" }
+
+wheels = [
+    "./wheels/cp313/certifi-2026.5.20-py3-none-any.whl",
+    "./wheels/cp313/ezdxf-1.4.4-cp313-cp313-macosx_11_0_arm64.whl",
+    "./wheels/cp313/fonttools-4.63.0-cp313-cp313-macosx_10_13_universal2.whl",
+    "./wheels/cp313/pyparsing-3.3.2-py3-none-any.whl",
+    "./wheels/cp313/pyproj-3.7.2-cp313-cp313-macosx_14_0_arm64.whl",
+    "./wheels/cp313/typing_extensions-4.15.0-py3-none-any.whl"
+    ]
+
+# Build configuration - exclude development and non-runtime files from the package
+[build]
+paths_exclude_pattern = [
+    # Dev directories
+    "scripts/",
+    "dev_utils/",
+    "README_images/",
+    "exporter_cesium/",
+    ".git/",
+    ".github/",
+    ".vscode/",
+    "build/",
+    "dist/",
+    "__pycache__/",
+    # NOTE: wheels/ is intentionally NOT excluded — the manifest references
+    # ./wheels/cp<XY>/*.whl and Blender must find them in the package.
+    # Dev files
+    "*.sh",
+    "*.bat",
+    "blender_manifest_template.toml",
+    "version.json",
+    ".zenodo.json",
+    "*.backup",
+    "ROADMAP.md",
+    # Build artifacts
+    "*.blext",
+    "*.zip",
+    "*.tar.gz",
+    # Hidden / OS / cache
+    ".*",
+    ".DS_Store",
+    "Thumbs.db",
+    "*.pyc",
+    "*.pyo",
+    "*.pyd",
+]

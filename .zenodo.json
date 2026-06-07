@@ -1,0 +1,30 @@
+{
+    "title": "3D Survey Collection for Blender",
+    "upload_type": "software",
+    "description": "Blender add-on for 3D survey workflows: LOD generation, Cesium 3D Tiles export, orthophoto and panorama rendering, DXF import, mesh quality tools and georeferencing (shift) shared with EM-tools.",
+    "creators": [
+        {
+            "name": "Demetrescu, Emanuel",
+            "affiliation": "CNR - Consiglio Nazionale delle Ricerche",
+            "orcid": "0000-0002-5065-7970"
+        }
+    ],
+    "keywords": [
+        "Blender",
+        "photogrammetry",
+        "3D survey",
+        "cultural heritage",
+        "Cesium 3D Tiles",
+        "level of detail",
+        "georeferencing"
+    ],
+    "license": "GPL-3.0-or-later",
+    "related_identifiers": [
+        {
+            "scheme": "url",
+            "identifier": "https://github.com/zalmoxes-laran/3D-survey-collection",
+            "relation": "isSupplementTo",
+            "resource_type": "software"
+        }
+    ]
+}

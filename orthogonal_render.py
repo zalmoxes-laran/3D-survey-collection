@@ -971,23 +971,14 @@ class RENDER_OT_create_orthogonal_svg(Operator):
 
 
 def get_addon_path():
-    """Get the correct path to the addon directory"""
-    # Determina il percorso al file corrente
-    current_path = os.path.realpath(__file__)
-    
-    # Se il file è in una sottocartella dell'addon (come utils/), adatta il percorso
-    path_parts = current_path.split(os.sep)
-    
-    # Cerca l'indice di "3D-survey-collection" nel percorso
-    try:
-        addon_index = path_parts.index("3D-survey-collection")
-        # Ricostruisci il percorso fino alla cartella dell'addon
-        addon_path = os.sep.join(path_parts[:addon_index+1])
-    except ValueError:
-        # Fallback: risali di un solo livello
-        addon_path = os.path.dirname(os.path.dirname(current_path))
-    
-    return addon_path
+    """Return the addon root directory.
+
+    orthogonal_render.py lives at the addon root, so the directory containing
+    this file IS the addon root. Using __file__ works regardless of the addon
+    folder name or install location (legacy addon dir or bl_ext extension
+    namespace) — unlike the old hardcoded "3D-survey-collection" path lookup.
+    """
+    return os.path.dirname(os.path.realpath(__file__))
 
 class RENDER_OT_open_templates_folder(Operator):
     """Open the SVG templates folder"""

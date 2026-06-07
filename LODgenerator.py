@@ -212,8 +212,11 @@ def add_to_lod_log(context, message):
 
 
 def _get_addon_preferences(context):
-    addon_key = (__package__ or "").split(".")[0]
-    addon = context.preferences.addons.get(addon_key)
+    # Use the full __package__ as key: addon preferences are indexed by the
+    # full module name. Under the extension namespace this is
+    # "bl_ext.user_default.<id>"; splitting on "." (old code) yielded "bl_ext"
+    # and silently returned None.
+    addon = context.preferences.addons.get(__package__)
     if addon is None:
         return None
     return addon.preferences

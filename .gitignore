@@ -120,3 +120,7 @@ env/
 
 # Local-only diagnostics (Claude dev sessions, not part of the addon)
 cesium_exporter/dev_diag/
+
+# Built extension packages (local builds land in ../3DSC_Releases)
+*.blext
+

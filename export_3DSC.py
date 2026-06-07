@@ -28,6 +28,10 @@ class ExportConvert3DTiles(bpy.types.Operator):
 
     def execute(self, context):
         #from py3dtiles.convert import convert
+        import importlib.util
+        if importlib.util.find_spec("py3dtiles") is None:
+            self.report({'ERROR'}, "py3dtiles is not installed (optional dependency, not bundled). Install it to use the legacy 3D Tiles export.")
+            return {'CANCELLED'}
         try:
             # Seleziona una cartella di destinazione (questo è solo un placeholder)
             
