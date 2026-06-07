@@ -1016,17 +1016,13 @@ class DXF_PT_ImportPanel(Panel):
                 "Install it, reload Python paths, then restart Blender if needed."
             )
             op.url = "3DSCstructure.html#importers"
-            
-            # Bottone per installare
-            row = layout.row(align=True)
-            op = row.operator("install_3dsc_missing.modules", icon="IMPORT", text="Install ezdxf module")
-            op.is_install = True
-            op.list_modules_to_install = "ezdxf"
-            
-            # Suggerimento per riavviare Blender
+
+            # ezdxf ships bundled with the extension. If it is missing, the
+            # platform wheel failed to install — reinstalling is the fix, not a
+            # runtime pip install (which extensions don't do).
             box = layout.box()
-            box.label(text="Tip: After installation, you may need")
-            box.label(text="to restart Blender for changes to take effect")
+            box.label(text="ezdxf ships bundled with 3DSC.")
+            box.label(text="If missing, reinstall the extension for your platform.")
 
 
 # Registra e deregistra le classi

@@ -386,20 +386,12 @@ class DemPreferences(bpy.types.AddonPreferences):
         layout.label(text="Path to Obj2Tiles.exe")
         layout.prop(self, "exe_path")
         layout = self.layout
-        layout.label(text="Export cesium tiles setup")
-        #layout.prop(self, "filepath", text="Credentials path:")
+        layout.label(text="Bundled Python dependencies")
         if self.is_external_module:
-                layout.label(text="Py3dtiles module (to convert 3d tiles) is correctly installed")
+            layout.label(text="ezdxf and pyproj are available", icon='CHECKMARK')
         else:
-                layout.label(text="Py3dtiles module is missing: install with the button below")
-        row = layout.row()              
-        op = row.operator("install_3dsc_missing.modules", icon="STICKY_UVS_DISABLE", text='Install Py3dtiles modules (waiting some minutes is normal)')
-        op.is_install = True
-        op.list_modules_to_install = "py3dtiles"
-        row = layout.row()
-        op = row.operator("install_3dsc_missing.modules", icon="STICKY_UVS_DISABLE", text='Uninstall Py3dtiles modules (waiting some minutes is normal)')
-        op.is_install = False
-        op.list_modules_to_install = "py3dtiles"
+            layout.label(text="Bundled dependencies missing — try reinstalling the extension", icon='ERROR')
+        layout.label(text="py3dtiles and matplotlib are optional and not bundled.", icon='INFO')
 
         # SVG Templates Management
         layout = self.layout
