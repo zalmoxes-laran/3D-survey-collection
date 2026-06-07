@@ -18,6 +18,10 @@ typing_extensions>=4.6
 # Python dependency is certifi.
 pyproj>=3.6,<4.0
 certifi>=2024.0
+# NOTE: pyproj ships NO macOS-Intel (x86_64) wheel for cp313, so the
+# macosx-x64 + Blender 5.1 build can't bundle it; pyproj is lazy-imported and
+# degrades gracefully there. cp311 (Blender 4.4-5.0) does have an x86_64 wheel
+# at the macosx_11_0 tag (release.yml / build.py use that tag).
 
 # --- NOT bundled (optional, lazy-imported with a friendly message) ----------
 # matplotlib  -> only the orthogonal_render placeholder fallback (PIL covers

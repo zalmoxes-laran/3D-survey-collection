@@ -22,6 +22,8 @@ _setup_one() {
   local pv="$1" force="$2"
   if [ "$(uname)" = "Darwin" ] && [ -f "$ROOT/scripts/setup_dev_macos.sh" ]; then
     bash "$ROOT/scripts/setup_dev_macos.sh" $force "$pv"
+  elif [ "$(uname)" = "Linux" ] && [ -f "$ROOT/scripts/setup_dev_linux.sh" ]; then
+    bash "$ROOT/scripts/setup_dev_linux.sh" $force "$pv"
   else
     "$PY" "$ROOT/scripts/setup_development.py" --python-version="$pv" $force \
       && "$PY" "$ROOT/scripts/version_manager.py" update --python-version="$pv"

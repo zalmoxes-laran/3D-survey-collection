@@ -49,7 +49,7 @@ def download_platform_wheels(platform: str, wheels_dir: Path, python_version: st
     """Download per-platform wheels (used for production/CI cross-builds)."""
     platform_map = {
         'windows': 'win_amd64',
-        'macos-intel': 'macosx_10_13_x86_64',
+        'macos-intel': 'macosx_11_0_x86_64',  # pyproj ships no <11.0 x86_64 wheel
         'macos-arm': 'macosx_11_0_arm64',
         'linux': 'manylinux2014_x86_64',
     }

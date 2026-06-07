@@ -65,7 +65,7 @@ jobs:
           case "${{ matrix.platform }}" in
             windows-x64)  PIP_PLATFORM="win_amd64" ;;
             macosx-arm64) PIP_PLATFORM="macosx_11_0_arm64" ;;
-            macosx-x64)   PIP_PLATFORM="macosx_10_13_x86_64" ;;
+            macosx-x64)   PIP_PLATFORM="macosx_11_0_x86_64" ;;   # pyproj needs macOS >= 11 on Intel
             linux-x64)    PIP_PLATFORM="manylinux2014_x86_64" ;;
           esac
           echo "Downloading wheels for $PIP_PLATFORM (Python ${{ matrix.python-version }})..."
