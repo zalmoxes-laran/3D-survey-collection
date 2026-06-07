@@ -90,7 +90,7 @@ class OBJECT_OT_LOD0(bpy.types.Operator):
                     try:
                         col.objects.unlink(obj)
                         print(f'Unlinked "{obj.name}" from collection "{col.name}"')
-                    except:
+                    except Exception:
                         pass
 
         return {'FINISHED'}
@@ -624,7 +624,7 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                     elif algo == 'MINIMUM':
                         try:
                             bpy.ops.uv.minimize_stretch()
-                        except Exception as e:
+                        except Exception:
                             print("Minimum Stretch operator not available, using conformal instead")
                             bpy.ops.uv.unwrap(method='CONFORMAL', use_limit_boundaries=True)
                     else:
@@ -779,7 +779,7 @@ class OBJECT_OT_LOD(bpy.types.Operator):
 
         minutes = int(end_time // 60)
         seconds = int(end_time % 60)
-        add_to_lod_log(context, f"=== Process completed ===")
+        add_to_lod_log(context, "=== Process completed ===")
         add_to_lod_log(context, f"Total: {ob_tot} objects in {minutes}m {seconds}s")
 
         # Update final progress

@@ -2,11 +2,10 @@ import bpy
 import os
 from .functions import *
 
-import bpy
 import math
 
 from bpy_extras.io_utils import ExportHelper # type: ignore
-from bpy.props import StringProperty, BoolProperty, EnumProperty # type: ignore
+from bpy.props import StringProperty, BoolProperty # type: ignore
 from bpy.types import Operator # type: ignore
 
 import shutil
@@ -29,7 +28,6 @@ class ExportConvert3DTiles(bpy.types.Operator):
 
     def execute(self, context):
         #from py3dtiles.convert import convert
-        from py3dtiles import convert as convert_to_3dtiles
         try:
             # Seleziona una cartella di destinazione (questo è solo un placeholder)
             
@@ -165,7 +163,7 @@ def write_some_data(context, filepath, shift, rot, cam, nam, y_up):
             y_coor = z_coor
             z_coor = -temp_y
         
-        if rot == True or cam == True:
+        if rot or cam:
             rotation_grad_x = math.degrees(obj.rotation_euler[0])
             rotation_grad_y = math.degrees(obj.rotation_euler[1])
             rotation_grad_z = math.degrees(obj.rotation_euler[2])
@@ -183,7 +181,7 @@ def write_some_data(context, filepath, shift, rot, cam, nam, y_up):
             scale_grad_y = obj.scale[1]
             scale_grad_z = obj.scale[2]
 
-        if shift == True:
+        if shift:
             shift_x = context.scene.BL_x_shift
             shift_y = context.scene.BL_y_shift
             shift_z = context.scene.BL_z_shift
@@ -198,16 +196,16 @@ def write_some_data(context, filepath, shift, rot, cam, nam, y_up):
                 y_coor = y_coor+shift_z
                 z_coor = z_coor-temp_shift_y
 
-        if rot == True:
-            if nam == True:
+        if rot:
+            if nam:
                 f.write("%s %s %s %s %s %s %s %s %s %s\n" % (obj.name, x_coor, y_coor, z_coor, rotation_grad_x, rotation_grad_y, rotation_grad_z, scale_grad_x, scale_grad_y, scale_grad_z))
             else:
                 f.write("%s %s %s %s %s %s %s %s %s\n" % (x_coor, y_coor, z_coor, rotation_grad_x, rotation_grad_y, rotation_grad_z, scale_grad_x, scale_grad_y, scale_grad_z))
-        if cam == True:
+        if cam:
             if obj.type == 'CAMERA':
                 f.write("%s %s %s %s %s %s %s %s\n" % (obj.name, x_coor, y_coor, z_coor, rotation_grad_x, rotation_grad_y, rotation_grad_z, obj.data.lens))        
-        if rot == False and cam == False:
-            if nam == True:
+        if not rot and not cam:
+            if nam:
                 f.write("%s %s %s %s\n" % (obj.name, x_coor, y_coor, z_coor))
             else:
                 f.write("%s %s %s\n" % (x_coor, y_coor, z_coor))
@@ -297,6 +295,12 @@ class OBJECT_OT_ExportObjButton(bpy.types.Operator):
                 z_shift = 0.0  
 
         # write active object in obj format
+        # KNOWN ISSUE: wm.obj_export (Blender 4.x) has no global_shift_x/y/z
+        # parameters, unlike the old export_scene.obj (commented below). As a
+        # result x_shift/y_shift/z_shift computed above are NOT applied on export
+        # (regression from the OBJ exporter API migration). Same pattern in the
+        # gltf/obj batch operator below. To restore: translate objects by the
+        # shift before export and restore afterwards.
         #bpy.ops.export_scene.obj(filepath=fn + ".obj", use_selection=True, axis_forward='Y', axis_up='Z', path_mode='RELATIVE', global_shift_x = x_shift, global_shift_y = y_shift, global_shift_z = z_shift)
 
         bpy.ops.wm.obj_export(filepath=fn + ".obj", check_existing=True, export_animation=False, forward_axis='Y', up_axis='Z', global_scale=1.0, apply_modifiers=True, export_eval_mode='DAG_EVAL_VIEWPORT', export_selected_objects=True, export_uv=True, export_normals=True, export_materials=True, export_pbr_extensions=False, path_mode='RELATIVE', export_triangulated_mesh=False, export_curves_as_nurbs=False, export_object_groups=False, export_material_groups=False, export_vertex_groups=False, export_smooth_groups=False, smooth_group_bitflags=False)

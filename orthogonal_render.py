@@ -924,7 +924,7 @@ class RENDER_OT_create_orthogonal_svg(Operator):
             try:
                 # Try to use a font if available
                 font = ImageFont.truetype("arial.ttf", 40)
-            except:
+            except OSError:
                 # Fallback to default
                 font = ImageFont.load_default()
                 
@@ -966,7 +966,7 @@ class RENDER_OT_create_orthogonal_svg(Operator):
                     
                     plt.imsave(placeholder_path, arr)
                     print(f"Created fallback placeholder image at {placeholder_path}")
-            except:
+            except Exception:
                 print("Could not create placeholder image")
 
 

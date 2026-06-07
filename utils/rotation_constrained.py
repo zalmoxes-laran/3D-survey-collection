@@ -95,7 +95,7 @@ class MESH_OT_rotation_constrained(bpy.types.Operator):
                 posaxis = mathutils.Vector([(0, 1)[paxis not in (self.raxis, self.caxis)] for paxis in ("0", "1", "2")])
                 posindex = list(posaxis).index(1)
                 caxis = [(0, 1)[i == int(self.caxis)] for i in range(3)]
-                faces = [face for face in self.mesh.polygons if face.select == True]
+                faces = [face for face in self.mesh.polygons if face.select]
                
                 if not faces:
                     bpy.ops.object.editmode_toggle()

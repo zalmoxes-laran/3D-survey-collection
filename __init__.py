@@ -23,7 +23,7 @@ bl_info = {
     "blender": (4, 2, 0),
     "location": "3D View > Toolbox",
     "description": "A collection of tools for 3D Survey activities",
-    "warning": "Beta version of 1.6.2 3DSC dev1",
+    "warning": "Beta - 3DSC 1.7.0 dev01",
     "wiki_url": "",
     "devel_version": " 3DSC 1.7.0 dev01",  # Aggiunto campo devel_version
     "category": "Tools",
@@ -33,14 +33,18 @@ def get_3dsc_bl_info():
     return bl_info
 
 if "bpy" in locals():
+    # On "Reload Scripts", reload every already-imported submodule of this
+    # package (not just one), so code edits across the addon take effect.
     import importlib
-    importlib.reload(import_3DSC)
+    import sys
+    for _mod_name in [m for m in sys.modules if m.startswith(__name__ + ".")]:
+        try:
+            importlib.reload(sys.modules[_mod_name])
+        except Exception as _exc:
+            print("3DSC reload: skipped %s (%s)" % (_mod_name, _exc))
 
 else:
-    import math
     import bpy
-
-    import bpy.props as prop
 
     from bpy.props import (
             StringProperty,
@@ -51,7 +55,6 @@ else:
             CollectionProperty,
             )
     from bpy.types import (
-            AddonPreferences,
             PropertyGroup,
             )
 
@@ -84,8 +87,6 @@ else:
             lod_shortcuts
             )
     
-    #from .exporter_cesium import export_tile_model  # Legacy: removed
-
 from .external_modules_install import check_external_modules
 from .utils import mesh_cleaner
 
@@ -697,7 +698,6 @@ def register():
     external_modules_install.register()
     export_3DSC.register()
     camera_unreal_exporter.register()
-    #exporter_cesium.export_tile_model.register()
     PhotogrTool.register()
     multimesh_manager.register()
     realitycapture.register()
@@ -936,7 +936,6 @@ def unregister():
     external_modules_install.unregister()
     export_3DSC.unregister()
     PhotogrTool.unregister()
-    #exporter_cesium.export_tile_model.unregister()
     multimesh_manager.unregister()
     realitycapture.unregister()
     functions.unregister()

@@ -737,8 +737,11 @@ class OBJECT_OT_parse_cams(bpy.types.Operator):
 
     def execute(self, context):
 
-        path = bpy.utils.script_paths(subdir="Addons/3D-survey-collection/src/", user_pref=True, check_all=False, use_user=True)
-        path2xml = os.path.join(path[0], "cams.xml")
+        addon_dir = os.path.dirname(os.path.abspath(__file__))
+        path2xml = os.path.join(addon_dir, "src", "cams.xml")
+        if not os.path.exists(path2xml):
+            self.report({'ERROR'}, "cams.xml not found at %s" % path2xml)
+            return {'CANCELLED'}
         tree = ET.parse(path2xml)
         root = tree.getroot()
         

@@ -15,7 +15,6 @@ Usage:
 
 import os
 import argparse
-import math
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -341,7 +340,7 @@ def generate_svg(config):
     parts.append('  </defs>')
 
     # Named view (Inkscape metadata)
-    parts.append(f'''  <sodipodi:namedview
+    parts.append('''  <sodipodi:namedview
      id="namedview"
      pagecolor="#ffffff"
      bordercolor="#666666"

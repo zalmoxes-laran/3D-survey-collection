@@ -1,7 +1,5 @@
 import bpy
 import time
-import bmesh
-import math
 from .functions import *
 from bpy.props import BoolProperty
 
@@ -257,7 +255,7 @@ class OBJECT_OT_projectsegmentationinversed(bpy.types.Operator):
         if _should_preclean(context.scene):
             try:
                 _preprocess_mesh_topology(context, ob_to_cut)
-            except RuntimeError as e:
+            except RuntimeError:
                 self.report({'WARNING'}, f"Pre-clean skipped on '{ob_to_cut.name}' (linked mesh, not editable): cutting on original mesh.")
 
         ob_tot = len(cutters)
