@@ -7,7 +7,9 @@
 #   ./em.sh build [3.11|3.13]               build a dev .blext into ../3DSC_Releases
 #   ./em.sh dev [3.11|3.13]                 increment dev build + build
 #   ./em.sh inc [dev_build|patch|minor|major]   bump version
-#   ./em.sh stable                          build stable + git tag
+#   ./em.sh stable                          build stable .blext locally + git tag
+#   ./em.sh devrel [3.11|3.13]              bump dev + commit + tag + PUSH (CI builds zips)
+#   ./em.sh ghrelease                       stable release: bump + tag + PUSH (CI + Zenodo)
 #   ./em.sh current | status                show version (+ git status)
 #   ./em.sh clean                           remove __pycache__ dirs
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -25,6 +27,9 @@ _setup_one() {
       && "$PY" "$ROOT/scripts/version_manager.py" update --python-version="$pv"
   fi
 }
+
+# Bare version string from version_manager, e.g. "1.7.0-dev.2".
+_version() { "$PY" "$ROOT/scripts/version_manager.py" current | awk '{print $3}'; }
 
 case "$cmd" in
   first_setup)
@@ -65,5 +70,46 @@ case "$cmd" in
   current)  "$PY" "$ROOT/scripts/version_manager.py" current ;;
   status)   "$PY" "$ROOT/scripts/version_manager.py" current; git -C "$ROOT" status --short ;;
   clean)    find "$ROOT" -type d -name __pycache__ -prune -exec rm -rf {} + ; echo "cleaned __pycache__" ;;
-  *)        sed -n '2,13p' "$ROOT/em.sh" ;;
+
+  devrel)
+    # Dev release: bump dev build, commit, tag, PUSH -> GitHub Actions builds
+    # the per-platform .zip files (release.yml triggers on v*.*.*-dev.* tags).
+    echo "== 3DSC dev release: push a dev tag -> CI builds .zip x4 platforms =="
+    "$PY" "$ROOT/scripts/version_manager.py" current
+    printf "Continue? This commits, tags and PUSHES (CI build ~10-15 min). (y/N): "
+    read -r reply; case "$reply" in [Yy]*) ;; *) echo "cancelled"; exit 0 ;; esac
+    "$PY" "$ROOT/scripts/version_manager.py" increment --part dev_build >/dev/null
+    ver="$(_version)"; [ -z "$ver" ] && { echo "ERROR: could not read version"; exit 1; }
+    branch="$(git -C "$ROOT" rev-parse --abbrev-ref HEAD)"
+    git -C "$ROOT" add -A
+    git -C "$ROOT" commit -m "build: dev release $ver"
+    git -C "$ROOT" tag "v$ver"
+    git -C "$ROOT" push origin "$branch"
+    git -C "$ROOT" push origin "v$ver"
+    echo "Pushed v$ver on $branch."
+    echo "  Actions: https://github.com/zalmoxes-laran/3D-survey-collection/actions"
+    echo "  Release: https://github.com/zalmoxes-laran/3D-survey-collection/releases/tag/v$ver"
+    ;;
+
+  ghrelease)
+    # Stable release: bump (patch/minor/major), set stable, commit, tag, PUSH.
+    # CI builds the zips AND (on non-prerelease tags) archives to Zenodo.
+    echo "== 3DSC stable release: push a stable tag -> CI builds + Zenodo =="
+    "$PY" "$ROOT/scripts/version_manager.py" current
+    printf "Increment (patch/minor/major) [patch]: "; read -r inc; inc="${inc:-patch}"
+    printf "Create STABLE release and PUSH? (y/N): "; read -r reply
+    case "$reply" in [Yy]*) ;; *) echo "cancelled"; exit 0 ;; esac
+    "$PY" "$ROOT/scripts/version_manager.py" increment --part "$inc" >/dev/null
+    "$PY" "$ROOT/scripts/version_manager.py" set-mode --mode stable >/dev/null
+    ver="$(_version)"; [ -z "$ver" ] && { echo "ERROR: could not read version"; exit 1; }
+    branch="$(git -C "$ROOT" rev-parse --abbrev-ref HEAD)"
+    git -C "$ROOT" add -A
+    git -C "$ROOT" commit -m "release: $ver"
+    git -C "$ROOT" tag "v$ver"
+    git -C "$ROOT" push origin "$branch"
+    git -C "$ROOT" push origin "v$ver"
+    echo "Pushed stable v$ver. CI builds zips; Zenodo runs if secret ZENODO_TOKEN + var ZENODO_CONCEPT are set."
+    ;;
+
+  *)        sed -n '2,14p' "$ROOT/em.sh" ;;
 esac
