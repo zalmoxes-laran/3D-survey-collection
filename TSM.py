@@ -3,9 +3,8 @@
 import bpy
 from bpy.types import Operator, Panel, PropertyGroup, UIList
 from bpy.props import (FloatProperty, BoolProperty, EnumProperty, 
-                       StringProperty, CollectionProperty, IntProperty, PointerProperty)
-import bmesh
-from mathutils import Matrix, Vector
+                       StringProperty, CollectionProperty, IntProperty)
+from mathutils import Vector
 
 # =====================================================================
 # PROPERTY GROUPS
@@ -75,7 +74,7 @@ def refresh_tsm_list(context):
     tsm_list.clear()
     
     for obj in bpy.data.objects:
-        if obj.type == 'EMPTY' and obj.get("tsm_system") == True:
+        if obj.type == 'EMPTY' and obj.get("tsm_system"):
             item = tsm_list.add()
             item.name = obj.name
             item.obj_name = obj.name

@@ -1,5 +1,4 @@
 import bpy
-import math
 import mathutils
 from bpy.props import FloatVectorProperty, StringProperty, BoolProperty, EnumProperty
 from bpy.types import Operator, Panel

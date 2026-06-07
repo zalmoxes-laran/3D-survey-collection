@@ -3,15 +3,13 @@ import xml.etree.ElementTree as ET
 import math
 import os
 from bpy_extras.io_utils import ImportHelper
-from bpy.props import BoolProperty, StringProperty, EnumProperty
-from bpy.types import Operator, Panel
+from bpy.props import BoolProperty, StringProperty
+from bpy.types import Panel
 import re
 
 import logging
 log = logging.getLogger(__name__)
 
-import bpy
-import os
 import platform
 import subprocess
 
@@ -344,7 +342,7 @@ class OBJECT_OT_correct_rc_lod_names(bpy.types.Operator):
                                 print(f"Material renamed (generic) to '{new_mat_name}'")
                             else:
                                 # Just add the LOD suffix if no UV part is found
-                                if not lod_part in mat_name:
+                                if lod_part not in mat_name:
                                     new_mat_name = f"{mat_name}_{lod_part}"
                                     slot.material.name = new_mat_name
                                     print(f"Material renamed (simple) to '{new_mat_name}'")
@@ -463,7 +461,7 @@ class ImportReconstructionRegion(bpy.types.Operator, ImportHelper):
             location = [float(x) for x in region.centre.split()]
         else:
             location = [0,0,0]  # Valore di fallback nel caso non ci sia un centro definito
-            self.report({'INFO'}, f"Error: can't load the location of the rcbox. I assume 0,0,0")
+            self.report({'INFO'}, "Error: can't load the location of the rcbox. I assume 0,0,0")
 
 
 
@@ -605,7 +603,7 @@ def register():
     for cls in classes:
         try:
             bpy.utils.register_class(cls)
-        except ValueError as e:
+        except ValueError:
             log.warning(
                 '{} is already registered, now unregister and retry... '.format(cls))
             bpy.utils.unregister_class(cls)

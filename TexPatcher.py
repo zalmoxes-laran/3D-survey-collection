@@ -1,5 +1,4 @@
 import bpy
-import os
 from .functions import *
         
 class OBJECT_OT_textransfer(bpy.types.Operator):

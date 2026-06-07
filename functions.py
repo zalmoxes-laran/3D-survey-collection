@@ -313,7 +313,7 @@ def tex_to_mat():
             if i:
                 try:
                     m = bpy.data.materials[i.name]
-                except:
+                except KeyError:
                     m = bpy.data.materials.new(name=i.name)
                     continue
 
@@ -1190,7 +1190,7 @@ def create_material_from_image(context,image,oggetto,connect,custom_name=None):
     texImage.image = image
 #    imagepath = image.filepath_raw
 #    texImage.image = bpy.data.images.load(imagepath)
-    if connect == True:
+    if connect:
         mat.node_tree.links.new(bsdf.inputs['Base Color'], texImage.outputs['Color'])
 
     # Assign it to object
@@ -1215,7 +1215,7 @@ def GetObjectAndUVMap( objName, uvMapName ):
         if obj.type == 'MESH':
             uvMap = obj.data.uv_layers[uvMapName]
             return obj, uvMap
-    except:
+    except KeyError:
         pass
 
     return None, None
@@ -1273,7 +1273,7 @@ def create_tex_from_file(ItemName,path_dir):
     #realpath = path_dir + ItemName #+ '.' + extension
     try:
         img = bpy.data.images.load(realpath)
-    except:
+    except Exception:
         raise NameError("Cannot load image %s" % realpath)
     # Create image texture from image
     diffTex = bpy.data.textures.new('TEX_'+ItemName, type = 'IMAGE')
@@ -1287,7 +1287,6 @@ def create_pano_ubermat(regenerate_maps):
     obj_mat_mat_name = obj_mat.name+"uberpano"
     if obj_mat.name in scene.pano_list:
         raise NameError("The active object %s is a panorama, skip the process, please select an object you want to create a panoramic material for" % obj_mat.name)
-        return
     else:
         mat = bpy.data.materials.get(obj_mat_mat_name)
 
@@ -1323,6 +1322,7 @@ def create_pano_ubermat(regenerate_maps):
 
         current_y_location = 0
         iteration_num = 1
+        last_pano_mix_node = None
         for pano in scene.pano_list:
             current_pano_name = pano.name
 
@@ -1424,6 +1424,10 @@ def create_pano_ubermat(regenerate_maps):
             iteration_num +=1
             current_y_location -= 350
 
+        if last_pano_mix_node is None:
+            # scene.pano_list was empty: no panorama nodes to wire into the material.
+            return
+
         current_x_location +=400
         current_y_location = 0
         pano_emission_node = nodes.new('ShaderNodeEmission')
@@ -1448,7 +1452,7 @@ def image_from_path(path):
     #path = "path_to_the_image"
     try:
         img = bpy.data.images.load(path)
-    except:
+    except Exception:
         raise NameError("Cannot load image %s" % path)
     return img
 

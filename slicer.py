@@ -341,7 +341,7 @@ def slicer(settings):
                             else:
                                 vlist.append(e1.vertices[1])
                                 vlist.append(e1.vertices[0])
-                        except:
+                        except Exception:
                             e1 = [ed for ed in sliceedges if ed not in elist][0]
                             vlist.append(e1.vertices[0])
                             vlist.append(e1.vertices[1])
@@ -449,14 +449,6 @@ def slicer(settings):
     bpy.ops.object.mode_set(mode='OBJECT')
     aob.select_set(True)
     bpy.context.view_layer.objects.active = aob
-
-class OBJECT_OT_Laser_Slicer(bpy.types.Operator):
-    bl_label = "Laser Slicer"
-    bl_idname = "object.laser_slicer"
-
-    def execute(self, context):
-        slicer(context.scene.slicer_settings)
-        return {'FINISHED'}
 
 class OBJECT_PT_Laser_Slicer_Panel(bpy.types.Panel):
     bl_label = "Laser Slicer Panel"

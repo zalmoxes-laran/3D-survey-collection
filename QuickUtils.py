@@ -7,7 +7,6 @@ from bpy.props import StringProperty, EnumProperty
 from .functions import *
 from .qualitycheck import *
 
-from .utils import mesh_cleaner
 
 
 class OBJECT_OT_invertcoordinates(bpy.types.Operator):

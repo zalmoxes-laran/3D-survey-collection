@@ -1,8 +1,7 @@
 import bpy
 import os
 import math
-import mathutils
-from bpy.props import StringProperty, BoolProperty, FloatVectorProperty, EnumProperty, FloatProperty
+from bpy.props import StringProperty, BoolProperty, EnumProperty, FloatProperty
 from bpy.props import IntProperty
 
 from bpy_extras.io_utils import ImportHelper
@@ -191,7 +190,6 @@ class ImportDXF_3DSC(Operator, ImportHelper):
     
     def import_dxf_lines(self, modelspace, collection, shift):
         """Import LINE entities from DXF"""
-        import ezdxf # type: ignore
         
         lines = modelspace.query('LINE')
         count = 0
@@ -390,7 +388,6 @@ class ImportDXF_3DSC(Operator, ImportHelper):
     
     def import_dxf_circles(self, modelspace, collection, shift):
         """Import CIRCLE entities from DXF"""
-        import ezdxf # type: ignore
         import math
         
         circles = modelspace.query('CIRCLE')
@@ -441,7 +438,6 @@ class ImportDXF_3DSC(Operator, ImportHelper):
     
     def import_dxf_arcs(self, modelspace, collection, shift):
         """Import ARC entities from DXF"""
-        import ezdxf # type: ignore
         import math
         
         arcs = modelspace.query('ARC')
@@ -498,7 +494,6 @@ class ImportDXF_3DSC(Operator, ImportHelper):
     
     def import_dxf_polylines(self, modelspace, collection, shift):
         """Import POLYLINE and LWPOLYLINE entities from DXF"""
-        import ezdxf # type: ignore
         
         polylines = []
         if self.merge_by_layer:
@@ -663,7 +658,6 @@ class ImportDXF_3DSC(Operator, ImportHelper):
     
     def import_dxf_text(self, modelspace, collection, shift):
         """Import TEXT entities from DXF"""
-        import ezdxf # type: ignore
         
         texts = list(modelspace.query('TEXT')) + list(modelspace.query('MTEXT'))
         count = 0
@@ -714,9 +708,7 @@ class ImportDXF_3DSC(Operator, ImportHelper):
 
     def import_dxf_hatches(self, modelspace, collection, shift):
         """Import HATCH entities from DXF as polygon meshes"""
-        import ezdxf
         import bmesh
-        from mathutils import Vector
         
         hatches = modelspace.query('HATCH')
         count = 0
