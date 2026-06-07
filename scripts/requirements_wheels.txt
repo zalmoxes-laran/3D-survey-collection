@@ -1,0 +1,25 @@
+# 3D Survey Collection — bundled runtime dependencies.
+#
+# These packages are downloaded as wheels (pip download --no-deps) and bundled
+# into the extension via blender_manifest.toml. Because we use --no-deps, the
+# FULL runtime closure must be listed explicitly here.
+#
+# numpy is intentionally NOT listed: Blender 4.x+ ships its own numpy.
+
+# --- DXF import (importer/import_dxf.py) ------------------------------------
+# ezdxf is pure-Python (py3-none-any). Its runtime closure:
+ezdxf>=1.1,<2.0
+pyparsing>=3.0
+fonttools>=4.0
+typing_extensions>=4.6
+
+# --- CRS / PROJ data for Cesium georeferencing (cesium_exporter/shared.py) --
+# pyproj ships per-platform binary wheels (bundles PROJ); its only runtime
+# Python dependency is certifi.
+pyproj>=3.6,<4.0
+certifi>=2024.0
+
+# --- NOT bundled (optional, lazy-imported with a friendly message) ----------
+# matplotlib  -> only the orthogonal_render placeholder fallback (PIL covers
+#                the normal path and is already in Blender)
+# py3dtiles   -> only the legacy "Convert to 3D Tiles" export (heavy closure)

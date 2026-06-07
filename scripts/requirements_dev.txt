@@ -1,0 +1,3 @@
+# Dev-only tools for the local .venv (never bundled into the extension).
+build
+wheel
