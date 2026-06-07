@@ -19,8 +19,9 @@ EXCLUDE_SUFFIXES = {'.blext', '.backup', '.pyc'}
 # Patterns pruned from copied subdirectories.
 DIR_IGNORE = shutil.ignore_patterns('__pycache__', '*.pyc', '*.blext', 'dev_diag')
 
-# Python version -> user-facing Blender compatibility tag.
-BLENDER_TAG_MAP = {'3.11': 'blender44', '3.13': 'blender51'}
+# Python version -> user-facing Blender compatibility tag (matches EM-tools).
+# cp311 covers Blender 4.4–5.0, cp313 covers Blender 5.1+.
+BLENDER_TAG_MAP = {'3.11': 'blender50', '3.13': 'blender51'}
 
 
 def clean_build_directory(build_dir: Path):

@@ -1,0 +1,249 @@
+# .github/workflows/release.yml
+name: Build 3D Survey Collection Extensions (Multi-Platform)
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'        # Stable releases (v1.7.0)
+      - 'v*.*.*-rc.*'   # Release candidates (v1.7.0-rc.1)
+      - 'v*.*.*-dev.*'  # Dev releases (v1.7.0-dev.1)
+
+  workflow_dispatch:
+    inputs:
+      version_tag:
+        description: 'Version tag (e.g., v1.7.0-dev.1)'
+        required: true
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform: [windows-x64, macosx-arm64, macosx-x64, linux-x64]
+        python-version: ['3.11', '3.13']
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.version_tag }}"
+          else
+            TAG="${{ github.ref_name }}"
+          fi
+          VERSION=${TAG#v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Set Python ABI tag and Blender tag
+        id: pytag
+        run: |
+          PY_VER="${{ matrix.python-version }}"
+          CP_TAG="cp${PY_VER//.}"
+          echo "cp_tag=$CP_TAG" >> $GITHUB_OUTPUT
+          case "$PY_VER" in
+            3.11) BLENDER_TAG="blender50" ;;
+            3.13) BLENDER_TAG="blender51" ;;
+            *)    BLENDER_TAG="py${PY_VER//.}" ;;
+          esac
+          echo "blender_tag=$BLENDER_TAG" >> $GITHUB_OUTPUT
+
+      - name: Download platform-specific wheels
+        run: |
+          CP_TAG="${{ steps.pytag.outputs.cp_tag }}"
+          mkdir -p wheels/$CP_TAG
+          case "${{ matrix.platform }}" in
+            windows-x64)  PIP_PLATFORM="win_amd64" ;;
+            macosx-arm64) PIP_PLATFORM="macosx_11_0_arm64" ;;
+            macosx-x64)   PIP_PLATFORM="macosx_10_13_x86_64" ;;
+            linux-x64)    PIP_PLATFORM="manylinux2014_x86_64" ;;
+          esac
+          echo "Downloading wheels for $PIP_PLATFORM (Python ${{ matrix.python-version }})..."
+          while IFS= read -r package || [ -n "$package" ]; do
+            [[ -z "$package" || "$package" =~ ^[[:space:]]*# ]] && continue
+            echo "Downloading $package for $PIP_PLATFORM ($CP_TAG)..."
+            pip download "$package" \
+              --only-binary=:all: \
+              --platform="$PIP_PLATFORM" \
+              --python-version=${{ matrix.python-version }} \
+              --implementation=cp \
+              --abi=$CP_TAG \
+              --no-deps \
+              -d wheels/$CP_TAG/ || true
+          done < scripts/requirements_wheels.txt
+          echo "Downloaded wheels:"
+          ls -la wheels/$CP_TAG/
+
+      - name: Generate platform-specific manifest
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          python scripts/version_manager.py set-mode --mode stable --python-version ${{ matrix.python-version }}
+          python scripts/version_manager.py update --python-version ${{ matrix.python-version }}
+          if ! grep -q "version = \"$VERSION\"" blender_manifest.toml; then
+            echo "Repairing manifest version -> $VERSION"
+            sed -i "s/^version = \"[^\"]*\"/version = \"$VERSION\"/" blender_manifest.toml
+          fi
+
+      - name: Create platform-specific package
+        run: |
+          PLATFORM="${{ matrix.platform }}"
+          VERSION="${{ steps.version.outputs.version }}"
+          BLENDER_TAG="${{ steps.pytag.outputs.blender_tag }}"
+          CP_TAG="${{ steps.pytag.outputs.cp_tag }}"
+          PACKAGE_NAME="dsc_tools-v${VERSION}-${PLATFORM}-${BLENDER_TAG}.zip"
+
+          mkdir -p build
+          rsync -av --exclude='.git' \
+                    --exclude='.github' \
+                    --exclude='scripts' \
+                    --exclude='dev_utils' \
+                    --exclude='README_images' \
+                    --exclude='exporter_cesium' \
+                    --exclude='__pycache__' \
+                    --exclude='*.pyc' \
+                    --exclude='build' \
+                    --exclude='wheels' \
+                    --exclude='*.blext' \
+                    --exclude='.gitignore' \
+                    --exclude='blender_manifest_template.toml' \
+                    --exclude='version.json' \
+                    --exclude='em.bat' \
+                    --exclude='em.sh' \
+                    --exclude='.vscode' \
+                    --exclude='.zenodo.json' \
+                    . build/
+
+          # Flatten platform wheels into build/wheels/ and point the manifest at them
+          mkdir -p build/wheels
+          cp wheels/$CP_TAG/*.whl build/wheels/ 2>/dev/null || true
+          sed -i "s|wheels/$CP_TAG/|wheels/|g" build/blender_manifest.toml
+
+          cd build
+          zip -r "../${PACKAGE_NAME}" . -x "*.pyc" "__pycache__/*"
+          cd ..
+          echo "Created package: ${PACKAGE_NAME}"
+          ls -la "${PACKAGE_NAME}"
+          echo "package_name=${PACKAGE_NAME}" >> $GITHUB_ENV
+
+      - name: Upload platform package
+        uses: actions/upload-artifact@v4
+        with:
+          name: dsc_tools-${{ matrix.platform }}-${{ steps.pytag.outputs.blender_tag }}
+          path: ${{ env.package_name }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    # A GitHub Release is created for EVERY tag: -dev/-rc/-alpha/-beta as
+    # "prerelease", the rest as stable. Pre-releases are needed for persistent
+    # asset download links (/releases/download/<tag>/<file>).
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - name: Extract version info
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.version_tag }}"
+          else
+            TAG="${{ github.ref_name }}"
+          fi
+          VERSION=${TAG#v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Check if prerelease
+        id: prerelease
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if [[ "$VERSION" =~ -(dev|rc|alpha|beta) ]]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+            echo "release_type=pre-release" >> $GITHUB_OUTPUT
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+            echo "release_type=stable" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: 3D Survey Collection ${{ steps.version.outputs.tag }}
+          files: dsc_tools-*.zip
+          prerelease: ${{ steps.prerelease.outputs.is_prerelease }}
+          generate_release_notes: true
+          body: |
+            ## 3D Survey Collection ${{ steps.version.outputs.tag }}
+
+            This is a **${{ steps.prerelease.outputs.release_type }}** of 3D Survey Collection.
+
+            ### Downloads for Blender 4.4 – 5.0 (Python 3.11)
+            - **Windows (x64)**: `dsc_tools-${{ steps.version.outputs.tag }}-windows-x64-blender50.zip`
+            - **macOS (Apple Silicon)**: `dsc_tools-${{ steps.version.outputs.tag }}-macosx-arm64-blender50.zip`
+            - **macOS (Intel)**: `dsc_tools-${{ steps.version.outputs.tag }}-macosx-x64-blender50.zip`
+            - **Linux (x64)**: `dsc_tools-${{ steps.version.outputs.tag }}-linux-x64-blender50.zip`
+
+            ### Downloads for Blender 5.1+ (Python 3.13)
+            - **Windows (x64)**: `dsc_tools-${{ steps.version.outputs.tag }}-windows-x64-blender51.zip`
+            - **macOS (Apple Silicon)**: `dsc_tools-${{ steps.version.outputs.tag }}-macosx-arm64-blender51.zip`
+            - **macOS (Intel)**: `dsc_tools-${{ steps.version.outputs.tag }}-macosx-x64-blender51.zip`
+            - **Linux (x64)**: `dsc_tools-${{ steps.version.outputs.tag }}-linux-x64-blender51.zip`
+
+            ### Installation
+            1. Choose the `.zip` matching your **platform** and **Blender version**
+               (Blender 4.4–5.0 → `blender50`, Blender 5.1+ → `blender51`).
+            2. In Blender: **Edit → Preferences → Get Extensions → Install from Disk**.
+            3. Select the downloaded zip (do not unzip) and enable it.
+
+            ### Notes
+            Each package bundles ezdxf and pyproj wheels for its platform/Python.
+            py3dtiles and matplotlib are optional and not bundled.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  zenodo:
+    needs: build
+    runs-on: ubuntu-latest
+    # Archive on Zenodo for STABLE tags only (not -dev/-rc/-alpha/-beta), via
+    # the deposit API. Separate, NON-blocking job: if it fails the GitHub
+    # Release stays valid. Requires repo secret ZENODO_TOKEN (scopes
+    # deposit:write + deposit:actions) and repo variable ZENODO_CONCEPT (the
+    # 3DSC concept record id). If the token is missing the script skips cleanly.
+    if: >-
+      ${{ github.event_name == 'push'
+          && !contains(github.ref_name, '-dev')
+          && !contains(github.ref_name, '-rc')
+          && !contains(github.ref_name, '-alpha')
+          && !contains(github.ref_name, '-beta') }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build source archive
+        run: |
+          TAG="${{ github.ref_name }}"
+          git archive --format=zip --prefix="3D-survey-collection-${TAG}/" HEAD \
+            -o "3D-survey-collection-${TAG}.zip"
+          ls -la "3D-survey-collection-${TAG}.zip"
+
+      - name: Publish source to Zenodo (stable only)
+        env:
+          ZENODO_TOKEN: ${{ secrets.ZENODO_TOKEN }}
+          ZENODO_CONCEPT: ${{ vars.ZENODO_CONCEPT }}
+          TAG: ${{ github.ref_name }}
+          SRC_ZIP: "3D-survey-collection-${{ github.ref_name }}.zip"
+        run: python3 scripts/zenodo_publish.py
