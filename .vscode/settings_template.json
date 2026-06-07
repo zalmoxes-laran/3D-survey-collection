@@ -1,0 +1,33 @@
+{
+    "blender.addon.sourceDirectory": ".",
+    "blender.addon.reloadOnSave": true,
+    "blender.addon.loadAsExtension": true,
+    "blender.addon.extensionDirectoryType": "user",
+    "blender.addon.extensionType": "add-on",
+    "blender.executable": "BLENDER_PATH_PLACEHOLDER",
+    "python.defaultInterpreterPath": "python",
+    "python.analysis.extraPaths": [
+        "./",
+        "./scripts/"
+    ],
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/*.pyc": true,
+        "build/": true,
+        "wheels/": true,
+        "*.blext": true,
+        "blender_manifest.toml": true
+    },
+    "files.watcherExclude": {
+        "**/wheels/**": true,
+        "**/build/**": true,
+        "**/__pycache__/**": true
+    },
+    "search.exclude": {
+        "wheels/": true,
+        "build/": true,
+        "**/__pycache__": true
+    },
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true
+}
