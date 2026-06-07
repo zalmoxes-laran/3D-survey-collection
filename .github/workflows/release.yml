@@ -220,8 +220,10 @@ jobs:
     # Archive on Zenodo for STABLE tags only (not -dev/-rc/-alpha/-beta), via
     # the deposit API. Separate, NON-blocking job: if it fails the GitHub
     # Release stays valid. Requires repo secret ZENODO_TOKEN (scopes
-    # deposit:write + deposit:actions) and repo variable ZENODO_CONCEPT (the
-    # 3DSC concept record id). If the token is missing the script skips cleanly.
+    # deposit:write + deposit:actions). The repo variable ZENODO_CONCEPT is
+    # OPTIONAL: if set, TAG is archived as a new version of that concept; if
+    # empty, the script bootstraps the FIRST deposition and prints the concept
+    # id to set afterwards. If the token is missing the script skips cleanly.
     if: >-
       ${{ github.event_name == 'push'
           && !contains(github.ref_name, '-dev')
