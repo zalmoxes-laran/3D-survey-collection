@@ -77,8 +77,11 @@ case "$cmd" in
     # Dev release: bump dev build, commit, tag, PUSH -> GitHub Actions builds
     # the per-platform .zip files (release.yml triggers on v*.*.*-dev.* tags).
     echo "== 3DSC dev release: push a dev tag -> CI builds .zip x4 platforms =="
-    "$PY" "$ROOT/scripts/version_manager.py" current
-    printf "Continue? This commits, tags and PUSHES (CI build ~10-15 min). (y/N): "
+    cur="$(_version)"
+    next="$("$PY" "$ROOT/scripts/version_manager.py" next --part dev_build)"
+    echo "Current:                    $cur"
+    echo "Will commit, tag and push:  v$next   (CI builds 8 zips, ~10-15 min)"
+    printf "Continue? (y/N): "
     read -r reply; case "$reply" in [Yy]*) ;; *) echo "cancelled"; exit 0 ;; esac
     "$PY" "$ROOT/scripts/version_manager.py" increment --part dev_build >/dev/null
     ver="$(_version)"; [ -z "$ver" ] && { echo "ERROR: could not read version"; exit 1; }
@@ -99,7 +102,9 @@ case "$cmd" in
     echo "== 3DSC stable release: push a stable tag -> CI builds + Zenodo =="
     "$PY" "$ROOT/scripts/version_manager.py" current
     printf "Increment (patch/minor/major) [patch]: "; read -r inc; inc="${inc:-patch}"
-    printf "Create STABLE release and PUSH? (y/N): "; read -r reply
+    next="$("$PY" "$ROOT/scripts/version_manager.py" next --part "$inc" --mode stable)"
+    echo "Will commit, tag and push STABLE:  v$next   (CI builds + Zenodo)"
+    printf "Continue? (y/N): "; read -r reply
     case "$reply" in [Yy]*) ;; *) echo "cancelled"; exit 0 ;; esac
     "$PY" "$ROOT/scripts/version_manager.py" increment --part "$inc" >/dev/null
     "$PY" "$ROOT/scripts/version_manager.py" set-mode --mode stable >/dev/null

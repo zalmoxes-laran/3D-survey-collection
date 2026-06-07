@@ -91,8 +91,10 @@ goto :eof
 
 :devrel
 echo == 3DSC dev release: push a dev tag -^> CI builds .zip x4 platforms ==
+for /f "tokens=*" %%v in ('python "%ROOT%\scripts\version_manager.py" next --part dev_build') do set "NEXT=%%v"
 "%PY%" "%ROOT%\scripts\version_manager.py" current
-set /p REPLY=Continue? commit+tag+PUSH (CI ~10-15 min). (y/N):
+echo Will commit, tag and push: v!NEXT!   - CI builds 8 zips
+set /p REPLY=Continue? (y/N):
 if /i not "!REPLY!"=="y" ( echo cancelled & goto :eof )
 "%PY%" "%ROOT%\scripts\version_manager.py" increment --part dev_build >nul
 for /f "tokens=3" %%v in ('python "%ROOT%\scripts\version_manager.py" current') do set "VER=%%v"
@@ -111,6 +113,8 @@ echo == 3DSC stable release: push a stable tag -^> CI builds + Zenodo ==
 "%PY%" "%ROOT%\scripts\version_manager.py" current
 set /p INC=Increment (patch/minor/major) [patch]:
 if "!INC!"=="" set "INC=patch"
+for /f "tokens=*" %%v in ('python "%ROOT%\scripts\version_manager.py" next --part !INC! --mode stable') do set "NEXT=%%v"
+echo Will commit, tag and push STABLE: v!NEXT!
 set /p REPLY=Create STABLE release and PUSH? (y/N):
 if /i not "!REPLY!"=="y" ( echo cancelled & goto :eof )
 "%PY%" "%ROOT%\scripts\version_manager.py" increment --part !INC! >nul

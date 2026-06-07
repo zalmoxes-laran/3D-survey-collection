@@ -41,7 +41,13 @@ class VersionManager:
             return base
 
     def increment_version(self, part: str = 'dev_build') -> str:
-        config = self.load_version_config()
+        config = self._apply_increment(self.load_version_config(), part)
+        self.save_version_config(config)
+        return self.get_version_string(config)
+
+    @staticmethod
+    def _apply_increment(config: Dict, part: str) -> Dict:
+        """Apply a version bump to `config` in place (no save). Returns it."""
         if part == 'dev_build':
             config['dev_build'] = config.get('dev_build', 0) + 1
         elif part == 'rc_build':
@@ -61,8 +67,16 @@ class VersionManager:
             config['patch'] = 0
             config['dev_build'] = 0
             config['rc_build'] = 1
-        self.save_version_config(config)
-        return self.get_version_string(config)
+        return config
+
+    def preview_next(self, part: str = 'dev_build', mode: str = None) -> str:
+        """Version string that increment(part) [+ optional mode] would produce,
+        WITHOUT writing version.json. Used to preview a release before pushing."""
+        import copy
+        cfg = self._apply_increment(copy.deepcopy(self.load_version_config()), part)
+        if mode:
+            cfg['mode'] = mode
+        return self.get_version_string(cfg)
 
     def set_mode(self, mode: str):
         config = self.load_version_config()
@@ -171,7 +185,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Manage 3D Survey Collection versions")
-    parser.add_argument('action', choices=['increment', 'set-mode', 'update', 'current'])
+    parser.add_argument('action', choices=['increment', 'set-mode', 'update', 'current', 'next'])
     parser.add_argument('--part', choices=['dev_build', 'rc_build', 'patch', 'minor', 'major'],
                         default='dev_build')
     parser.add_argument('--mode', choices=['dev', 'rc', 'stable'])
@@ -195,6 +209,9 @@ if __name__ == "__main__":
     elif args.action == 'update':
         version = vm.update_manifest(args.python_version)
         print(f"Files updated to version: {version}")
+    elif args.action == 'next':
+        # Preview the version increment(--part) [+ --mode] would produce (no save).
+        print(vm.preview_next(args.part, args.mode))
     elif args.action == 'current':
         config = vm.load_version_config()
         print(f"Current version: {vm.get_version_string(config)} (mode: {config.get('mode', 'dev')})")
