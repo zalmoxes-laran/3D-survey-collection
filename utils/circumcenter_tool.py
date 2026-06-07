@@ -4,7 +4,7 @@ import math
 import traceback
 import mathutils
 from bpy.types import Operator, Panel
-from bpy.props import BoolProperty, FloatProperty, EnumProperty, FloatVectorProperty
+from bpy.props import BoolProperty, FloatVectorProperty
 
 class MESH_OT_improved_circumcenter(Operator):
     """Create a circle from three selected vertices, using their circumcenter as the center"""
@@ -162,7 +162,7 @@ class MESH_OT_improved_circumcenter(Operator):
                         # For newer Blender versions
                         if hasattr(circle_obj.display, "show_object_color"):
                             circle_obj.display.show_object_color = True
-                    except:
+                    except Exception:
                         # Older versions might use different API
                         pass
                     

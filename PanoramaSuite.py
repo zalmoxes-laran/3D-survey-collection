@@ -1,24 +1,14 @@
 import bpy
-import mathutils
 
-from bpy.types import Panel
-from bpy.types import Operator
-from bpy.types import PropertyGroup
 
 from .functions import *
 
 import os
-from bpy_extras.io_utils import ImportHelper, axis_conversion
 
-from bpy.props import (BoolProperty,
-                       FloatProperty,
-                       StringProperty,
-                       EnumProperty,
-                       CollectionProperty
+from bpy.props import (StringProperty
                        )
 
 import json
-import os
 import shutil
 
 def panolistitem_to_obj(item_in_list):

@@ -1,10 +1,6 @@
 import bpy
-import os
-import time
 from .functions import *
 
-import nodeitems_utils
-from bpy.types import Header, Menu, Panel
 
 
 class OBJECT_OT_removeccsetup(bpy.types.Operator):

@@ -3,7 +3,6 @@ import sys
 import os
 import re
 import bpy
-import site
 import tempfile
 
 from bpy.props import BoolProperty, StringProperty
@@ -241,7 +240,7 @@ def register():
 	for cls in classes:
 		try:
 			bpy.utils.register_class(cls)
-		except ValueError as e:
+		except ValueError:
 			log.warning('{} is already registered, now unregister and retry... '.format(cls))
 			bpy.utils.unregister_class(cls)
 			bpy.utils.register_class(cls)

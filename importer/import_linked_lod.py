@@ -1,7 +1,6 @@
 import bpy
 import os
 import re
-from pathlib import Path
 import math
 from bpy.props import (StringProperty,
                        BoolProperty,

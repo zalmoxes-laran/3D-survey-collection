@@ -43,7 +43,6 @@ class Pip:
     
     @staticmethod
     def _ensure_user_site_package():
-        import os
         import site
         import sys
         site_package = site.getusersitepackages()

@@ -10,8 +10,6 @@ from bpy.props import (StringProperty,
                        )
 
 from bpy.types import Panel
-from bpy.types import PropertyGroup
-from bpy.types import Menu, UIList
 
 import logging
 log = logging.getLogger(__name__)
@@ -248,7 +246,7 @@ def register():
     for cls in classes:
         try:
             bpy.utils.register_class(cls)
-        except ValueError as e:
+        except ValueError:
             log.warning(
                 '{} is already registered, now unregister and retry... '.format(cls))
             bpy.utils.unregister_class(cls)

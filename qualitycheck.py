@@ -268,9 +268,9 @@ class MESH_OT_info_texres(Operator):
             texture_area = texture_area + res_unit_area
         texture_area = 1000/(math.sqrt(texture_area/total_area)) if texture_area > 0 and total_area > 0 else 0
         mean_poly = total_polynum/total_area if total_area > 0 else 0
-        info.append((f"Mean resolution ", None))
-        info.append((f"- Tex: "+str(round(texture_area,2))+" mm/pixel", None))
-        info.append((f"- Poly: "+str(round(mean_poly,1))+" poly/m²", None))
+        info.append(("Mean resolution ", None))
+        info.append(("- Tex: "+str(round(texture_area,2))+" mm/pixel", None))
+        info.append(("- Poly: "+str(round(mean_poly,1))+" poly/m²", None))
         if missing_materials > 0 or missing_textures > 0:
             info.append((f"Skipped: no material={missing_materials}, no texture={missing_textures}", None))
         report_data.update(*info)

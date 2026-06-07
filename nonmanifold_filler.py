@@ -2,7 +2,6 @@ import bpy
 import bmesh
 from bpy.types import Operator, Panel
 from bpy.props import BoolProperty, FloatProperty, EnumProperty, FloatVectorProperty
-import time
 
 class MESH_OT_fill_nonmanifold(Operator):
     """Fill non-manifold edges with faces and apply nodata pattern material"""
@@ -148,7 +147,7 @@ class MESH_OT_fill_nonmanifold(Operator):
                 try:
                     # Fill using edge_face_add
                     bpy.ops.mesh.edge_face_add()
-                    print(f"  Created faces from edges")
+                    print("  Created faces from edges")
                     
                     # SIMPLIFIED APPROACH: The newly created faces remain selected after edge_face_add
                     # Switch to face select mode to work with the created faces
@@ -158,7 +157,7 @@ class MESH_OT_fill_nonmanifold(Operator):
                     if self.improve_geometry:
                         bpy.ops.mesh.quads_convert_to_tris(quad_method='BEAUTY', ngon_method='BEAUTY')
                         bpy.ops.mesh.beautify_fill()
-                        print(f"  Improved geometry")
+                        print("  Improved geometry")
                     
                     # Use F2 addon if available and enabled
                     if self.use_f2:
@@ -170,7 +169,7 @@ class MESH_OT_fill_nonmanifold(Operator):
                     # Directly assign the material to the selected faces
                     # (which are the newly created ones since they remain selected)
                     bpy.ops.object.material_slot_assign()
-                    print(f"  Assigned material to new faces")
+                    print("  Assigned material to new faces")
                     
                     processed_count += 1
                     print(f"  Successfully processed {obj.name}")
