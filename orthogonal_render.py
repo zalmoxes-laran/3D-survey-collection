@@ -1,7 +1,7 @@
 import bpy
 import os
 import math
-from mathutils import Vector
+from mathutils import Vector, Matrix
 from bpy.props import EnumProperty, IntProperty, StringProperty, BoolProperty, FloatProperty
 from bpy.types import Panel, Operator
 from .functions import make_path_relative
@@ -27,6 +27,46 @@ RESOLUTION_PRESETS = [
     ("LOW", "Low (2000x2000)", "2000x2000 pixels", 2000),
     ("MED", "Medium (4000x4000)", "4000x4000 pixels", 4000),
     ("HIGH", "High (6000x6000)", "6000x6000 pixels", 6000)
+]
+
+# Three-point "TriLamp" light rig, reproduced from Rachele's reference
+# Luci.blend (the lights parented to the base OrthoRenderCamera, ortho_scale
+# 1.0 -> calibrated for a ~1m object). Transforms are LOCAL to the camera:
+# +X right, +Y up, -Z toward the subject. The rig is parented to the camera
+# so it orbits with the viewpoint; positions/energies are scaled to the
+# object size at setup time (see LIGHT_RIG_SIZE_REF) and keyframed on every
+# pose so each of the six views can be fine-tuned manually afterwards.
+LIGHT_RIG_COLLECTION = "OrthoRender_Lights"
+LIGHT_RIG_SIZE_REF = 1.0  # meters: object size the reference rig was tuned for
+
+TRILAMP_RIG = [
+    {
+        "name": "OrthoRender_TriLamp-Key",
+        "type": "POINT",
+        "energy": 150.0,
+        "color": (1.0, 1.0, 1.0),
+        "location": (-1.1485, -1.5719, 0.7455),
+        "rotation": (0.0, 0.0, 0.0),
+    },
+    {
+        "name": "OrthoRender_TriLamp-Fill",
+        "type": "POINT",
+        "energy": 250.0,
+        "color": (1.0, 1.0, 1.0),
+        "location": (1.6853, -0.4644, 0.5145),
+        "rotation": (0.7014, 1.2025, 0.5929),
+    },
+    {
+        "name": "OrthoRender_TriLamp-Back",
+        "type": "AREA",
+        "energy": 200.0,
+        "color": (1.0, 1.0, 1.0),
+        "location": (-4.1669, 0.3039, 0.8412),
+        "rotation": (0.0, 0.0, 0.0),
+        "shape": "SQUARE",
+        "size": 1.0,
+        "size_y": 0.25,
+    },
 ]
 
 
@@ -109,11 +149,21 @@ class OBJECT_OT_setup_orthogonal_render(Operator):
         
         # Position camera for each view and set keyframes
         self.setup_camera_positions(camera, target, obj, context)
-        
+
+        # Create the three-point light rig parented to the camera
+        light_msg = ""
+        if getattr(scene, "ortho_render_create_lights", True):
+            max_dim = max(self.get_object_bbox_dimensions(obj))
+            n_lights = self.setup_light_rig(camera, max_dim, context)
+            light_msg = f", {n_lights} lights"
+
+        # Restore to the first pose
+        scene.frame_set(scene.frame_start)
+
         # Set render settings
         self.setup_render_settings(context)
-        
-        self.report({'INFO'}, f"Orthogonal render setup complete. Object size: {size_category}, ortho scale: {ortho_scale:.2f}m")
+
+        self.report({'INFO'}, f"Orthogonal render setup complete. Object size: {size_category}, ortho scale: {ortho_scale:.2f}m{light_msg}")
         return {'FINISHED'}
     
     def get_object_bbox_dimensions(self, obj):
@@ -269,6 +319,74 @@ class OBJECT_OT_setup_orthogonal_render(Operator):
             else:
                 scene.timeline_markers[code].frame = i
     
+    def _get_light_rig_collection(self, context):
+        """Return (creating if needed) the collection that holds the rig lights."""
+        coll = bpy.data.collections.get(LIGHT_RIG_COLLECTION)
+        if coll is None:
+            coll = bpy.data.collections.new(LIGHT_RIG_COLLECTION)
+            context.scene.collection.children.link(coll)
+        return coll
+
+    def setup_light_rig(self, camera, max_dim, context):
+        """Create/refresh the three-point light rig parented to the camera.
+
+        The rig reproduces Rachele's reference Luci.blend (Key/Fill/Back).
+        Positions and area-light size scale linearly with the object size,
+        and energy scales with the square of that factor (inverse-square law),
+        using LIGHT_RIG_SIZE_REF as the reference. Each light's LOCAL transform
+        is keyframed on every pose so each of the six views can be fine-tuned
+        by hand afterwards; because the lights are parented to the camera they
+        otherwise orbit rigidly with the viewpoint.
+        """
+        scene = context.scene
+        factor = max(max_dim, 1e-4) / LIGHT_RIG_SIZE_REF
+        coll = self._get_light_rig_collection(context)
+        identity = Matrix.Identity(4)
+
+        light_objs = []
+        for spec in TRILAMP_RIG:
+            name = spec["name"]
+            light_obj = bpy.data.objects.get(name)
+            if light_obj is None or light_obj.type != 'LIGHT':
+                light_data = bpy.data.lights.new(name, type=spec["type"])
+                light_obj = bpy.data.objects.new(name, light_data)
+            light_data = light_obj.data
+
+            # Link into the rig collection (and nowhere else)
+            for c in list(light_obj.users_collection):
+                c.objects.unlink(light_obj)
+            coll.objects.link(light_obj)
+
+            # Light data
+            light_data.type = spec["type"]
+            light_data.color = spec["color"]
+            light_data.energy = spec["energy"] * factor * factor
+            if spec["type"] == 'AREA':
+                light_data.shape = spec.get("shape", 'SQUARE')
+                light_data.size = spec.get("size", 1.0) * factor
+                if "size_y" in spec:
+                    light_data.size_y = spec["size_y"] * factor
+
+            # Clear any previous animation so re-running gives a clean rig
+            if light_obj.animation_data:
+                light_obj.animation_data_clear()
+
+            # Parent to the camera with local transform == the spec offset
+            light_obj.parent = camera
+            light_obj.matrix_parent_inverse = identity
+            light_obj.location = Vector(spec["location"]) * factor
+            light_obj.rotation_euler = spec["rotation"]
+            light_objs.append(light_obj)
+
+        # Keyframe the local transform on every pose for per-view fine-tuning
+        for i in range(scene.frame_start, scene.frame_end + 1):
+            scene.frame_set(i)
+            for light_obj in light_objs:
+                light_obj.keyframe_insert(data_path="location", frame=i)
+                light_obj.keyframe_insert(data_path="rotation_euler", frame=i)
+
+        return len(light_objs)
+
     def setup_render_settings(self, context):
         """Set up render settings for transparency"""
         scene = context.scene
@@ -398,13 +516,8 @@ class RENDER_OT_create_orthogonal_svg(Operator):
         # Get the current family filter
         family = context.scene.ortho_template_family if hasattr(context.scene, 'ortho_template_family') else 'LEGACY'
 
-        # Percorsi possibili in cui cercare i template
-        possible_paths = [
-            os.path.join(get_addon_path(), "svg_templates"),
-            os.path.join(os.path.dirname(bpy.data.filepath), "svg_templates") if bpy.data.filepath else None,
-            os.path.join(os.path.dirname(bpy.data.filepath), "3DSC", "svg_templates") if bpy.data.filepath else None
-        ]
-        possible_paths = [p for p in possible_paths if p]
+        # Percorsi possibili in cui cercare i template (user folders first)
+        possible_paths = get_template_search_paths()
 
         for path in possible_paths:
             if os.path.exists(path):
@@ -573,23 +686,10 @@ class RENDER_OT_create_orthogonal_svg(Operator):
         """Find all possible paths for a given template"""
         template_paths = []
         self.last_checked_paths = []  # Resetta la lista
-        
-        # Get the addon directory
-        addon_dir = get_addon_path()
-        
-        # Possible paths
-        possible_paths = [
-            # Standard path inside the addon
-            os.path.join(addon_dir, "svg_templates"),
-            # Path relative to the blend file
-            os.path.join(os.path.dirname(bpy.data.filepath), "svg_templates") if bpy.data.filepath else None,
-            # Alternative path for development
-            os.path.join(os.path.dirname(bpy.data.filepath), "3DSC", "svg_templates") if bpy.data.filepath else None
-        ]
-        
-        # Filter out None values
-        possible_paths = [p for p in possible_paths if p]
-        
+
+        # Possible paths (user resource folders first, bundled last)
+        possible_paths = get_template_search_paths()
+
         # Log possible paths
         print("Cercando template SVG in:")
         for path in possible_paths:
@@ -980,10 +1080,92 @@ def get_addon_path():
     """
     return os.path.dirname(os.path.realpath(__file__))
 
+
+# ---------------------------------------------------------------------------
+# Template folder resolution
+#
+# Templates can live in several places. They are searched in priority order;
+# the first folder that contains a given template name wins, so user/resource
+# folders override the bundled ones. The bundled folder inside the addon is
+# always the last-resort fallback and ships with the extension.
+#
+# The ExtendedMatrix home folder (~/ExtendedMatrix/3D Survey Collection/...) is
+# part of the wider EM ecosystem and is NEVER created automatically on install
+# — the user creates it manually from the addon preferences. Extra resource
+# folders (including cloud/Drive paths) are added by the user to a list in the
+# addon preferences.
+# ---------------------------------------------------------------------------
+
+def get_em_home_base():
+    """~/ExtendedMatrix — shared root for the Extended Matrix tool ecosystem."""
+    return os.path.join(os.path.expanduser("~"), "ExtendedMatrix")
+
+
+def get_3dsc_home():
+    """~/ExtendedMatrix/3D Survey Collection — this tool's home subfolder."""
+    return os.path.join(get_em_home_base(), "3D Survey Collection")
+
+
+def get_em_home_templates():
+    """The SVG templates folder inside the EM home (manually created)."""
+    return os.path.join(get_3dsc_home(), "svg_templates")
+
+
+def get_addon_prefs():
+    """Return this addon's preferences, or None if unavailable."""
+    try:
+        return bpy.context.preferences.addons[__package__].preferences
+    except (KeyError, AttributeError):
+        return None
+
+
+def get_user_template_folders():
+    """Absolute paths of the user-configured resource folders (in order)."""
+    folders = []
+    prefs = get_addon_prefs()
+    if prefs is not None:
+        for item in getattr(prefs, "svg_template_folders", []):
+            raw = (item.path or "").strip()
+            if not raw:
+                continue
+            folders.append(os.path.normpath(bpy.path.abspath(raw)))
+    return folders
+
+
+def get_template_search_paths():
+    """Ordered list of folders to search for SVG templates.
+
+    Priority (first wins on name collision):
+      1. User resource folders from preferences (incl. cloud/Drive)
+      2. ExtendedMatrix home folder (~/ExtendedMatrix/3D Survey Collection)
+      3. Folders next to the saved .blend (project-local)
+      4. Bundled folder inside the addon (always present, fallback)
+    """
+    paths = list(get_user_template_folders())
+    paths.append(get_em_home_templates())
+
+    if bpy.data.filepath:
+        blend_dir = os.path.dirname(bpy.data.filepath)
+        paths.append(os.path.join(blend_dir, "svg_templates"))
+        paths.append(os.path.join(blend_dir, "3DSC", "svg_templates"))
+
+    paths.append(os.path.join(get_addon_path(), "svg_templates"))
+
+    # De-duplicate while preserving order
+    seen = set()
+    ordered = []
+    for p in paths:
+        norm = os.path.normpath(p)
+        if norm and norm not in seen:
+            seen.add(norm)
+            ordered.append(norm)
+    return ordered
+
+
 class RENDER_OT_open_templates_folder(Operator):
-    """Open the SVG templates folder"""
+    """Open the bundled SVG templates folder (read-only reference inside the addon)"""
     bl_idname = "render.open_templates_folder"
-    bl_label = "Open Templates Folder"
+    bl_label = "Open Bundled Templates Folder"
     bl_options = {'REGISTER'}
 
     def execute(self, context):
@@ -1018,6 +1200,108 @@ class RENDER_OT_open_templates_folder(Operator):
             self.report({'ERROR'}, f"Could not open folder: {e}")
             return {'CANCELLED'}
 
+        return {'FINISHED'}
+
+
+def _open_in_file_browser(path):
+    """Open a folder in the OS file browser. Returns (ok, error)."""
+    try:
+        import subprocess
+        import platform
+        if os.name == 'nt':
+            os.startfile(path)
+        elif platform.system() == 'Darwin':
+            subprocess.Popen(['open', path])
+        else:
+            subprocess.Popen(['xdg-open', path])
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
+
+class RENDER_UL_template_folders(bpy.types.UIList):
+    """List of user-configured SVG template resource folders."""
+
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+        abspath = os.path.normpath(bpy.path.abspath(item.path)) if item.path else ""
+        exists = bool(abspath) and os.path.isdir(abspath)
+        row = layout.row(align=True)
+        row.prop(item, "path", text="", emboss=False,
+                 icon='FILE_FOLDER' if exists else 'ERROR')
+
+
+class RENDER_OT_add_template_folder(Operator):
+    """Add a folder to the SVG template resource list (can be a cloud/Drive path)"""
+    bl_idname = "render.add_template_folder"
+    bl_label = "Add Template Folder"
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        prefs = get_addon_prefs()
+        if prefs is None:
+            self.report({'ERROR'}, "Could not access addon preferences")
+            return {'CANCELLED'}
+        prefs.svg_template_folders.add()
+        prefs.svg_template_folders_index = len(prefs.svg_template_folders) - 1
+        return {'FINISHED'}
+
+
+class RENDER_OT_remove_template_folder(Operator):
+    """Remove the selected folder from the SVG template resource list"""
+    bl_idname = "render.remove_template_folder"
+    bl_label = "Remove Template Folder"
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        prefs = get_addon_prefs()
+        if prefs is None:
+            self.report({'ERROR'}, "Could not access addon preferences")
+            return {'CANCELLED'}
+        idx = prefs.svg_template_folders_index
+        if 0 <= idx < len(prefs.svg_template_folders):
+            prefs.svg_template_folders.remove(idx)
+            prefs.svg_template_folders_index = max(0, idx - 1)
+        return {'FINISHED'}
+
+
+class RENDER_OT_create_em_home_folder(Operator):
+    """Create the ExtendedMatrix home templates folder and add it to the list
+
+    Creates ~/ExtendedMatrix/3D Survey Collection/svg_templates (part of the
+    Extended Matrix ecosystem), registers it as a resource folder, and opens it.
+    Nothing is created automatically on install — this is an explicit user action.
+    """
+    bl_idname = "render.create_em_home_templates_folder"
+    bl_label = "Create ExtendedMatrix Home Folder"
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        prefs = get_addon_prefs()
+        if prefs is None:
+            self.report({'ERROR'}, "Could not access addon preferences")
+            return {'CANCELLED'}
+
+        path = get_em_home_templates()
+        try:
+            os.makedirs(path, exist_ok=True)
+        except Exception as e:
+            self.report({'ERROR'}, f"Could not create folder: {e}")
+            return {'CANCELLED'}
+
+        # Add to the resource list if not already present
+        norm = os.path.normpath(path)
+        existing = {os.path.normpath(bpy.path.abspath(i.path))
+                    for i in prefs.svg_template_folders if i.path}
+        if norm not in existing:
+            item = prefs.svg_template_folders.add()
+            item.path = path
+            prefs.svg_template_folders_index = len(prefs.svg_template_folders) - 1
+
+        ok, err = _open_in_file_browser(path)
+        if not ok:
+            self.report({'WARNING'}, f"Folder created at {path} but could not open it: {err}")
+        else:
+            self.report({'INFO'}, f"ExtendedMatrix home templates folder ready: {path}")
         return {'FINISHED'}
 
 
@@ -1078,7 +1362,12 @@ class VIEW3D_PT_orthogonal_render(Panel):
             row.label(text="Save file first!", icon='ERROR')
         
         box.prop(scene, "ortho_render_output_path", text="")
-        
+
+        # Lighting
+        box = layout.box()
+        box.label(text="Lighting", icon='LIGHT')
+        box.prop(scene, "ortho_render_create_lights")
+
         # Setup and render buttons
         row = layout.row(align=True)
         row.scale_y = 1.5
@@ -1147,43 +1436,22 @@ class VIEW3D_PT_orthogonal_render(Panel):
 
 # Function to make sure the SVG template folder exists and create it if not
 def ensure_svg_templates_folder():
-    """Make sure the SVG template folder exists with at least one template"""
-    
-    # Get addon directory
-    addon_dir = get_addon_path()
-    
-    # Define possible template locations
-    possible_paths = [
-        # Standard path inside the addon
-        os.path.join(addon_dir, "svg_templates"),
-        # Path relative to the blend file 
-        os.path.join(os.path.dirname(bpy.data.filepath), "svg_templates") if bpy.data.filepath else None,
-        # Alternative path for development/testing
-        os.path.join(os.path.dirname(bpy.data.filepath), "3DSC", "svg_templates") if bpy.data.filepath else None
-    ]
-    
-    # Filter out None values (e.g., if blend file is not saved)
-    possible_paths = [p for p in possible_paths if p]
-    
+    """Return True if at least one SVG template is available in any search path.
+
+    The bundled folder inside the addon always exists and ships with templates,
+    so this normally returns True. User/EM-home/project folders are checked too,
+    with user folders taking priority. Nothing is created automatically here.
+    """
+    possible_paths = get_template_search_paths()
+
     # Log paths
     print("Checking template folders in:")
     for path in possible_paths:
         print(f"  - {path}")
-    
+
     # Find existing paths
     existing_paths = [p for p in possible_paths if os.path.exists(p)]
-    
-    # Create a folder if none exist
-    if not existing_paths and possible_paths:
-        try:
-            target_path = possible_paths[0]
-            os.makedirs(target_path, exist_ok=True)
-            print(f"Created SVG templates directory at: {target_path}")
-            existing_paths = [target_path]
-        except Exception as e:
-            print(f"Error creating svg_templates directory: {e}")
-            return False
-    
+
     # Check if any svg template exists
     has_template = False
     for path in existing_paths:
@@ -1201,6 +1469,10 @@ def register():
     bpy.utils.register_class(RENDER_OT_orthogonal_views)
     bpy.utils.register_class(RENDER_OT_create_orthogonal_svg)
     bpy.utils.register_class(RENDER_OT_open_templates_folder)
+    bpy.utils.register_class(RENDER_UL_template_folders)
+    bpy.utils.register_class(RENDER_OT_add_template_folder)
+    bpy.utils.register_class(RENDER_OT_remove_template_folder)
+    bpy.utils.register_class(RENDER_OT_create_em_home_folder)
     bpy.utils.register_class(VIEW3D_PT_orthogonal_render)
     
     # Register properties
@@ -1278,6 +1550,13 @@ def register():
         subtype='DIR_PATH'
     )
 
+    bpy.types.Scene.ortho_render_create_lights = BoolProperty(
+        name="Create Light Rig",
+        description="Create a three-point light rig (Key/Fill/Back) parented to the camera, "
+                    "keyframed on every pose for per-view manual fine-tuning",
+        default=True
+    )
+
     bpy.types.Scene.ortho_template_family = EnumProperty(
         name="Template Family",
         description="Template family for SVG layout export",
@@ -1292,6 +1571,10 @@ def register():
 
 def unregister():
     bpy.utils.unregister_class(VIEW3D_PT_orthogonal_render)
+    bpy.utils.unregister_class(RENDER_OT_create_em_home_folder)
+    bpy.utils.unregister_class(RENDER_OT_remove_template_folder)
+    bpy.utils.unregister_class(RENDER_OT_add_template_folder)
+    bpy.utils.unregister_class(RENDER_UL_template_folders)
     bpy.utils.unregister_class(RENDER_OT_open_templates_folder)
     bpy.utils.unregister_class(RENDER_OT_create_orthogonal_svg)
     bpy.utils.unregister_class(RENDER_OT_orthogonal_views)
@@ -1307,6 +1590,7 @@ def unregister():
     del bpy.types.Scene.ortho_render_large_resolution
     del bpy.types.Scene.ortho_render_xlarge_resolution
     del bpy.types.Scene.ortho_render_output_path
+    del bpy.types.Scene.ortho_render_create_lights
     del bpy.types.Scene.ortho_template_family
 
 

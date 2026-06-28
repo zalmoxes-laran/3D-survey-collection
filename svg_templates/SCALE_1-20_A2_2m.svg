@@ -5,8 +5,8 @@
    viewBox="0 0 594 420"
    id="svg_root"
    version="1.1"
-   inkscape:version="1.2.1 (9c6d41e410, 2022-07-14)"
-   sodipodi:docname="SCALE_1-20_A2_2m.svg"
+   inkscape:version="1.4.2 (f4327f4, 2025-05-13)"
+   sodipodi:docname="SCALE_1-20_A2_2m_R.svg"
    xml:space="preserve"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
@@ -16,141 +16,422 @@
    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
    xmlns:cc="http://creativecommons.org/ns#"
    xmlns:dc="http://purl.org/dc/elements/1.1/">
-  <defs id="defs_clips">
-    <clipPath id="clip_view1" clipPathUnits="userSpaceOnUse">
-      <rect x="225" y="120" width="100" height="100"/>
+  <defs
+   id="defs_clips">
+    <clipPath
+   id="clip_view1"
+   clipPathUnits="userSpaceOnUse">
+      <rect
+   x="225"
+   y="120"
+   width="100"
+   height="100"
+   id="rect1" />
     </clipPath>
-    <clipPath id="clip_view2" clipPathUnits="userSpaceOnUse">
-      <rect x="15" y="120" width="100" height="100"/>
+    <clipPath
+   id="clip_view2"
+   clipPathUnits="userSpaceOnUse">
+      <rect
+   x="15"
+   y="120"
+   width="100"
+   height="100"
+   id="rect2" />
     </clipPath>
-    <clipPath id="clip_view3" clipPathUnits="userSpaceOnUse">
-      <rect x="330" y="120" width="100" height="100"/>
+    <clipPath
+   id="clip_view3"
+   clipPathUnits="userSpaceOnUse">
+      <rect
+   x="330"
+   y="120"
+   width="100"
+   height="100"
+   id="rect3" />
     </clipPath>
-    <clipPath id="clip_view4" clipPathUnits="userSpaceOnUse">
-      <rect x="120" y="120" width="100" height="100"/>
+    <clipPath
+   id="clip_view4"
+   clipPathUnits="userSpaceOnUse">
+      <rect
+   x="120"
+   y="120"
+   width="100"
+   height="100"
+   id="rect4" />
     </clipPath>
-    <clipPath id="clip_view5" clipPathUnits="userSpaceOnUse">
-      <rect x="225" y="15" width="100" height="100"/>
+    <clipPath
+   id="clip_view5"
+   clipPathUnits="userSpaceOnUse">
+      <rect
+   x="225"
+   y="15"
+   width="100"
+   height="100"
+   id="rect5" />
     </clipPath>
-    <clipPath id="clip_view6" clipPathUnits="userSpaceOnUse">
-      <rect x="225" y="225" width="100" height="100"/>
+    <clipPath
+   id="clip_view6"
+   clipPathUnits="userSpaceOnUse">
+      <rect
+   x="225"
+   y="225"
+   width="100"
+   height="100"
+   id="rect6" />
     </clipPath>
   </defs>
   <sodipodi:namedview
-     id="namedview"
-     pagecolor="#ffffff"
-     bordercolor="#666666"
-     borderopacity="1.0"
-     inkscape:pageopacity="0.0"
-     inkscape:pageshadow="2"
-     inkscape:document-units="mm"
-     inkscape:current-layer="layer_images"
-     showgrid="true"
-     units="mm">
+   id="namedview"
+   pagecolor="#ffffff"
+   bordercolor="#666666"
+   borderopacity="1.0"
+   inkscape:pageopacity="0.0"
+   inkscape:pageshadow="2"
+   inkscape:document-units="mm"
+   inkscape:current-layer="layer_titleblock"
+   showgrid="true"
+   units="mm"
+   inkscape:showpageshadow="2"
+   inkscape:pagecheckerboard="0"
+   inkscape:deskcolor="#d1d1d1"
+   showguides="true"
+   inkscape:zoom="0.29110106"
+   inkscape:cx="371.00518"
+   inkscape:cy="1516.6554"
+   inkscape:window-width="2560"
+   inkscape:window-height="1566"
+   inkscape:window-x="-11"
+   inkscape:window-y="-11"
+   inkscape:window-maximized="1">
     <inkscape:grid
-       type="xygrid"
-       id="grid1"
-       empspacing="5"
-       visible="true"
-       enabled="true"
-       snapvisiblegridlinesonly="true"
-       spacingx="1"
-       spacingy="1"
-       units="mm"/>
-  </sodipodi:namedview>
-  <metadata id="metadata">
+   type="xygrid"
+   id="grid1"
+   empspacing="5"
+   visible="true"
+   enabled="true"
+   snapvisiblegridlinesonly="true"
+   spacingx="1"
+   spacingy="1"
+   units="mm"
+   originx="0"
+   originy="0" />
+  <sodipodi:guide
+   position="584,14.99999"
+   orientation="1,0"
+   id="guide33"
+   inkscape:locked="false" /><sodipodi:guide
+   position="583,20.99999"
+   orientation="0,-1"
+   id="guide34"
+   inkscape:locked="false" /><sodipodi:guide
+   position="584,37.99999"
+   orientation="0,-1"
+   id="guide35"
+   inkscape:locked="false" /></sodipodi:namedview>
+  <metadata
+   id="metadata">
     <rdf:RDF>
-      <cc:Work rdf:about="">
+      <cc:Work
+   rdf:about="">
         <dc:format>image/svg+xml</dc:format>
-        <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+        <dc:type
+   rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
       </cc:Work>
     </rdf:RDF>
   </metadata>
-  <g inkscape:groupmode="layer" id="layer_bg" inkscape:label="Sfondo" style="display:inline">
-    <rect x="0" y="0" width="594" height="420"
-          style="fill:#333132;fill-opacity:1;stroke:none"/>
+  <g
+   inkscape:groupmode="layer"
+   id="layer_bg"
+   inkscape:label="Sfondo"
+   style="display:inline"
+   sodipodi:insensitive="true">
+    <rect
+   x="0"
+   y="0"
+   width="594"
+   height="420"
+   style="fill:#333132;fill-opacity:1;stroke:none"
+   id="rect7" />
   </g>
-  <g inkscape:groupmode="layer" id="layer_frames" inkscape:label="Cornici" style="display:inline">
-    <rect x="225" y="120" width="100" height="100" style="fill:none;stroke:#ffffff;stroke-width:0.5"/>
-    <rect x="15" y="120" width="100" height="100" style="fill:none;stroke:#ffffff;stroke-width:0.5"/>
-    <rect x="330" y="120" width="100" height="100" style="fill:none;stroke:#ffffff;stroke-width:0.5"/>
-    <rect x="120" y="120" width="100" height="100" style="fill:none;stroke:#ffffff;stroke-width:0.5"/>
-    <rect x="225" y="15" width="100" height="100" style="fill:none;stroke:#ffffff;stroke-width:0.5"/>
-    <rect x="225" y="225" width="100" height="100" style="fill:none;stroke:#ffffff;stroke-width:0.5"/>
+  <g
+   inkscape:groupmode="layer"
+   id="layer_frames"
+   inkscape:label="Cornici"
+   style="display:inline"
+   sodipodi:insensitive="true">
+    <rect
+   x="299.5"
+   y="150.00018"
+   width="100"
+   height="100"
+   style="fill:none;stroke:#ffffff;stroke-width:0.5"
+   id="rect8" />
+    <rect
+   x="89.5"
+   y="150.00018"
+   width="100"
+   height="100"
+   style="fill:none;stroke:#ffffff;stroke-width:0.5"
+   id="rect9" />
+    <rect
+   x="404.5"
+   y="150.00018"
+   width="100"
+   height="100"
+   style="fill:none;stroke:#ffffff;stroke-width:0.5"
+   id="rect10" />
+    <rect
+   x="194.5"
+   y="150.00018"
+   width="100"
+   height="100"
+   style="fill:none;stroke:#ffffff;stroke-width:0.5"
+   id="rect11" />
+    <rect
+   x="299.5"
+   y="45.000179"
+   width="100"
+   height="100"
+   style="fill:none;stroke:#ffffff;stroke-width:0.5"
+   id="rect12" />
+    <rect
+   x="299.5"
+   y="255.00018"
+   width="100"
+   height="100"
+   style="fill:none;stroke:#ffffff;stroke-width:0.5"
+   id="rect13" />
   </g>
-  <g inkscape:groupmode="layer" id="layer_images" inkscape:label="Immagini" style="display:inline">
+  <g
+   inkscape:groupmode="layer"
+   id="layer_images"
+   inkscape:label="Immagini"
+   style="display:inline"
+   sodipodi:insensitive="true">
     <image
-       xlink:href="_ref_image1"
-       x="225" y="120"
-       width="100" height="100"
-       clip-path="url(#clip_view1)"
-       preserveAspectRatio="xMidYMid meet"
-       id="image_view1"/>
+   xlink:href="_ref_image1"
+   x="225"
+   y="120"
+   width="100"
+   height="100"
+   clip-path="url(#clip_view1)"
+   preserveAspectRatio="xMidYMid"
+   id="image_view1"
+   transform="translate(74.5,30.00018)" />
     <image
-       xlink:href="_ref_image2"
-       x="15" y="120"
-       width="100" height="100"
-       clip-path="url(#clip_view2)"
-       preserveAspectRatio="xMidYMid meet"
-       id="image_view2"/>
+   xlink:href="_ref_image2"
+   x="15"
+   y="120"
+   width="100"
+   height="100"
+   clip-path="url(#clip_view2)"
+   preserveAspectRatio="xMidYMid"
+   id="image_view2"
+   transform="translate(74.5,30.00018)" />
     <image
-       xlink:href="_ref_image3"
-       x="330" y="120"
-       width="100" height="100"
-       clip-path="url(#clip_view3)"
-       preserveAspectRatio="xMidYMid meet"
-       id="image_view3"/>
+   xlink:href="_ref_image3"
+   x="330"
+   y="120"
+   width="100"
+   height="100"
+   clip-path="url(#clip_view3)"
+   preserveAspectRatio="xMidYMid"
+   id="image_view3"
+   transform="translate(74.5,30.00018)" />
     <image
-       xlink:href="_ref_image4"
-       x="120" y="120"
-       width="100" height="100"
-       clip-path="url(#clip_view4)"
-       preserveAspectRatio="xMidYMid meet"
-       id="image_view4"/>
+   xlink:href="_ref_image4"
+   x="120"
+   y="120"
+   width="100"
+   height="100"
+   clip-path="url(#clip_view4)"
+   preserveAspectRatio="xMidYMid"
+   id="image_view4"
+   transform="translate(74.5,30.00018)" />
     <image
-       xlink:href="_ref_image5"
-       x="225" y="15"
-       width="100" height="100"
-       clip-path="url(#clip_view5)"
-       preserveAspectRatio="xMidYMid meet"
-       id="image_view5"/>
+   xlink:href="_ref_image5"
+   x="225"
+   y="15"
+   width="100"
+   height="100"
+   clip-path="url(#clip_view5)"
+   preserveAspectRatio="xMidYMid"
+   id="image_view5"
+   transform="translate(74.5,30.00018)" />
     <image
-       xlink:href="_ref_image6"
-       x="225" y="225"
-       width="100" height="100"
-       clip-path="url(#clip_view6)"
-       preserveAspectRatio="xMidYMid meet"
-       id="image_view6"/>
+   xlink:href="_ref_image6"
+   x="225"
+   y="225"
+   width="100"
+   height="100"
+   clip-path="url(#clip_view6)"
+   preserveAspectRatio="xMidYMid"
+   id="image_view6"
+   transform="translate(74.5,30.00018)" />
   </g>
-  <g inkscape:groupmode="layer" id="layer_labels" inkscape:label="Etichette" style="display:inline">
-    <text x="275" y="118.5" style="font-family:sans-serif;font-size:3.5px;fill:#fffefe;text-anchor:middle">Front (FR)</text>
-    <text x="65" y="118.5" style="font-family:sans-serif;font-size:3.5px;fill:#fffefe;text-anchor:middle">Back (BA)</text>
-    <text x="380" y="118.5" style="font-family:sans-serif;font-size:3.5px;fill:#fffefe;text-anchor:middle">Right (RI)</text>
-    <text x="170" y="118.5" style="font-family:sans-serif;font-size:3.5px;fill:#fffefe;text-anchor:middle">Left (LE)</text>
-    <text x="275" y="13.5" style="font-family:sans-serif;font-size:3.5px;fill:#fffefe;text-anchor:middle">Top (TO)</text>
-    <text x="275" y="223.5" style="font-family:sans-serif;font-size:3.5px;fill:#fffefe;text-anchor:middle">Bottom (BO)</text>
+  <g
+   inkscape:groupmode="layer"
+   id="layer_labels"
+   inkscape:label="Etichette"
+   style="display:inline"
+   sodipodi:insensitive="true">
+    <text
+   x="349.5"
+   y="148.50018"
+   style="font-size:3.5px;font-family:sans-serif;text-anchor:middle;fill:#fffefe"
+   id="text13">Front (FR)</text>
+    <text
+   x="139.5"
+   y="148.50018"
+   style="font-size:3.5px;font-family:sans-serif;text-anchor:middle;fill:#fffefe"
+   id="text14">Back (BA)</text>
+    <text
+   x="454.5"
+   y="148.50018"
+   style="font-size:3.5px;font-family:sans-serif;text-anchor:middle;fill:#fffefe"
+   id="text15">Right (RI)</text>
+    <text
+   x="244.5"
+   y="148.50018"
+   style="font-size:3.5px;font-family:sans-serif;text-anchor:middle;fill:#fffefe"
+   id="text16">Left (LE)</text>
+    <text
+   x="349.5"
+   y="43.500179"
+   style="font-size:3.5px;font-family:sans-serif;text-anchor:middle;fill:#fffefe"
+   id="text17">Top (TO)</text>
+    <text
+   x="349.5"
+   y="253.50018"
+   style="font-size:3.5px;font-family:sans-serif;text-anchor:middle;fill:#fffefe"
+   id="text18">Bottom (BO)</text>
   </g>
-  <g inkscape:groupmode="layer" id="layer_scale" inkscape:label="Scala" style="display:inline">
-    <rect x="247" y="392" width="20" height="3" style="fill:#ffffff;stroke:#ffffff;stroke-width:0.3"/>
-    <rect x="267" y="392" width="20" height="3" style="fill:none;stroke:#ffffff;stroke-width:0.3"/>
-    <rect x="287" y="392" width="20" height="3" style="fill:#ffffff;stroke:#ffffff;stroke-width:0.3"/>
-    <rect x="307" y="392" width="20" height="3" style="fill:none;stroke:#ffffff;stroke-width:0.3"/>
-    <rect x="327" y="392" width="20" height="3" style="fill:#ffffff;stroke:#ffffff;stroke-width:0.3"/>
-    <text x="247" y="398" style="font-family:sans-serif;font-size:2.5px;fill:#fffefe;text-anchor:start">0</text>
-    <text x="267" y="398" style="font-family:sans-serif;font-size:2.5px;fill:#fffefe;text-anchor:middle">0.4</text>
-    <text x="287" y="398" style="font-family:sans-serif;font-size:2.5px;fill:#fffefe;text-anchor:middle">0.8</text>
-    <text x="307" y="398" style="font-family:sans-serif;font-size:2.5px;fill:#fffefe;text-anchor:middle">1.2</text>
-    <text x="327" y="398" style="font-family:sans-serif;font-size:2.5px;fill:#fffefe;text-anchor:middle">1.6</text>
-    <text x="347" y="398" style="font-family:sans-serif;font-size:2.5px;fill:#fffefe;text-anchor:end">2 m</text>
-    <text x="297" y="402" style="font-family:sans-serif;font-size:3px;fill:#fffefe;text-anchor:middle">Scala 1:20</text>
+  <g
+   inkscape:groupmode="layer"
+   id="layer_scale"
+   inkscape:label="Scala"
+   style="display:inline"
+   sodipodi:insensitive="true">
+    <rect
+   x="483.84998"
+   y="382.15002"
+   width="20"
+   height="3"
+   style="fill:#ffffff;stroke:#ffffff;stroke-width:0.3"
+   id="rect18" />
+    <rect
+   x="503.84998"
+   y="382.15002"
+   width="20"
+   height="3"
+   style="fill:none;stroke:#ffffff;stroke-width:0.3"
+   id="rect19" />
+    <rect
+   x="523.84998"
+   y="382.15002"
+   width="20"
+   height="3"
+   style="fill:#ffffff;stroke:#ffffff;stroke-width:0.3"
+   id="rect20" />
+    <rect
+   x="543.84998"
+   y="382.15002"
+   width="20"
+   height="3"
+   style="fill:none;stroke:#ffffff;stroke-width:0.3"
+   id="rect21" />
+    <rect
+   x="563.84998"
+   y="382.15002"
+   width="20"
+   height="3"
+   style="fill:#ffffff;stroke:#ffffff;stroke-width:0.3"
+   id="rect22" />
+    <text
+   x="483.84998"
+   y="388.15002"
+   style="font-size:2.5px;font-family:sans-serif;text-anchor:start;fill:#fffefe"
+   id="text22">0</text>
+    <text
+   x="503.84998"
+   y="388.15002"
+   style="font-size:2.5px;font-family:sans-serif;text-anchor:middle;fill:#fffefe"
+   id="text23">0.4</text>
+    <text
+   x="523.84998"
+   y="388.15002"
+   style="font-size:2.5px;font-family:sans-serif;text-anchor:middle;fill:#fffefe"
+   id="text24">0.8</text>
+    <text
+   x="543.84998"
+   y="388.15002"
+   style="font-size:2.5px;font-family:sans-serif;text-anchor:middle;fill:#fffefe"
+   id="text25">1.2</text>
+    <text
+   x="563.84998"
+   y="388.15002"
+   style="font-size:2.5px;font-family:sans-serif;text-anchor:middle;fill:#fffefe"
+   id="text26">1.6</text>
+    <text
+   x="583.84998"
+   y="388.15002"
+   style="font-size:2.5px;font-family:sans-serif;text-anchor:end;fill:#fffefe"
+   id="text27">2 m</text>
+    <text
+   x="533.84998"
+   y="392.15002"
+   style="font-size:3px;font-family:sans-serif;text-anchor:middle;fill:#fffefe"
+   id="text28">Scala 1:20</text>
   </g>
-  <g inkscape:groupmode="layer" id="layer_titleblock" inkscape:label="Cartiglio" style="display:inline">
-    <rect x="15" y="392" width="564" height="26" style="fill:none;stroke:#ffffff;stroke-width:0.5"/>
-    <image xlink:href="_ref_logo" x="17" y="395" width="20" height="20" preserveAspectRatio="xMidYMid meet"/>
-    <text x="42" y="398" style="font-family:sans-serif;font-size:4px;fill:#fffefe">_3dsctitolo</text>
-    <text x="42" y="404.5" style="font-family:sans-serif;font-size:3.5px;fill:#fffefe;font-weight:bold">_3dscnomeblocco</text>
-    <text x="42" y="410" style="font-family:sans-serif;font-size:2.5px;fill:#fffefe">_3dscmisure</text>
-    <text x="576" y="398" style="font-family:sans-serif;font-size:4px;fill:#fffefe;text-anchor:end">Scala 1:20</text>
-    <text x="576" y="403.5" style="font-family:sans-serif;font-size:2.5px;fill:#fffefe;text-anchor:end">A2</text>
+  <g
+   inkscape:groupmode="layer"
+   id="layer_titleblock"
+   inkscape:label="Cartiglio"
+   style="display:inline">
+    
+    <path
+   style="display:inline;fill:#ffffff;fill-opacity:1;stroke:#ffffff;stroke-width:0.147038px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+   d="m 10.084255,395.93197 v -21.90373 l 0.089,-0.37424 -0.071,-1.10484 -0.1425,-1.37213 -0.3562,-1.37213 0.9084,-1.10485 -0.3206,-1.42561 v -1.53253 l -0.018,-0.39205 0.1247,-0.40986 0.4631,-0.58805 0.6412,-0.37422 h 38.8663 v 7.69826 h 14.1428 v 4.49064 c 0,0 0.7838,0.55243 0.855,0.60589 0.071,0.0535 1.3181,0.67716 1.3181,0.67716 l 0.4631,0.40986 0.463103,0.73063 0.5522,0.73871 -0.2672,0.68689 v 13.13205 l 0.6122,0.11341 0.4283,0.30242 0.2015,0.0756 0.1008,0.41581 -0.038,0.2268 0.4406,-0.0547 0.4899,0.6326 c 0,0 -0.08,-0.44549 -0.01,-0.44549 0.071,0 0.944,-0.40986 0.944,-0.40986 l 0.6145,0.28511 0.6591,0.0624 0.08,0.16929 c 0,0 0.1158,-0.0891 0.1692,-0.098 0.053,-0.009 0.3919,-0.009 0.4453,0 0.053,0.009 0.2672,0.0802 0.2672,0.0802 l 0.2048,-0.13366 -0.2672,-0.38315 -0.08,-0.37419 0.8194,-0.0535 0.1157,0.15148 0.2583,-0.009 0.1782,0.1782 0.1068,0.19604 0.7125,0.0268 0.285,-0.0802 0.4988,-0.0178 0.1335,0.0446 0.089,0.40095 -0.045,0.30295 0.4275,0.47222 -0.1781,0.23167 v 0.51657 l -16.580403,0.0513 v -0.50162 l 0.573,-0.0504 0.076,-0.40322 0.3842,-0.007 0.1574,-0.25832 0.2141,-0.1386 -0.2204,-0.34023 0.082,-0.16379 1.0328,-0.0882 0.2519,0.0441 0.1134,0.30242 0.069,-0.41581 0.6234,0.0189 v -11.63674 c 0,0 0.028,-0.82928 -0.044,-1.23488 -0.064,-0.36098 -0.1934,-0.70991 -0.3401,-1.04583 -0.1482,-0.33946 -0.3474,-0.65486 -0.5416,-0.97027 -0.1807,-0.29361 -0.3572,-0.59317 -0.5793,-0.85684 -0.2813,-0.33393 -0.6037,-0.6346 -0.9447,-0.90723 -0.2829,-0.22633 -0.5875,-0.42801 -0.9068,-0.59925 -0.3175,-0.17025 -0.6526,-0.30983 -0.995,-0.42142 -0.369,-0.1202 -0.7504,-0.20395 -1.1336,-0.26463 -0.4411,-0.0698 -0.8887,-0.12805 -1.3351,-0.1134 -0.4303,0.0141 -0.8625,0.0774 -1.2772,0.19356 -0.4451,0.12465 -0.8661,0.32782 -1.2796,0.53459 -0.2832,0.14159 -0.5587,0.30079 -0.8187,0.48152 -0.2933,0.20394 -0.5738,0.42897 -0.8313,0.67679 -0.3305,0.31818 -0.6364,0.66446 -0.9089,1.03354 -0.1988,0.26915 -0.3739,0.55704 -0.5255,0.85537 -0.1381,0.27187 -0.2538,0.55615 -0.3473,0.84645 -0.098,0.30513 -0.2227,0.93556 -0.2227,0.93556 v 11.28008 l 0.5611,-0.0535 0.6947,0.32078 0.3028,0.40985 v 0.46332 l 0.089,0.2673 0.071,0.76626 0.1247,0.46333 0.9263,-0.19605 0.4096,-0.0891 c 0,0 -0.089,-0.14252 0,-0.17818 0.089,-0.0356 1.1934,0.14256 1.1934,0.14256 l -0.029,0.53764 v 0.32262 h 0.2173 l 0.019,-0.55259 0.2203,-0.0226 0.1336,-0.19602 2.1107,0.0267 v 0.74444 l -14.6238,-2e-5 v -0.31676 l 0.6769,-0.44548 0.4364,0.0446 0.053,-0.13365 0.2404,-0.13365 0.2583,-0.18712 0.3295,-0.28508 c 0,0 0.1337,-0.63263 0.1693,-0.67718 0.036,-0.0446 0.1959,-0.0535 0.1959,-0.0535 l 0.2315,-0.17822 c 0,0 0.2761,0.0446 0.3207,0.0535 0.045,0.009 0.3473,-0.0713 0.3473,-0.0713 v -11.82362 c 0,0 -0.1246,-0.68144 -0.2137,-1.01574 -0.092,-0.34394 -0.1859,-0.69011 -0.3296,-1.01575 -0.1842,-0.41752 -0.4102,-0.81982 -0.6773,-1.18978 -0.2543,-0.35231 -0.5464,-0.68133 -0.8723,-0.9686 -0.3553,-0.31312 -0.7439,-0.59744 -1.1667,-0.81053 -0.4201,-0.21173 -0.8767,-0.35492 -1.3369,-0.45253 -0.6325,-0.13418 -1.2851,-0.18583 -1.9317,-0.17748 -0.5051,0.007 -1.0113,0.0708 -1.5051,0.17748 -0.4019,0.0868 -0.793,0.22338 -1.1756,0.37422 -0.2965,0.1169 -0.5879,0.25045 -0.8639,0.40985 -0.2624,0.15158 -0.5164,0.32141 -0.7481,0.5168 -0.2321,0.19566 -0.44,0.41997 -0.6368,0.65113 -0.3157,0.37092 -0.6316,0.74967 -0.8683,1.17541 -0.1756,0.31568 -0.29,0.66303 -0.4008,1.00683 -0.1015,0.31467 -0.1804,0.63717 -0.2405,0.96228 -0.083,0.44913 -0.1647,1.36023 -0.1647,1.36023 v 10.18715 l 0.3295,-0.0489 0.2939,0.3074 0.4542,-0.004 0.2182,0.16038 0.1692,0.26283 -0.013,0.16041 c 0,0 -0.1202,0.0668 -0.138,0.0668 -0.018,0 0.031,0.13364 0.031,0.13364 l 0.08,0.2005 c 0,0 0.2271,-0.0713 0.2494,-0.0891 0.022,-0.0178 0.236,-0.13363 0.2404,-0.15591 0.01,-0.0223 0.1915,-0.15148 0.1915,-0.15148 l 0.2048,-0.0178 0.2806,-0.0891 0.3785,0.0178 0.2895,0.0713 0.2716,0.35193 c 0,0 0.1336,0.25841 0.138,0.2762 0.01,0.0178 0.3474,0.0891 0.3474,0.0891 l 0.1024,0.47669 -0.018,0.5257 0.027,0.12026 v 0.3899 h -10.1898 v -1.8564 l -0.2393,-0.32764 0.1637,-0.15121 v -0.30241 l 1.9019,0.0504 v -10.81139 l 0.1511,-0.0124 -0.038,-0.50402 c 0,0 -0.1651,-0.90859 -0.3023,-1.34827 -0.1268,-0.40656 -0.2813,-0.80712 -0.4786,-1.18446 -0.2396,-0.45823 -0.5226,-0.89728 -0.8495,-1.29789 -0.2675,-0.32801 -0.5754,-0.62445 -0.9012,-0.89465 -0.3091,-0.25635 -0.6403,-0.48986 -0.9923,-0.68315 -0.4127,-0.22659 -0.8514,-0.40912 -1.3,-0.5517 -0.3767,-0.11974 -0.7669,-0.20043 -1.1588,-0.25203 -0.4375,-0.0576 -0.8818,-0.0875 -1.3225,-0.063 -0.4778,0.0265 -0.9533,0.11092 -1.4176,0.22677 -0.3895,0.0972 -0.7722,0.22782 -1.1392,0.39065 -0.3141,0.13942 -0.6178,0.30601 -0.9024,0.49879 -0.3493,0.23669 -0.6764,0.50838 -0.9796,0.80188 -0.3176,0.30735 -0.6184,0.63662 -0.8728,0.99795 -0.2036,0.28911 -0.3691,0.60523 -0.5166,0.92666 -0.1795,0.39107 -0.3341,0.79601 -0.4453,1.21174 -0.1448,0.54151 -0.285,1.65727 -0.285,1.65727 l -0.089,0.3564 0.1247,1.38996 v 0.94447 1.14048 7.4844 h 0.4715 l 0.1002,0.22463 0.2078,0.0693 -0.01,0.47885 0.088,0.3843 0.1386,0.34022 v 0.69738 z"
+   id="path935"
+   sodipodi:nodetypes="cccccccccccccccccscccccccccccccsccccsscccccccccccccccccccccccccccccccccaaaaaaaaaaaaaaaacccccccccccsccccccccccccccccccccsccaaaaaaaaaaaaaaaccccccccsccssccccccsccccccccccccccaaaaaaaaaaaaaaacccccccccccccc"
+   inkscape:label="Archi" /><rect
+   style="display:inline;fill:#ffffff;fill-opacity:1;fill-rule:evenodd;stroke:#ffffff;stroke-width:0.373932;stroke-linecap:round;stroke-opacity:1"
+   id="rect15821"
+   width="23.652628"
+   height="593.62604"
+   x="396.16043"
+   y="0.186966"
+   transform="matrix(0,1,1,0,0,0)" /><image
+   xlink:href="_ref_logo"
+   x="10"
+   y="398"
+   width="20"
+   height="20"
+   preserveAspectRatio="xMidYMid"
+   id="image28" />
+    <text
+   x="40"
+   y="403"
+   style="font-size:4px;font-family:sans-serif;fill:#000000"
+   id="text29">_3dsctitolo</text>
+    <text
+   x="40"
+   y="409.5"
+   style="font-weight:bold;font-size:3.5px;font-family:sans-serif;fill:#000000"
+   id="text30">_3dscnomeblocco</text>
+    <text
+   x="40"
+   y="415"
+   style="font-size:2.5px;font-family:sans-serif;fill:#000000"
+   id="text31">_3dscmisure</text>
+    <text
+   x="584"
+   y="402.10934"
+   style="font-size:4px;font-family:sans-serif;text-anchor:end;fill:#000000"
+   id="text32">Scala 1:20</text>
+    <text
+   x="584"
+   y="407.60934"
+   style="font-size:2.5px;font-family:sans-serif;text-anchor:end;fill:#000000"
+   id="text33">A2</text>
   </g>
 </svg>

@@ -115,6 +115,21 @@ def _prefs_on_lod_texture_format_update(owner, context):
     _prefs_enforce_alpha_texture_format(owner)
 
 # demo bare-bones preferences
+class OrthoTemplateFolderItem(PropertyGroup):
+    """A user-configured folder to search for orthogonal-render SVG templates.
+
+    Can point anywhere, including a cloud-synced folder (Google Drive, etc.).
+    """
+
+    path: StringProperty(
+        name="Folder",
+        description="Folder containing SVG templates. Cloud folders are allowed, "
+                    "but keep the files available offline on this machine to avoid load errors",
+        subtype='DIR_PATH',
+        default=""
+    ) # type: ignore
+
+
 class LODPresetItem(PropertyGroup):
     """Persistent named LOD preset stored in addon preferences."""
 
@@ -241,6 +256,16 @@ class DemPreferences(bpy.types.AddonPreferences):
         name="Py3dtiles module (to convert cesium tiled files) is present",
         default=False
                 ) # type: ignore # type: ignore
+
+    # Orthogonal render: user-configured SVG template resource folders
+    svg_template_folders : CollectionProperty(
+        type=OrthoTemplateFolderItem
+    ) # type: ignore
+    svg_template_folders_index : IntProperty(
+        name="Active Template Folder",
+        default=0
+    ) # type: ignore
+
     # LOD Generator defaults (persistent across .blend files)
     lod_num : bpy.props.IntProperty(
         name="Number of LODs",
@@ -396,11 +421,26 @@ class DemPreferences(bpy.types.AddonPreferences):
         # SVG Templates Management
         layout = self.layout
         box = layout.box()
-        box.label(text="Orthogonal Render Templates", icon='FILEBROWSER')
+        box.label(text="Orthogonal Render — SVG Templates", icon='FILEBROWSER')
+        box.label(text="Bundled templates always ship with the addon. Add your own folders below; "
+                       "they are searched first and override the bundled ones.")
+
         row = box.row()
-        row.operator("render.open_templates_folder", icon='FOLDER_REDIRECT', text='Open SVG Templates Folder')
-        row = box.row()
-        row.label(text="Add custom SVG templates to this folder. Templates should end with scale info (e.g., MASTER_1m, MASTER_50cm)")
+        row.template_list("RENDER_UL_template_folders", "",
+                          self, "svg_template_folders",
+                          self, "svg_template_folders_index", rows=3)
+        col = row.column(align=True)
+        col.operator("render.add_template_folder", icon='ADD', text="")
+        col.operator("render.remove_template_folder", icon='REMOVE', text="")
+
+        col = box.column(align=True)
+        col.operator("render.create_em_home_templates_folder", icon='HOME',
+                     text="Create ExtendedMatrix Home Folder (~/ExtendedMatrix/3D Survey Collection)")
+        col.operator("render.open_templates_folder", icon='FOLDER_REDIRECT',
+                     text="Open Bundled Templates Folder")
+
+        box.label(text="Cloud folders (Google Drive, etc.) are supported. Keep the files "
+                       "always available offline on this machine to avoid load errors.", icon='ERROR')
 
         # LOD Generator Defaults
         layout = self.layout
@@ -674,6 +714,7 @@ classes = (
     RES_list,
     LODitemListItem,
     LODPresetItem,
+    OrthoTemplateFolderItem,
     DemPreferences,
     AnalysisListItem,
     StatisticsListItem,

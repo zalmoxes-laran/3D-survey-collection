@@ -124,3 +124,7 @@ cesium_exporter/dev_diag/
 # Built extension packages (local builds land in ../3DSC_Releases)
 *.blext
 
+# Generated manifest - ignore (built from blender_manifest_template.toml by
+# scripts/version_manager.py; CI regenerates it per Python ABI). Same as EM-tools.
+/blender_manifest.toml
+
