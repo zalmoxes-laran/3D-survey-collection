@@ -395,17 +395,11 @@ class ImportCamAgiXML(Operator, ImportHelper):
                 return {'FINISHED'}
 
 class VIEW3D_PT_3DSC_Instructions(Panel):
-    from .__init__ import get_3dsc_bl_info
+    from .__init__ import get_3dsc_version_string
 
-    bl_3dsc_info = get_3dsc_bl_info()
-    version_tuple = bl_3dsc_info.get("version", (0, 0, 0))
-    version_label = ".".join(str(v) for v in version_tuple)
-    devel_version = bl_3dsc_info.get("devel_version", "").strip()
-    devel_tag = devel_version.replace(f"3DSC {version_label}", "").strip()
-    if not devel_tag:
-        devel_tag = "dev?"
-
-    bl_label = f"3D Survey Collection {version_label} {devel_tag}"
+    # Real version from the shipped manifest (e.g. "1.7.0-dev.2"), not the
+    # static bl_info — so the panel header always reflects the installed build.
+    bl_label = f"3D Survey Collection {get_3dsc_version_string()}"
     bl_category = "3DSC"
     bl_idname = "VIEW3D_PT_3DSC_Instructions"
     bl_space_type = 'VIEW_3D'

@@ -23,14 +23,49 @@ bl_info = {
     "blender": (4, 2, 0),
     "location": "3D View > Toolbox",
     "description": "A collection of tools for 3D Survey activities",
-    "warning": "Beta - 3DSC 1.7.0 dev01",
+    "warning": "Beta",
     "wiki_url": "",
-    "devel_version": " 3DSC 1.7.0 dev01",  # Aggiunto campo devel_version
+    "devel_version": "",  # legacy; real version comes from the manifest (see below)
     "category": "Tools",
     }
 
 def get_3dsc_bl_info():
     return bl_info
+
+
+def get_3dsc_version_string():
+    """Return the real extension version string, e.g. "1.7.0-dev.2".
+
+    For a Blender *extension* the authoritative version lives in the shipped
+    ``blender_manifest.toml`` (regenerated per build by version_manager.py),
+    not in ``bl_info`` (legacy/static) — so read it from the manifest first.
+    Falls back to version.json (present in dev checkouts), then to bl_info.
+    """
+    import os
+    here = os.path.dirname(os.path.realpath(__file__))
+
+    manifest = os.path.join(here, "blender_manifest.toml")
+    try:
+        with open(manifest, "r", encoding="utf-8") as f:
+            for line in f:
+                s = line.strip()
+                if s.startswith("version") and "=" in s:
+                    return s.split("=", 1)[1].strip().strip('"').strip("'")
+    except Exception:
+        pass
+
+    try:
+        import json
+        with open(os.path.join(here, "version.json"), "r", encoding="utf-8") as f:
+            d = json.load(f)
+        base = f"{d['major']}.{d['minor']}.{d['patch']}"
+        if d.get("mode") == "dev":
+            return f"{base}-dev.{d.get('dev_build', 0)}"
+        return base
+    except Exception:
+        pass
+
+    return ".".join(str(v) for v in bl_info.get("version", (0, 0, 0)))
 
 if "bpy" in locals():
     # On "Reload Scripts", reload every already-imported submodule of this
