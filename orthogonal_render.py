@@ -1247,6 +1247,45 @@ def _save_calibration(data):
     _CALIBRATION_CACHE = data
 
 
+def _cycles_gpu_available():
+    """True if Cycles has an active non-CPU compute device configured."""
+    try:
+        cp = bpy.context.preferences.addons['cycles'].preferences
+        return (cp.compute_device_type not in ('NONE', '')) and cp.has_active_device()
+    except Exception:
+        return False
+
+
+def _effective_device(scene):
+    """Resolve the device Cycles will actually use ('GPU' or 'CPU').
+
+    AUTO resolves to GPU when a GPU is configured and the scene is set to GPU,
+    otherwise CPU. This is what we key the timing calibration on, so AUTO and an
+    explicit matching choice share the same record (no spurious re-benchmark).
+    """
+    dev = getattr(scene, "ortho_render_device", 'AUTO')
+    if dev == 'GPU':
+        return 'GPU'
+    if dev == 'CPU':
+        return 'CPU'
+    # AUTO
+    try:
+        if scene.cycles.device == 'GPU' and _cycles_gpu_available():
+            return 'GPU'
+    except Exception:
+        pass
+    return 'CPU'
+
+
+def _calib_key(scene):
+    """Calibration key. Cycles timings depend heavily on the compute device, so
+    key by engine + effective device; EEVEE is keyed by engine alone."""
+    engine = getattr(scene, "ortho_render_engine", 'CYCLES')
+    if engine == 'CYCLES':
+        return f"CYCLES:{_effective_device(scene)}"
+    return engine
+
+
 def _per_view_seconds(rec, mpx, samples, denoise):
     """Predicted seconds for ONE view from a calibration record.
 
@@ -1288,7 +1327,7 @@ def estimate_render_seconds(scene):
     if not data:
         return None
     engine = getattr(scene, "ortho_render_engine", 'CYCLES')
-    rec = data.get(engine)
+    rec = data.get(_calib_key(scene))
     if not rec:
         return None
     mpx = (scene.render.resolution_x * scene.render.resolution_y) / 1e6
@@ -1331,11 +1370,13 @@ class RENDER_OT_ortho_benchmark(Operator):
     bl_label = "Benchmark Render Speed"
     bl_options = {'REGISTER'}
 
-    # Cross-test design points (small, to keep the benchmark quick)
-    RES_LO = 300
-    RES_HI = 600
-    SAMP_LO = 16
-    SAMP_HI = 64
+    # Cross-test design points. The sample spread must be wide enough that the
+    # per-sample cost rises above timing noise even on a fast GPU (where 16 vs
+    # 64 samples at low res is unmeasurable); hence 32 -> 256.
+    RES_LO = 400
+    RES_HI = 700
+    SAMP_LO = 32
+    SAMP_HI = 256
 
     @classmethod
     def poll(cls, context):
@@ -1385,10 +1426,18 @@ class RENDER_OT_ortho_benchmark(Operator):
 
             cur_dn = saved["denoise"] if engine == 'CYCLES' else False
 
+            # Warm-up render (DISCARDED). On a freshly installed/launched Blender
+            # the first render compiles & loads the GPU kernels (Metal/CUDA/OptiX)
+            # or builds EEVEE shaders — a one-time cost of seconds to tens of
+            # seconds. Doing it once here means the timed cross-tests below
+            # measure steady-state speed, not that first-launch spike.
+            t_warm = self._timed_render(scene, engine, self.RES_LO, self.SAMP_LO, cur_dn)
+
             # Cross-tests. Vary samples (t1->t2), resolution (t1->t3), and
             # denoise at BOTH resolutions (t4,t5) so denoising can be split into
             # a fixed init cost and a per-pixel cost.
             t1 = self._timed_render(scene, engine, self.RES_LO, self.SAMP_LO, cur_dn)
+            kernel_warmup = max(0.0, t_warm - t1)
             t2 = self._timed_render(scene, engine, self.RES_LO, self.SAMP_HI, cur_dn)
             t3 = self._timed_render(scene, engine, self.RES_HI, self.SAMP_LO, cur_dn)
             t4 = t5 = None
@@ -1440,11 +1489,14 @@ class RENDER_OT_ortho_benchmark(Operator):
             points.append({"res": self.RES_HI, "samples": self.SAMP_LO, "denoise": (not cur_dn), "seconds": round(t5, 3)})
 
         data = dict(_load_calibration())
-        data[engine] = {
+        data[_calib_key(scene)] = {
             "model": "affine_v2",
+            "engine": engine,
             "k_fixed": k_fixed, "k_px": k_px, "k_smp": k_smp,
             "dn_fixed": dn_fixed, "dn_px": dn_px,
-            "device": getattr(scene, "ortho_render_device", 'AUTO'),
+            "kernel_warmup": round(kernel_warmup, 3),
+            "device_setting": getattr(scene, "ortho_render_device", 'AUTO'),
+            "device_effective": _effective_device(scene) if engine == 'CYCLES' else 'GPU/EEVEE',
             "points": points,
             "object": obj.name if obj else "",
             "polycount": len(obj.data.polygons) if obj and obj.type == 'MESH' else 0,
@@ -1453,12 +1505,14 @@ class RENDER_OT_ortho_benchmark(Operator):
         }
         _save_calibration(data)
 
-        total_measured = t1 + t2 + t3 + (t4 or 0.0) + (t5 or 0.0)
+        total_measured = t_warm + t1 + t2 + t3 + (t4 or 0.0) + (t5 or 0.0)
         est = estimate_render_seconds(scene)
+        dev = _effective_device(scene) if engine == 'CYCLES' else 'GPU'
+        warm_note = f" (+{kernel_warmup:.0f}s kernel load on first render)" if kernel_warmup >= 1.0 else ""
         self.report(
             {'INFO'},
-            f"Benchmark done ({engine}, {total_measured:.1f}s of tests). "
-            f"Estimated {len(CAMERA_POSITIONS)} views: {format_duration(est)}"
+            f"Benchmark done ({engine}/{dev}, {total_measured:.1f}s of tests). "
+            f"Estimated {len(CAMERA_POSITIONS)} views: {format_duration(est)}{warm_note}"
         )
         return {'FINISHED'}
 
@@ -1669,17 +1723,28 @@ class VIEW3D_PT_orthogonal_render(Panel):
         box.label(text="Render Quality", icon='RENDER_STILL')
         box.prop(scene, "ortho_render_engine")
         box.prop(scene, "ortho_render_samples")
-        if scene.ortho_render_engine == 'CYCLES':
+        is_cycles = scene.ortho_render_engine == 'CYCLES'
+        if is_cycles:
             box.prop(scene, "ortho_render_denoise")
             box.prop(scene, "ortho_render_device")
+            # Warn if GPU is requested but no GPU compute device is configured
+            if scene.ortho_render_device == 'GPU' and not _cycles_gpu_available():
+                box.label(text="No GPU configured (Preferences > System) — will use CPU",
+                          icon='ERROR')
 
-        # Render-time estimate (from the saved machine benchmark)
+        # Render-time estimate (from the saved per-engine/device benchmark)
         est = estimate_render_seconds(scene)
         row = box.row()
         if est is not None:
-            row.label(text=f"Est. {len(CAMERA_POSITIONS)} views: ~{format_duration(est)}", icon='TIME')
+            dev = f" ({_effective_device(scene)})" if is_cycles else ""
+            row.label(text=f"Est. {len(CAMERA_POSITIONS)} views: ~{format_duration(est)}{dev}", icon='TIME')
+            rec = _load_calibration().get(_calib_key(scene), {})
+            warm = rec.get("kernel_warmup", 0.0)
+            if warm >= 1.0:
+                box.label(text=f"+ ~{int(round(warm))}s on the first render after launch (kernel load)",
+                          icon='INFO')
         else:
-            row.label(text="Run benchmark to estimate time", icon='QUESTION')
+            row.label(text="Run benchmark for these settings", icon='QUESTION')
         box.operator("render.ortho_benchmark", icon='PREVIEW_RANGE')
 
         # Lighting
