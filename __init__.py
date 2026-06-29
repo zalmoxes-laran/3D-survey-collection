@@ -161,7 +161,9 @@ class OrthoTemplateFolderItem(PropertyGroup):
         description="Folder containing SVG templates. Cloud folders are allowed, "
                     "but keep the files available offline on this machine to avoid load errors",
         subtype='DIR_PATH',
-        default=""
+        default="",
+        # Allow blend-relative ("//") paths without the 4.5+ red-field warning.
+        options={'PATH_SUPPORTS_BLEND_RELATIVE'} if bpy.app.version >= (4, 5, 0) else set()
     ) # type: ignore
 
 

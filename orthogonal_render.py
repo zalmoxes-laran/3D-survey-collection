@@ -31,11 +31,18 @@ RESOLUTION_PRESETS = [
 
 # Three-point "TriLamp" light rig, reproduced from Rachele's reference
 # Luci.blend (the lights parented to the base OrthoRenderCamera, ortho_scale
-# 1.0 -> calibrated for a ~1m object). Transforms are LOCAL to the camera:
-# +X right, +Y up, -Z toward the subject. The rig is parented to the camera
-# so it orbits with the viewpoint; positions/energies are scaled to the
-# object size at setup time (see LIGHT_RIG_SIZE_REF) and keyframed on every
-# pose so each of the six views can be fine-tuned manually afterwards.
+# 1.0 -> calibrated for a ~1m object).
+#
+# IMPORTANT: location/rotation are the light's pose in CAMERA space, i.e.
+# camera.matrix_world.inverted() @ light.matrix_world, extracted from the
+# reference file. They must be applied with matrix_parent_inverse = Identity.
+# Using the raw object-local ("basis") values instead would drop the original
+# parent-inverse and, because our TRACK_TO camera uses +Y-up while Rachele's
+# camera was tilted, would flip the rig below the horizon (lit from below).
+# Camera convention: +X right, +Y up, -Z toward the subject. The rig is
+# parented to the camera so it orbits with the viewpoint; positions/energies
+# scale to object size at setup (see LIGHT_RIG_SIZE_REF) and are keyframed on
+# every pose for per-view manual fine-tuning.
 LIGHT_RIG_COLLECTION = "OrthoRender_Lights"
 LIGHT_RIG_SIZE_REF = 1.0  # meters: object size the reference rig was tuned for
 
@@ -45,24 +52,24 @@ TRILAMP_RIG = [
         "type": "POINT",
         "energy": 150.0,
         "color": (1.0, 1.0, 1.0),
-        "location": (-1.1485, -1.5719, 0.7455),
-        "rotation": (0.0, 0.0, 0.0),
+        "location": (-1.185, 0.6334, 0.1792),
+        "rotation": (-0.1982, -0.6592, -0.0624),
     },
     {
         "name": "OrthoRender_TriLamp-Fill",
         "type": "POINT",
         "energy": 250.0,
         "color": (1.0, 1.0, 1.0),
-        "location": (1.6853, -0.4644, 0.5145),
-        "rotation": (0.7014, 1.2025, 0.5929),
+        "location": (1.6488, 0.4025, -0.9282),
+        "rotation": (0.1435, 1.3003, 0.2942),
     },
     {
         "name": "OrthoRender_TriLamp-Back",
         "type": "AREA",
         "energy": 200.0,
         "color": (1.0, 1.0, 1.0),
-        "location": (-4.1669, 0.3039, 0.8412),
-        "rotation": (0.0, 0.0, 0.0),
+        "location": (-4.2033, 0.7291, -1.6966),
+        "rotation": (-0.8891, -1.6872, 0.7581),
         "shape": "SQUARE",
         "size": 1.0,
         "size_y": 0.25,
@@ -388,25 +395,20 @@ class OBJECT_OT_setup_orthogonal_render(Operator):
         return len(light_objs)
 
     def setup_render_settings(self, context):
-        """Set up render settings for transparency"""
+        """Set up render engine, sampling and transparency for ortho renders."""
         scene = context.scene
-        
-        # Make sure we're using a render engine that supports alpha
-        if scene.render.engine not in ['CYCLES', 'BLENDER_EEVEE']:
-            scene.render.engine = 'BLENDER_EEVEE'
-        
-        # Set up transparency settings
+
+        apply_ortho_render_quality(scene)
+
+        # Transparency + PNG RGBA output
         scene.render.film_transparent = True
-        
-        # Set the file format to PNG with transparency
         scene.render.image_settings.file_format = 'PNG'
         scene.render.image_settings.color_mode = 'RGBA'
         scene.render.image_settings.compression = 0  # No compression
-        
-        # Set the output path template
+
+        # Output path template
         if not scene.ortho_render_output_path:
             scene.ortho_render_output_path = "//ortho_renders/"
-        
         scene.render.filepath = scene.ortho_render_output_path
 
 
@@ -846,14 +848,27 @@ class RENDER_OT_create_orthogonal_svg(Operator):
         #    svg_content = svg_content.replace(img_tag, placeholder_path)
         #    svg_content = svg_content.replace(ref_tag, placeholder_path)
         
-        # Handle logo
-        logo_path = os.path.join(os.path.dirname(template_path), "logo.png")
-        if os.path.exists(logo_path):
-            #svg_content = svg_content.replace('_logo', logo_path)
-            svg_content = svg_content.replace('_ref_logo', logo_path)
+        # Handle logo. Resolution order:
+        #   1) the logo image chosen in the panel (scene.ortho_render_logo_path)
+        #   2) a "logo.png" dropped in any template search folder (user/EM-home/bundled)
+        #   3) nothing -> leave blank (do NOT fall back to the view placeholder,
+        #      which would print the grey "View Not Rendered" image in the logo box)
+        logo_src = ""
+        prop_logo = context.scene.ortho_render_logo_path
+        if prop_logo:
+            abs_logo = bpy.path.abspath(prop_logo)
+            if os.path.exists(abs_logo):
+                logo_src = abs_logo
+        if not logo_src:
+            for p in get_template_search_paths():
+                cand = os.path.join(p, "logo.png")
+                if os.path.exists(cand):
+                    logo_src = cand
+                    break
+        if logo_src:
+            svg_content = svg_content.replace('_ref_logo', make_path_relative(logo_src, output_path))
         else:
-            #svg_content = svg_content.replace('_logo', placeholder_path)
-            svg_content = svg_content.replace('_ref_logo', placeholder_path)
+            svg_content = svg_content.replace('_ref_logo', '')
         
         # Write back the modified content
         try:
@@ -1162,6 +1177,292 @@ def get_template_search_paths():
     return ordered
 
 
+# ---------------------------------------------------------------------------
+# Render engine settings + render-time estimation
+#
+# A true a-priori "hardware simulator" is unreliable (depends on GPU/CPU,
+# scene, denoising). Instead we calibrate ONCE on the real machine+scene with
+# a small benchmark render, store the measured throughput (seconds per
+# megapixel-sample) on disk in the EM home folder, and estimate any future job
+# as throughput * megapixels * samples * number_of_views.
+# ---------------------------------------------------------------------------
+
+def apply_ortho_render_quality(scene):
+    """Apply engine/samples/denoise/device from the scene props. Returns engine."""
+    engine = getattr(scene, "ortho_render_engine", 'CYCLES')
+    if engine not in ('CYCLES', 'BLENDER_EEVEE'):
+        engine = 'CYCLES'
+    scene.render.engine = engine
+
+    samples = getattr(scene, "ortho_render_samples", 128)
+    denoise = getattr(scene, "ortho_render_denoise", True)
+
+    if engine == 'CYCLES':
+        scene.cycles.samples = samples
+        scene.cycles.use_denoising = denoise
+        device = getattr(scene, "ortho_render_device", 'AUTO')
+        if device in ('GPU', 'CPU'):
+            # 'GPU' only takes effect if a compute device is configured in
+            # Preferences > System; otherwise Cycles falls back to CPU.
+            try:
+                scene.cycles.device = device
+            except Exception as e:
+                print(f"[ortho] could not set Cycles device: {e}")
+        # 'AUTO' leaves the user's configured device untouched.
+    else:  # BLENDER_EEVEE
+        try:
+            scene.eevee.taa_render_samples = samples
+        except Exception as e:
+            print(f"[ortho] could not set EEVEE samples: {e}")
+    return engine
+
+
+_CALIBRATION_CACHE = None
+
+
+def _calibration_path():
+    return os.path.join(get_3dsc_home(), "render_calibration.json")
+
+
+def _load_calibration(force=False):
+    """Load the per-engine throughput calibration (cached). Returns a dict."""
+    global _CALIBRATION_CACHE
+    if _CALIBRATION_CACHE is not None and not force:
+        return _CALIBRATION_CACHE
+    try:
+        import json
+        with open(_calibration_path(), "r", encoding="utf-8") as f:
+            _CALIBRATION_CACHE = json.load(f)
+    except Exception:
+        _CALIBRATION_CACHE = {}
+    return _CALIBRATION_CACHE
+
+
+def _save_calibration(data):
+    global _CALIBRATION_CACHE
+    import json
+    os.makedirs(get_3dsc_home(), exist_ok=True)
+    with open(_calibration_path(), "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+    _CALIBRATION_CACHE = data
+
+
+def _per_view_seconds(rec, mpx, samples, denoise):
+    """Predicted seconds for ONE view from a calibration record.
+
+    affine_v2 separates four costs measured by cross-tests:
+      k_fixed              per-frame overhead (BVH build/sync), constant
+      k_px * MP            pixel overhead, sample-independent
+      dn_fixed + dn_px*MP  denoising (a large fixed init + a per-pixel part),
+                           sample-independent, only when denoise is on
+      k_smp * MP * samples the actual sampling cost
+    """
+    model = rec.get("model")
+    if model == "affine_v2":
+        t = (rec.get("k_fixed", 0.0)
+             + rec.get("k_px", 0.0) * mpx
+             + rec.get("k_smp", 0.0) * mpx * samples)
+        if denoise:
+            t += rec.get("dn_fixed", 0.0) + rec.get("dn_px", 0.0) * mpx
+        return max(0.0, t)
+    if model == "affine_v1":  # earlier model: denoise as k_dn*MP
+        t = (rec.get("k_fixed", 0.0)
+             + rec.get("k_px", 0.0) * mpx
+             + (rec.get("k_dn", 0.0) * mpx if denoise else 0.0)
+             + rec.get("k_smp", 0.0) * mpx * samples)
+        return max(0.0, t)
+    # Legacy single-point model
+    spm = rec.get("sec_per_mpx_sample", 0.0)
+    return spm * mpx * samples if spm > 0 else 0.0
+
+
+def estimate_render_seconds(scene):
+    """Estimate seconds to render all ortho views at the current settings.
+
+    Uses the affine model fitted by the benchmark, which separates the
+    sample-independent costs (per-frame overhead + denoising, both ~constant in
+    samples) from the per-sample cost. Returns None if there is no calibration
+    for the current engine yet.
+    """
+    data = _load_calibration()
+    if not data:
+        return None
+    engine = getattr(scene, "ortho_render_engine", 'CYCLES')
+    rec = data.get(engine)
+    if not rec:
+        return None
+    mpx = (scene.render.resolution_x * scene.render.resolution_y) / 1e6
+    samples = getattr(scene, "ortho_render_samples", 128)
+    denoise = getattr(scene, "ortho_render_denoise", False) if engine == 'CYCLES' else False
+    per_view = _per_view_seconds(rec, mpx, samples, denoise)
+    if per_view <= 0:
+        return None
+    return per_view * len(CAMERA_POSITIONS)
+
+
+def format_duration(seconds):
+    """Human-friendly duration: '<1s', '45s', '3m 20s', '1h 05m'."""
+    if seconds is None:
+        return "?"
+    s = int(round(seconds))
+    if s < 1:
+        return "<1s"
+    if s < 60:
+        return f"{s}s"
+    m, sec = divmod(s, 60)
+    if m < 60:
+        return f"{m}m {sec:02d}s"
+    h, m = divmod(m, 60)
+    return f"{h}h {m:02d}m"
+
+
+class RENDER_OT_ortho_benchmark(Operator):
+    """Benchmark this machine with cross-tests and save a render-time model
+
+    Runs a few small test renders that vary samples, resolution and (for
+    Cycles) denoising. Fitting these cross-tests separates the costs that do
+    NOT scale with samples (per-frame overhead + denoising, both ~constant in
+    samples) from the per-sample cost, so estimates stay accurate when you
+    change samples, resolution or toggle denoise. The model is saved in
+    ~/ExtendedMatrix/3D Survey Collection. Re-run after changing engine/device
+    or when working on a much heavier/lighter scene.
+    """
+    bl_idname = "render.ortho_benchmark"
+    bl_label = "Benchmark Render Speed"
+    bl_options = {'REGISTER'}
+
+    # Cross-test design points (small, to keep the benchmark quick)
+    RES_LO = 300
+    RES_HI = 600
+    SAMP_LO = 16
+    SAMP_HI = 64
+
+    @classmethod
+    def poll(cls, context):
+        return context.scene.camera is not None
+
+    def _timed_render(self, scene, engine, res, samples, denoise):
+        import time
+        import tempfile
+        r = scene.render
+        r.resolution_x = res
+        r.resolution_y = res
+        r.resolution_percentage = 100
+        if engine == 'CYCLES':
+            scene.cycles.samples = samples
+            scene.cycles.use_denoising = denoise
+        else:
+            scene.eevee.taa_render_samples = samples
+        r.filepath = os.path.join(tempfile.gettempdir(), "ortho_bench.png")
+        t0 = time.perf_counter()
+        bpy.ops.render.render(write_still=True)
+        return time.perf_counter() - t0
+
+    def execute(self, context):
+        import time
+        scene = context.scene
+        if scene.camera is None:
+            self.report({'ERROR'}, "No active camera. Run Setup Orthogonal Render first.")
+            return {'CANCELLED'}
+
+        r = scene.render
+        saved = {
+            "rx": r.resolution_x, "ry": r.resolution_y, "pct": r.resolution_percentage,
+            "filepath": r.filepath, "film": r.film_transparent, "frame": scene.frame_current,
+            "fmt": r.image_settings.file_format,
+            "samples": getattr(scene, "ortho_render_samples", 128),
+            "denoise": getattr(scene, "ortho_render_denoise", True),
+        }
+
+        MP1 = (self.RES_LO ** 2) / 1e6
+        MP2 = (self.RES_HI ** 2) / 1e6
+        try:
+            engine = apply_ortho_render_quality(scene)  # sets engine + device
+            r.film_transparent = True
+            r.image_settings.file_format = 'PNG'
+            if scene.frame_start:
+                scene.frame_set(scene.frame_start)
+
+            cur_dn = saved["denoise"] if engine == 'CYCLES' else False
+
+            # Cross-tests. Vary samples (t1->t2), resolution (t1->t3), and
+            # denoise at BOTH resolutions (t4,t5) so denoising can be split into
+            # a fixed init cost and a per-pixel cost.
+            t1 = self._timed_render(scene, engine, self.RES_LO, self.SAMP_LO, cur_dn)
+            t2 = self._timed_render(scene, engine, self.RES_LO, self.SAMP_HI, cur_dn)
+            t3 = self._timed_render(scene, engine, self.RES_HI, self.SAMP_LO, cur_dn)
+            t4 = t5 = None
+            if engine == 'CYCLES':
+                t4 = self._timed_render(scene, engine, self.RES_LO, self.SAMP_LO, not cur_dn)
+                t5 = self._timed_render(scene, engine, self.RES_HI, self.SAMP_LO, not cur_dn)
+        finally:
+            r.resolution_x = saved["rx"]
+            r.resolution_y = saved["ry"]
+            r.resolution_percentage = saved["pct"]
+            r.filepath = saved["filepath"]
+            r.film_transparent = saved["film"]
+            r.image_settings.file_format = saved["fmt"]
+            scene.frame_set(saved["frame"])
+            # restore engine/samples/denoise/device
+            apply_ortho_render_quality(scene)
+
+        # --- Fit affine_v2 --------------------------------------------------
+        # per-view = k_fixed + k_px*MP + [denoise](dn_fixed + dn_px*MP) + k_smp*MP*samples
+        slo = self.SAMP_LO
+        k_smp = max(0.0, (t2 - t1) / ((self.SAMP_HI - self.SAMP_LO) * MP1))
+
+        if t4 is not None and t5 is not None:
+            # denoise delta (on - off) at each resolution
+            d_lo = (t1 - t4) if cur_dn else (t4 - t1)
+            d_hi = (t3 - t5) if cur_dn else (t5 - t3)
+            dn_px = max(0.0, (d_hi - d_lo) / (MP2 - MP1))
+            dn_fixed = max(0.0, d_lo - dn_px * MP1)
+            t_off_lo = t4 if cur_dn else t1
+            t_off_hi = t5 if cur_dn else t3
+        else:  # EEVEE: no denoise
+            dn_px = dn_fixed = 0.0
+            t_off_lo, t_off_hi = t1, t3
+
+        # base = engine overhead with sampling removed, measured on denoise-OFF
+        base_lo = t_off_lo - k_smp * MP1 * slo
+        base_hi = t_off_hi - k_smp * MP2 * slo
+        k_px = max(0.0, (base_hi - base_lo) / (MP2 - MP1))
+        k_fixed = max(0.0, base_lo - k_px * MP1)
+
+        obj = context.active_object
+        points = [
+            {"res": self.RES_LO, "samples": self.SAMP_LO, "denoise": cur_dn, "seconds": round(t1, 3)},
+            {"res": self.RES_LO, "samples": self.SAMP_HI, "denoise": cur_dn, "seconds": round(t2, 3)},
+            {"res": self.RES_HI, "samples": self.SAMP_LO, "denoise": cur_dn, "seconds": round(t3, 3)},
+        ]
+        if t4 is not None:
+            points.append({"res": self.RES_LO, "samples": self.SAMP_LO, "denoise": (not cur_dn), "seconds": round(t4, 3)})
+            points.append({"res": self.RES_HI, "samples": self.SAMP_LO, "denoise": (not cur_dn), "seconds": round(t5, 3)})
+
+        data = dict(_load_calibration())
+        data[engine] = {
+            "model": "affine_v2",
+            "k_fixed": k_fixed, "k_px": k_px, "k_smp": k_smp,
+            "dn_fixed": dn_fixed, "dn_px": dn_px,
+            "device": getattr(scene, "ortho_render_device", 'AUTO'),
+            "points": points,
+            "object": obj.name if obj else "",
+            "polycount": len(obj.data.polygons) if obj and obj.type == 'MESH' else 0,
+            "blender": bpy.app.version_string,
+            "timestamp": time.strftime("%Y-%m-%d %H:%M"),
+        }
+        _save_calibration(data)
+
+        total_measured = t1 + t2 + t3 + (t4 or 0.0) + (t5 or 0.0)
+        est = estimate_render_seconds(scene)
+        self.report(
+            {'INFO'},
+            f"Benchmark done ({engine}, {total_measured:.1f}s of tests). "
+            f"Estimated {len(CAMERA_POSITIONS)} views: {format_duration(est)}"
+        )
+        return {'FINISHED'}
+
+
 class RENDER_OT_open_templates_folder(Operator):
     """Open the bundled SVG templates folder (read-only reference inside the addon)"""
     bl_idname = "render.open_templates_folder"
@@ -1363,6 +1664,24 @@ class VIEW3D_PT_orthogonal_render(Panel):
         
         box.prop(scene, "ortho_render_output_path", text="")
 
+        # Render quality / engine
+        box = layout.box()
+        box.label(text="Render Quality", icon='RENDER_STILL')
+        box.prop(scene, "ortho_render_engine")
+        box.prop(scene, "ortho_render_samples")
+        if scene.ortho_render_engine == 'CYCLES':
+            box.prop(scene, "ortho_render_denoise")
+            box.prop(scene, "ortho_render_device")
+
+        # Render-time estimate (from the saved machine benchmark)
+        est = estimate_render_seconds(scene)
+        row = box.row()
+        if est is not None:
+            row.label(text=f"Est. {len(CAMERA_POSITIONS)} views: ~{format_duration(est)}", icon='TIME')
+        else:
+            row.label(text="Run benchmark to estimate time", icon='QUESTION')
+        box.operator("render.ortho_benchmark", icon='PREVIEW_RANGE')
+
         # Lighting
         box = layout.box()
         box.label(text="Lighting", icon='LIGHT')
@@ -1396,6 +1715,7 @@ class VIEW3D_PT_orthogonal_render(Panel):
         box = layout.box()
         box.label(text="SVG Layout Export", icon='FILE_IMAGE')
         box.prop(scene, "ortho_template_family", text="Template")
+        box.prop(scene, "ortho_render_logo_path", text="Logo")
         
         # Check if SVG template exists
         template_exists = bool(ensure_svg_templates_folder())
@@ -1468,6 +1788,7 @@ def register():
     bpy.utils.register_class(OBJECT_OT_setup_orthogonal_render)
     bpy.utils.register_class(RENDER_OT_orthogonal_views)
     bpy.utils.register_class(RENDER_OT_create_orthogonal_svg)
+    bpy.utils.register_class(RENDER_OT_ortho_benchmark)
     bpy.utils.register_class(RENDER_OT_open_templates_folder)
     bpy.utils.register_class(RENDER_UL_template_folders)
     bpy.utils.register_class(RENDER_OT_add_template_folder)
@@ -1547,7 +1868,10 @@ def register():
         name="Output Path",
         description="Path to save rendered images",
         default="//ortho_renders/",
-        subtype='DIR_PATH'
+        subtype='DIR_PATH',
+        # Blender 4.5+ flags blend-relative ("//") paths red unless the
+        # property opts in. The option does not exist before 4.5.
+        options={'PATH_SUPPORTS_BLEND_RELATIVE'} if bpy.app.version >= (4, 5, 0) else set()
     )
 
     bpy.types.Scene.ortho_render_create_lights = BoolProperty(
@@ -1555,6 +1879,50 @@ def register():
         description="Create a three-point light rig (Key/Fill/Back) parented to the camera, "
                     "keyframed on every pose for per-view manual fine-tuning",
         default=True
+    )
+
+    bpy.types.Scene.ortho_render_engine = EnumProperty(
+        name="Engine",
+        description="Render engine for the orthogonal views",
+        items=[
+            ('CYCLES', "Cycles", "Path tracing — best quality for documentation (default)"),
+            ('BLENDER_EEVEE', "EEVEE", "Rasterizer — much faster, lower fidelity"),
+        ],
+        default='CYCLES'
+    )
+
+    bpy.types.Scene.ortho_render_samples = IntProperty(
+        name="Samples",
+        description="Render samples per pixel (Cycles) / TAA render samples (EEVEE). "
+                    "Higher = cleaner but slower",
+        default=128, min=1, max=8192
+    )
+
+    bpy.types.Scene.ortho_render_denoise = BoolProperty(
+        name="Denoise",
+        description="Apply denoising (Cycles) — lets you use fewer samples",
+        default=True
+    )
+
+    bpy.types.Scene.ortho_render_logo_path = StringProperty(
+        name="Logo",
+        description="Optional logo image placed in the layout. Leave empty for no logo "
+                    "(or drop a 'logo.png' into a template folder). PNG with alpha recommended",
+        default="",
+        subtype='FILE_PATH',
+        options={'PATH_SUPPORTS_BLEND_RELATIVE'} if bpy.app.version >= (4, 5, 0) else set()
+    )
+
+    bpy.types.Scene.ortho_render_device = EnumProperty(
+        name="Device",
+        description="Compute device for Cycles. GPU requires a device configured in "
+                    "Preferences > System; AUTO keeps your current setting",
+        items=[
+            ('AUTO', "Auto", "Use the device configured in Preferences"),
+            ('GPU', "GPU", "Force GPU Compute (falls back to CPU if none configured)"),
+            ('CPU', "CPU", "Force CPU"),
+        ],
+        default='AUTO'
     )
 
     bpy.types.Scene.ortho_template_family = EnumProperty(
@@ -1576,6 +1944,7 @@ def unregister():
     bpy.utils.unregister_class(RENDER_OT_add_template_folder)
     bpy.utils.unregister_class(RENDER_UL_template_folders)
     bpy.utils.unregister_class(RENDER_OT_open_templates_folder)
+    bpy.utils.unregister_class(RENDER_OT_ortho_benchmark)
     bpy.utils.unregister_class(RENDER_OT_create_orthogonal_svg)
     bpy.utils.unregister_class(RENDER_OT_orthogonal_views)
     bpy.utils.unregister_class(OBJECT_OT_setup_orthogonal_render)
@@ -1591,6 +1960,11 @@ def unregister():
     del bpy.types.Scene.ortho_render_xlarge_resolution
     del bpy.types.Scene.ortho_render_output_path
     del bpy.types.Scene.ortho_render_create_lights
+    del bpy.types.Scene.ortho_render_engine
+    del bpy.types.Scene.ortho_render_samples
+    del bpy.types.Scene.ortho_render_denoise
+    del bpy.types.Scene.ortho_render_device
+    del bpy.types.Scene.ortho_render_logo_path
     del bpy.types.Scene.ortho_template_family
 
 

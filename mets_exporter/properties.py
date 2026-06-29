@@ -217,7 +217,9 @@ class METSExportSettings(PropertyGroup):
         name="Export Path",
         description="Path to export the METS XML file",
         default="//",
-        subtype='DIR_PATH'
+        subtype='DIR_PATH',
+        # Blender 4.5+ flags blend-relative ("//") paths red unless opted in.
+        options={'PATH_SUPPORTS_BLEND_RELATIVE'} if bpy.app.version >= (4, 5, 0) else set()
     )
     
     file_name: StringProperty(
