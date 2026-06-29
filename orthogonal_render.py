@@ -5,6 +5,7 @@ from mathutils import Vector, Matrix
 from bpy.props import EnumProperty, IntProperty, StringProperty, BoolProperty, FloatProperty
 from bpy.types import Panel, Operator
 from .functions import make_path_relative
+from . import render_benchmark
 
 # Constants
 SIZE_CATEGORIES = [
@@ -1180,11 +1181,10 @@ def get_template_search_paths():
 # ---------------------------------------------------------------------------
 # Render engine settings + render-time estimation
 #
-# A true a-priori "hardware simulator" is unreliable (depends on GPU/CPU,
-# scene, denoising). Instead we calibrate ONCE on the real machine+scene with
-# a small benchmark render, store the measured throughput (seconds per
-# megapixel-sample) on disk in the EM home folder, and estimate any future job
-# as throughput * megapixels * samples * number_of_views.
+# The generic, reusable benchmark/estimator lives in render_benchmark.py (so
+# future tools — sections, perspective scenes — and other EM addons can reuse
+# it). Here we only keep the ortho-specific glue: apply the panel's quality
+# props, and call the estimator with the 6 ortho views as frame count.
 # ---------------------------------------------------------------------------
 
 def apply_ortho_render_quality(scene):
@@ -1217,302 +1217,62 @@ def apply_ortho_render_quality(scene):
     return engine
 
 
-_CALIBRATION_CACHE = None
-
-
-def _calibration_path():
-    return os.path.join(get_3dsc_home(), "render_calibration.json")
-
-
-def _load_calibration(force=False):
-    """Load the per-engine throughput calibration (cached). Returns a dict."""
-    global _CALIBRATION_CACHE
-    if _CALIBRATION_CACHE is not None and not force:
-        return _CALIBRATION_CACHE
-    try:
-        import json
-        with open(_calibration_path(), "r", encoding="utf-8") as f:
-            _CALIBRATION_CACHE = json.load(f)
-    except Exception:
-        _CALIBRATION_CACHE = {}
-    return _CALIBRATION_CACHE
-
-
-def _save_calibration(data):
-    global _CALIBRATION_CACHE
-    import json
-    os.makedirs(get_3dsc_home(), exist_ok=True)
-    with open(_calibration_path(), "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
-    _CALIBRATION_CACHE = data
-
-
-def _cycles_gpu_available():
-    """True if Cycles has an active non-CPU compute device configured."""
-    try:
-        cp = bpy.context.preferences.addons['cycles'].preferences
-        return (cp.compute_device_type not in ('NONE', '')) and cp.has_active_device()
-    except Exception:
-        return False
-
-
-def _effective_device(scene):
-    """Resolve the device Cycles will actually use ('GPU' or 'CPU').
-
-    AUTO resolves to GPU when a GPU is configured and the scene is set to GPU,
-    otherwise CPU. This is what we key the timing calibration on, so AUTO and an
-    explicit matching choice share the same record (no spurious re-benchmark).
-    """
-    dev = getattr(scene, "ortho_render_device", 'AUTO')
-    if dev == 'GPU':
-        return 'GPU'
-    if dev == 'CPU':
-        return 'CPU'
-    # AUTO
-    try:
-        if scene.cycles.device == 'GPU' and _cycles_gpu_available():
-            return 'GPU'
-    except Exception:
-        pass
-    return 'CPU'
-
-
-def _calib_key(scene):
-    """Calibration key. Cycles timings depend heavily on the compute device, so
-    key by engine + effective device; EEVEE is keyed by engine alone."""
-    engine = getattr(scene, "ortho_render_engine", 'CYCLES')
-    if engine == 'CYCLES':
-        return f"CYCLES:{_effective_device(scene)}"
-    return engine
-
-
-def _per_view_seconds(rec, mpx, samples, denoise):
-    """Predicted seconds for ONE view from a calibration record.
-
-    affine_v2 separates four costs measured by cross-tests:
-      k_fixed              per-frame overhead (BVH build/sync), constant
-      k_px * MP            pixel overhead, sample-independent
-      dn_fixed + dn_px*MP  denoising (a large fixed init + a per-pixel part),
-                           sample-independent, only when denoise is on
-      k_smp * MP * samples the actual sampling cost
-    """
-    model = rec.get("model")
-    if model == "affine_v2":
-        t = (rec.get("k_fixed", 0.0)
-             + rec.get("k_px", 0.0) * mpx
-             + rec.get("k_smp", 0.0) * mpx * samples)
-        if denoise:
-            t += rec.get("dn_fixed", 0.0) + rec.get("dn_px", 0.0) * mpx
-        return max(0.0, t)
-    if model == "affine_v1":  # earlier model: denoise as k_dn*MP
-        t = (rec.get("k_fixed", 0.0)
-             + rec.get("k_px", 0.0) * mpx
-             + (rec.get("k_dn", 0.0) * mpx if denoise else 0.0)
-             + rec.get("k_smp", 0.0) * mpx * samples)
-        return max(0.0, t)
-    # Legacy single-point model
-    spm = rec.get("sec_per_mpx_sample", 0.0)
-    return spm * mpx * samples if spm > 0 else 0.0
-
-
 def estimate_render_seconds(scene):
-    """Estimate seconds to render all ortho views at the current settings.
+    """Estimate seconds to render all 6 ortho views at the current settings.
 
-    Uses the affine model fitted by the benchmark, which separates the
-    sample-independent costs (per-frame overhead + denoising, both ~constant in
-    samples) from the per-sample cost. Returns None if there is no calibration
-    for the current engine yet.
+    Thin wrapper over the reusable render_benchmark module. Returns None if
+    there is no calibration for the current engine+device yet.
     """
-    data = _load_calibration()
-    if not data:
-        return None
     engine = getattr(scene, "ortho_render_engine", 'CYCLES')
-    rec = data.get(_calib_key(scene))
-    if not rec:
-        return None
     mpx = (scene.render.resolution_x * scene.render.resolution_y) / 1e6
     samples = getattr(scene, "ortho_render_samples", 128)
     denoise = getattr(scene, "ortho_render_denoise", False) if engine == 'CYCLES' else False
-    per_view = _per_view_seconds(rec, mpx, samples, denoise)
-    if per_view <= 0:
-        return None
-    return per_view * len(CAMERA_POSITIONS)
-
-
-def format_duration(seconds):
-    """Human-friendly duration: '<1s', '45s', '3m 20s', '1h 05m'."""
-    if seconds is None:
-        return "?"
-    s = int(round(seconds))
-    if s < 1:
-        return "<1s"
-    if s < 60:
-        return f"{s}s"
-    m, sec = divmod(s, 60)
-    if m < 60:
-        return f"{m}m {sec:02d}s"
-    h, m = divmod(m, 60)
-    return f"{h}h {m:02d}m"
+    device_setting = getattr(scene, "ortho_render_device", 'AUTO')
+    return render_benchmark.estimate(scene, engine, device_setting, mpx, samples,
+                                     denoise, len(CAMERA_POSITIONS))
 
 
 class RENDER_OT_ortho_benchmark(Operator):
     """Benchmark this machine with cross-tests and save a render-time model
 
-    Runs a few small test renders that vary samples, resolution and (for
-    Cycles) denoising. Fitting these cross-tests separates the costs that do
-    NOT scale with samples (per-frame overhead + denoising, both ~constant in
-    samples) from the per-sample cost, so estimates stay accurate when you
-    change samples, resolution or toggle denoise. The model is saved in
-    ~/ExtendedMatrix/3D Survey Collection. Re-run after changing engine/device
-    or when working on a much heavier/lighter scene.
+    Runs a few small cross-test renders (varying samples, resolution and, for
+    Cycles, denoise) plus a discarded warm-up to absorb first-launch GPU kernel
+    compilation. The fitted model is saved per engine+device in
+    ~/ExtendedMatrix and shared across the EM tools. Re-run after changing
+    engine/device or when working on a much heavier/lighter scene.
     """
     bl_idname = "render.ortho_benchmark"
     bl_label = "Benchmark Render Speed"
     bl_options = {'REGISTER'}
 
-    # Cross-test design points. The sample spread must be wide enough that the
-    # per-sample cost rises above timing noise even on a fast GPU (where 16 vs
-    # 64 samples at low res is unmeasurable); hence 32 -> 256.
-    RES_LO = 400
-    RES_HI = 700
-    SAMP_LO = 32
-    SAMP_HI = 256
-
     @classmethod
     def poll(cls, context):
         return context.scene.camera is not None
 
-    def _timed_render(self, scene, engine, res, samples, denoise):
-        import time
-        import tempfile
-        r = scene.render
-        r.resolution_x = res
-        r.resolution_y = res
-        r.resolution_percentage = 100
-        if engine == 'CYCLES':
-            scene.cycles.samples = samples
-            scene.cycles.use_denoising = denoise
-        else:
-            scene.eevee.taa_render_samples = samples
-        r.filepath = os.path.join(tempfile.gettempdir(), "ortho_bench.png")
-        t0 = time.perf_counter()
-        bpy.ops.render.render(write_still=True)
-        return time.perf_counter() - t0
-
     def execute(self, context):
-        import time
         scene = context.scene
         if scene.camera is None:
             self.report({'ERROR'}, "No active camera. Run Setup Orthogonal Render first.")
             return {'CANCELLED'}
 
-        r = scene.render
-        saved = {
-            "rx": r.resolution_x, "ry": r.resolution_y, "pct": r.resolution_percentage,
-            "filepath": r.filepath, "film": r.film_transparent, "frame": scene.frame_current,
-            "fmt": r.image_settings.file_format,
-            "samples": getattr(scene, "ortho_render_samples", 128),
-            "denoise": getattr(scene, "ortho_render_denoise", True),
-        }
+        engine = apply_ortho_render_quality(scene)  # sets engine/device/samples/denoise
+        device_setting = getattr(scene, "ortho_render_device", 'AUTO')
+        rec, total_measured = render_benchmark.run_benchmark(
+            scene, device_setting,
+            frame=(scene.frame_start or None),
+            obj=context.active_object,
+        )
+        # restore the panel's chosen samples/denoise (run_benchmark varied them)
+        apply_ortho_render_quality(scene)
 
-        MP1 = (self.RES_LO ** 2) / 1e6
-        MP2 = (self.RES_HI ** 2) / 1e6
-        try:
-            engine = apply_ortho_render_quality(scene)  # sets engine + device
-            r.film_transparent = True
-            r.image_settings.file_format = 'PNG'
-            if scene.frame_start:
-                scene.frame_set(scene.frame_start)
-
-            cur_dn = saved["denoise"] if engine == 'CYCLES' else False
-
-            # Warm-up render (DISCARDED). On a freshly installed/launched Blender
-            # the first render compiles & loads the GPU kernels (Metal/CUDA/OptiX)
-            # or builds EEVEE shaders — a one-time cost of seconds to tens of
-            # seconds. Doing it once here means the timed cross-tests below
-            # measure steady-state speed, not that first-launch spike.
-            t_warm = self._timed_render(scene, engine, self.RES_LO, self.SAMP_LO, cur_dn)
-
-            # Cross-tests. Vary samples (t1->t2), resolution (t1->t3), and
-            # denoise at BOTH resolutions (t4,t5) so denoising can be split into
-            # a fixed init cost and a per-pixel cost.
-            t1 = self._timed_render(scene, engine, self.RES_LO, self.SAMP_LO, cur_dn)
-            kernel_warmup = max(0.0, t_warm - t1)
-            t2 = self._timed_render(scene, engine, self.RES_LO, self.SAMP_HI, cur_dn)
-            t3 = self._timed_render(scene, engine, self.RES_HI, self.SAMP_LO, cur_dn)
-            t4 = t5 = None
-            if engine == 'CYCLES':
-                t4 = self._timed_render(scene, engine, self.RES_LO, self.SAMP_LO, not cur_dn)
-                t5 = self._timed_render(scene, engine, self.RES_HI, self.SAMP_LO, not cur_dn)
-        finally:
-            r.resolution_x = saved["rx"]
-            r.resolution_y = saved["ry"]
-            r.resolution_percentage = saved["pct"]
-            r.filepath = saved["filepath"]
-            r.film_transparent = saved["film"]
-            r.image_settings.file_format = saved["fmt"]
-            scene.frame_set(saved["frame"])
-            # restore engine/samples/denoise/device
-            apply_ortho_render_quality(scene)
-
-        # --- Fit affine_v2 --------------------------------------------------
-        # per-view = k_fixed + k_px*MP + [denoise](dn_fixed + dn_px*MP) + k_smp*MP*samples
-        slo = self.SAMP_LO
-        k_smp = max(0.0, (t2 - t1) / ((self.SAMP_HI - self.SAMP_LO) * MP1))
-
-        if t4 is not None and t5 is not None:
-            # denoise delta (on - off) at each resolution
-            d_lo = (t1 - t4) if cur_dn else (t4 - t1)
-            d_hi = (t3 - t5) if cur_dn else (t5 - t3)
-            dn_px = max(0.0, (d_hi - d_lo) / (MP2 - MP1))
-            dn_fixed = max(0.0, d_lo - dn_px * MP1)
-            t_off_lo = t4 if cur_dn else t1
-            t_off_hi = t5 if cur_dn else t3
-        else:  # EEVEE: no denoise
-            dn_px = dn_fixed = 0.0
-            t_off_lo, t_off_hi = t1, t3
-
-        # base = engine overhead with sampling removed, measured on denoise-OFF
-        base_lo = t_off_lo - k_smp * MP1 * slo
-        base_hi = t_off_hi - k_smp * MP2 * slo
-        k_px = max(0.0, (base_hi - base_lo) / (MP2 - MP1))
-        k_fixed = max(0.0, base_lo - k_px * MP1)
-
-        obj = context.active_object
-        points = [
-            {"res": self.RES_LO, "samples": self.SAMP_LO, "denoise": cur_dn, "seconds": round(t1, 3)},
-            {"res": self.RES_LO, "samples": self.SAMP_HI, "denoise": cur_dn, "seconds": round(t2, 3)},
-            {"res": self.RES_HI, "samples": self.SAMP_LO, "denoise": cur_dn, "seconds": round(t3, 3)},
-        ]
-        if t4 is not None:
-            points.append({"res": self.RES_LO, "samples": self.SAMP_LO, "denoise": (not cur_dn), "seconds": round(t4, 3)})
-            points.append({"res": self.RES_HI, "samples": self.SAMP_LO, "denoise": (not cur_dn), "seconds": round(t5, 3)})
-
-        data = dict(_load_calibration())
-        data[_calib_key(scene)] = {
-            "model": "affine_v2",
-            "engine": engine,
-            "k_fixed": k_fixed, "k_px": k_px, "k_smp": k_smp,
-            "dn_fixed": dn_fixed, "dn_px": dn_px,
-            "kernel_warmup": round(kernel_warmup, 3),
-            "device_setting": getattr(scene, "ortho_render_device", 'AUTO'),
-            "device_effective": _effective_device(scene) if engine == 'CYCLES' else 'GPU/EEVEE',
-            "points": points,
-            "object": obj.name if obj else "",
-            "polycount": len(obj.data.polygons) if obj and obj.type == 'MESH' else 0,
-            "blender": bpy.app.version_string,
-            "timestamp": time.strftime("%Y-%m-%d %H:%M"),
-        }
-        _save_calibration(data)
-
-        total_measured = t_warm + t1 + t2 + t3 + (t4 or 0.0) + (t5 or 0.0)
         est = estimate_render_seconds(scene)
-        dev = _effective_device(scene) if engine == 'CYCLES' else 'GPU'
-        warm_note = f" (+{kernel_warmup:.0f}s kernel load on first render)" if kernel_warmup >= 1.0 else ""
+        dev = render_benchmark.effective_device(scene, device_setting) if engine == 'CYCLES' else 'GPU'
+        warm = rec.get("kernel_warmup", 0.0)
+        warm_note = f" (+{warm:.0f}s kernel load on first render)" if warm >= 1.0 else ""
         self.report(
             {'INFO'},
             f"Benchmark done ({engine}/{dev}, {total_measured:.1f}s of tests). "
-            f"Estimated {len(CAMERA_POSITIONS)} views: {format_duration(est)}{warm_note}"
+            f"Estimated {len(CAMERA_POSITIONS)} views: {render_benchmark.format_duration(est)}{warm_note}"
         )
         return {'FINISHED'}
 
@@ -1728,7 +1488,7 @@ class VIEW3D_PT_orthogonal_render(Panel):
             box.prop(scene, "ortho_render_denoise")
             box.prop(scene, "ortho_render_device")
             # Warn if GPU is requested but no GPU compute device is configured
-            if scene.ortho_render_device == 'GPU' and not _cycles_gpu_available():
+            if scene.ortho_render_device == 'GPU' and not render_benchmark.cycles_gpu_available():
                 box.label(text="No GPU configured (Preferences > System) — will use CPU",
                           icon='ERROR')
 
@@ -1736,9 +1496,9 @@ class VIEW3D_PT_orthogonal_render(Panel):
         est = estimate_render_seconds(scene)
         row = box.row()
         if est is not None:
-            dev = f" ({_effective_device(scene)})" if is_cycles else ""
-            row.label(text=f"Est. {len(CAMERA_POSITIONS)} views: ~{format_duration(est)}{dev}", icon='TIME')
-            rec = _load_calibration().get(_calib_key(scene), {})
+            dev = f" ({render_benchmark.effective_device(scene, scene.ortho_render_device)})" if is_cycles else ""
+            row.label(text=f"Est. {len(CAMERA_POSITIONS)} views: ~{render_benchmark.format_duration(est)}{dev}", icon='TIME')
+            rec = render_benchmark.get_record(scene, scene.ortho_render_engine, scene.ortho_render_device)
             warm = rec.get("kernel_warmup", 0.0)
             if warm >= 1.0:
                 box.label(text=f"+ ~{int(round(warm))}s on the first render after launch (kernel load)",
