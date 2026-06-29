@@ -128,3 +128,4 @@ cesium_exporter/dev_diag/
 # scripts/version_manager.py; CI regenerates it per Python ABI). Same as EM-tools.
 /blender_manifest.toml
 
+**/.DS_Store
