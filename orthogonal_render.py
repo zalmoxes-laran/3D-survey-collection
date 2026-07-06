@@ -30,6 +30,13 @@ RESOLUTION_PRESETS = [
     ("HIGH", "High (6000x6000)", "6000x6000 pixels", 6000)
 ]
 
+# 1x1 fully transparent PNG (data URI). Used for the logo slot when no logo is
+# set, so nothing shows — an empty href would render a broken-image box.
+TRANSPARENT_PNG_URI = (
+    "data:image/png;base64,"
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+)
+
 # Three-point "TriLamp" light rig, reproduced from Rachele's reference
 # Luci.blend (the lights parented to the base OrthoRenderCamera, ortho_scale
 # 1.0 -> calibrated for a ~1m object).
@@ -144,9 +151,15 @@ class OBJECT_OT_setup_orthogonal_render(Operator):
         # Create camera if it doesn't exist
         camera = self.ensure_camera(context)
         
-        # Set the camera to orthographic and adjust scale
+        # Set the camera to orthographic and frame it to the ACTUAL object
+        # size (+ margin). Using a fixed per-category scale made tall/large
+        # objects fall outside the frame (e.g. a 3.18m column in the 3.0m
+        # XLARGE preset) and made the "Size categories" cutoffs change the
+        # camera size in confusing ways. The categories now only drive
+        # resolution; framing follows the real bounding box.
         camera.data.type = 'ORTHO'
-        ortho_scale = self.get_orthographic_scale(size_category)
+        margin = getattr(scene, "ortho_render_frame_margin", 1.1)
+        ortho_scale = max_dim * margin
         camera.data.ortho_scale = ortho_scale
         
         # Create an empty as a target at the object's center
@@ -229,17 +242,6 @@ class OBJECT_OT_setup_orthogonal_render(Operator):
         scene.render.resolution_y = resolution
         scene.render.resolution_percentage = 100
     
-    def get_orthographic_scale(self, size_category):
-        """Get the orthographic scale based on the size category"""
-        scale_mapping = {
-            'SMALL': 0.5,   # 50cm
-            'MEDIUM': 1.0,  # 1m
-            'LARGE': 2.0,   # 2m
-            'XLARGE': 3.0   # 3m
-        }
-        
-        return scale_mapping.get(size_category, 1.0)
-    
     def ensure_camera(self, context):
         """Create a camera if it doesn't exist, or use the existing one"""
         camera_name = "OrthoRenderCamera"
@@ -299,7 +301,12 @@ class OBJECT_OT_setup_orthogonal_render(Operator):
         
         # Calculate camera distance (this might need adjusting based on ortho scale)
         camera_distance = max_dim * 2.5
-        
+
+        # Make sure the clip range covers the object at that distance, so large
+        # objects are not clipped away.
+        camera.data.clip_start = min(camera.data.clip_start, max(max_dim * 0.01, 0.001))
+        camera.data.clip_end = max(camera.data.clip_end, camera_distance * 2.0 + max_dim)
+
         # Clear any existing animation data
         if camera.animation_data:
             camera.animation_data_clear()
@@ -869,7 +876,9 @@ class RENDER_OT_create_orthogonal_svg(Operator):
         if logo_src:
             svg_content = svg_content.replace('_ref_logo', make_path_relative(logo_src, output_path))
         else:
-            svg_content = svg_content.replace('_ref_logo', '')
+            # No logo: use a 1x1 transparent PNG, NOT an empty href — an empty
+            # href renders as a broken-image "red X" box in Inkscape/PDF export.
+            svg_content = svg_content.replace('_ref_logo', TRANSPARENT_PNG_URI)
         
         # Write back the modified content
         try:
@@ -1257,10 +1266,15 @@ class RENDER_OT_ortho_benchmark(Operator):
 
         engine = apply_ortho_render_quality(scene)  # sets engine/device/samples/denoise
         device_setting = getattr(scene, "ortho_render_device", 'AUTO')
+        # Record the rendered subject (a mesh), not whatever is active — after
+        # Setup the active object is often the camera.
+        subject = context.active_object
+        if subject is None or subject.type != 'MESH':
+            subject = next((o for o in context.selected_objects if o.type == 'MESH'), None)
         rec, total_measured = render_benchmark.run_benchmark(
             scene, device_setting,
             frame=(scene.frame_start or None),
-            obj=context.active_object,
+            obj=subject,
         )
         # restore the panel's chosen samples/denoise (run_benchmark varied them)
         apply_ortho_render_quality(scene)
@@ -1447,10 +1461,16 @@ class VIEW3D_PT_orthogonal_render(Panel):
         row = box.row()
         row.label(text=f"Object: {context.active_object.name}", icon='OBJECT_DATA')
         
-        # Size categories settings
+        # Framing
         box = layout.box()
-        box.label(text="Size Categories", icon='DRIVER_DISTANCE')
-        
+        box.label(text="Framing", icon='CON_CAMERASOLVE')
+        box.prop(scene, "ortho_render_frame_margin", text="Frame Margin")
+
+        # Size categories settings (these drive RESOLUTION only; the camera is
+        # framed to the real object size regardless of category)
+        box = layout.box()
+        box.label(text="Size Categories (resolution)", icon='DRIVER_DISTANCE')
+
         col = box.column(align=True)
         col.prop(scene, "ortho_render_small_cutoff", text="Small (≤)")
         col.prop(scene, "ortho_render_medium_cutoff", text="Medium (≤)")
@@ -1706,6 +1726,13 @@ def register():
         default=True
     )
 
+    bpy.types.Scene.ortho_render_frame_margin = FloatProperty(
+        name="Frame Margin",
+        description="Camera framing padding around the object (1.0 = tight fit, 1.1 = 10%% margin). "
+                    "The camera is sized to the real object, so tall/large objects always fit",
+        default=1.1, min=1.0, max=3.0
+    )
+
     bpy.types.Scene.ortho_render_engine = EnumProperty(
         name="Engine",
         description="Render engine for the orthogonal views",
@@ -1785,6 +1812,7 @@ def unregister():
     del bpy.types.Scene.ortho_render_xlarge_resolution
     del bpy.types.Scene.ortho_render_output_path
     del bpy.types.Scene.ortho_render_create_lights
+    del bpy.types.Scene.ortho_render_frame_margin
     del bpy.types.Scene.ortho_render_engine
     del bpy.types.Scene.ortho_render_samples
     del bpy.types.Scene.ortho_render_denoise
