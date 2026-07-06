@@ -1463,7 +1463,7 @@ class VIEW3D_PT_orthogonal_render(Panel):
         
         # Framing
         box = layout.box()
-        box.label(text="Framing", icon='CON_CAMERASOLVE')
+        box.label(text="Framing", icon='VIEW_CAMERA')
         box.prop(scene, "ortho_render_frame_margin", text="Frame Margin")
 
         # Size categories settings (these drive RESOLUTION only; the camera is
