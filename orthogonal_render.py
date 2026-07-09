@@ -1,5 +1,6 @@
 import bpy
 import os
+import re
 import math
 from mathutils import Vector, Matrix
 from bpy.props import EnumProperty, IntProperty, StringProperty, BoolProperty, FloatProperty
@@ -36,6 +37,15 @@ RESOLUTION_PRESETS = [
     ("MED", "Medium (4000x4000)", "4000x4000 pixels", 4000),
     ("HIGH", "High (6000x6000)", "6000x6000 pixels", 6000)
 ]
+
+# True-scale denominators, agreed with Rachele/Tommaso: small pieces print at
+# 1:10, medium/large at 1:20; a piece that would overflow its layout box climbs
+# the ladder to the first round scale that fits (1:25, 1:50, ...).
+SCALE_LADDER = [10, 20, 25, 50, 100, 200, 500, 1000]
+
+# Candidate real-world total lengths (metres) for the graphic scale bar,
+# 1-2-2.5-5 series: the largest one that fits the template's bar space is used.
+SCALE_BAR_LENGTHS_M = [0.1, 0.2, 0.25, 0.5, 1, 2, 2.5, 5, 10, 20, 25, 50, 100, 200, 500]
 
 # 1x1 fully transparent PNG (data URI). Used for the logo slot when no logo is
 # set, so nothing shows — an empty href would render a broken-image box.
@@ -634,7 +644,17 @@ class RENDER_OT_create_orthogonal_svg(Operator):
         description="Also create a PDF version of the SVG (requires Inkscape or similar)",
         default=False
     ) # type: ignore
-    
+
+    true_scale: BoolProperty(
+        name="True Metric Scale",
+        description="Print the views at a true metric scale (1:10 for small pieces, 1:20 for "
+                    "medium/large, climbing to 1:25, 1:50... if the piece would overflow its box) "
+                    "instead of stretching them to fill the box. Updates the scale bar and the "
+                    "'Scala 1:x' labels accordingly",
+        default=True
+    ) # type: ignore
+
+
     @classmethod
     def poll(cls, context):
         # Check if the blend file is saved
@@ -739,12 +759,13 @@ class RENDER_OT_create_orthogonal_svg(Operator):
         box = layout.box()
         box.label(text="Template Selection")
         box.prop(self, "auto_select_template")
-        
+
         if not self.auto_select_template:
             box.prop(self, "template_select")
         else:
             # Mostra il template selezionato automaticamente
             box.label(text=f"Selected template: {self.template_select}")
+        box.prop(self, "true_scale")
         
         box = layout.box()
         box.label(text="Post-Export Options")
@@ -887,7 +908,16 @@ class RENDER_OT_create_orthogonal_svg(Operator):
             # No logo: use a 1x1 transparent PNG, NOT an empty href — an empty
             # href renders as a broken-image "red X" box in Inkscape/PDF export.
             svg_content = svg_content.replace('_ref_logo', TRANSPARENT_PNG_URI)
-        
+
+        # True metric scale: shrink the views to their exact printed size and
+        # make the scale bar / 'Scala 1:x' labels truthful.
+        scale_denom = None
+        if self.true_scale:
+            svg_content, scale_denom, scale_warning = self.apply_true_scale(context, svg_content, obj)
+            if scale_warning:
+                self.report({'WARNING'}, scale_warning)
+
+
         # Write back the modified content
         try:
             with open(svg_output_path, 'w', encoding='utf-8') as f:
@@ -937,6 +967,8 @@ class RENDER_OT_create_orthogonal_svg(Operator):
                 self.report({'WARNING'}, f"Could not open folder: {e}")
 
         success_msg = f"SVG created successfully at {svg_output_path}"
+        if scale_denom:
+            success_msg += f" (scale 1:{scale_denom})"
         if pdf_output_path and os.path.exists(pdf_output_path):
             success_msg += f" and PDF at {pdf_output_path}"
 
@@ -958,9 +990,163 @@ class RENDER_OT_create_orthogonal_svg(Operator):
         width = max_x - min_x
         depth = max_y - min_y
         height = max_z - min_z
-        
+
         return (depth, width, height)
-    
+
+    # ---- True metric scale ------------------------------------------------
+    # The templates place each view as an 80 mm (50 mm compact) square image
+    # that the render stretches to fill, so the printed scale was arbitrary.
+    # These helpers shrink each view to its exact printed size for a round
+    # scale denominator and rebuild the graphic scale bar to match.
+
+    @staticmethod
+    def _get_attr(tag, name):
+        """Numeric value of an XML attribute inside an already-matched tag."""
+        m = re.search(r'(?<![-\w])%s="([^"]+)"' % name, tag)
+        try:
+            return float(m.group(1)) if m else None
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _edit_tag_attrs(svg_content, elem_id, attrs):
+        """Rewrite attributes of the (unique) element whose id == elem_id."""
+        m = re.search(r'<(?:image|rect|text)\b[^>]*?(?<![-\w])id="%s"[^>]*?>' % re.escape(elem_id),
+                      svg_content, re.DOTALL)
+        if not m:
+            return svg_content
+        tag = m.group(0)
+        for name, value in attrs.items():
+            tag = re.sub(r'(?<![-\w])%s="[^"]*"' % name, '%s="%s"' % (name, value), tag)
+        return svg_content[:m.start()] + tag + svg_content[m.end():]
+
+    @staticmethod
+    def _edit_text_content(svg_content, elem_id, new_text):
+        """Replace the text content of the <text> element with the given id."""
+        pattern = re.compile(r'(<text\b[^>]*?(?<![-\w])id="%s"[^>]*?>)[^<]*(</text>)' % re.escape(elem_id),
+                             re.DOTALL)
+        return pattern.sub(lambda m: m.group(1) + new_text + m.group(2), svg_content, count=1)
+
+    def apply_true_scale(self, context, svg_content, obj):
+        """Resize the six view images so they print at a true metric scale.
+
+        Returns (svg_content, denominator, warning): denominator is None when
+        the template has no image_view boxes (nothing was changed); warning is
+        a message to report, or None.
+        """
+        scene = context.scene
+        max_dim = max(self.get_object_dimensions(obj))
+
+        # Metres spanned by each (square) rendered PNG = the camera's ortho
+        # scale used for the renders; fall back to the framing formula.
+        cam = bpy.data.objects.get("OrthoRenderCamera")
+        if cam and cam.type == 'CAMERA' and cam.data.ortho_scale > 0:
+            ortho_scale = cam.data.ortho_scale
+        else:
+            ortho_scale = max_dim * getattr(scene, "ortho_render_frame_margin", 1.1)
+        if ortho_scale <= 0:
+            return svg_content, None, "Camera ortho scale is zero — true scale skipped"
+
+        # Collect the view boxes from the template (compact templates use a
+        # smaller box, so read the geometry instead of hardcoding 80 mm).
+        boxes = {}
+        for i in range(1, 7):
+            m = re.search(r'<image\b[^>]*?(?<![-\w])id="image_view%d"[^>]*?>' % i,
+                          svg_content, re.DOTALL)
+            if not m:
+                continue
+            vals = {a: self._get_attr(m.group(0), a) for a in ("x", "y", "width", "height")}
+            if None not in vals.values():
+                boxes[i] = vals
+        if not boxes:
+            return svg_content, None, ("Template has no 'image_viewN' boxes — "
+                                       "views were left at arbitrary scale")
+
+        box_mm = min(min(b["width"], b["height"]) for b in boxes.values())
+
+        small_cutoff = getattr(scene, "ortho_render_small_cutoff", 0.5)
+        preferred = 10 if max_dim <= small_cutoff else 20
+        denom = None
+        for d in SCALE_LADDER:
+            if d >= preferred and ortho_scale * 1000.0 / d <= box_mm:
+                denom = d
+                break
+        warning = None
+        if denom is None:
+            denom = SCALE_LADDER[-1]
+            warning = (f"Object overflows the layout box even at 1:{denom} — "
+                       "check the object dimensions")
+
+        printed_mm = ortho_scale * 1000.0 / denom
+
+        # Shrink each view to its printed size, centred in its original box.
+        for i, b in boxes.items():
+            svg_content = self._edit_tag_attrs(svg_content, f"image_view{i}", {
+                "x": f"{b['x'] + (b['width'] - printed_mm) / 2.0:.4f}",
+                "y": f"{b['y'] + (b['height'] - printed_mm) / 2.0:.4f}",
+                "width": f"{printed_mm:.4f}",
+                "height": f"{printed_mm:.4f}",
+            })
+
+        svg_content = self._rebuild_scale_bar(svg_content, denom)
+
+        # The 'Scala 1:x' captions are static text in the templates (layer
+        # Scala + cartiglio): rewrite whatever number they carry.
+        svg_content = re.sub(r'Scala 1:[\d.,]+', f'Scala 1:{denom}', svg_content)
+
+        return svg_content, denom, warning
+
+    def _rebuild_scale_bar(self, svg_content, denom):
+        """Rebuild the 5-segment graphic scale bar (rect18-22, labels
+        text22-27) so it shows a round real-world length at 1:denom. Templates
+        without that structure are left untouched (the text label still gets
+        updated by the caller)."""
+        m = re.search(r'<rect\b[^>]*?(?<![-\w])id="rect18"[^>]*?>', svg_content, re.DOTALL)
+        if not m:
+            return svg_content
+        x0 = self._get_attr(m.group(0), "x")
+        seg_w = self._get_attr(m.group(0), "width")
+        if x0 is None or seg_w is None:
+            return svg_content
+        bar_space_mm = seg_w * 5.0
+
+        # Largest nice real length whose printed size fits the original bar.
+        real_m = SCALE_BAR_LENGTHS_M[0]
+        for r in reversed(SCALE_BAR_LENGTHS_M):
+            if r * 1000.0 / denom <= bar_space_mm + 1e-6:
+                real_m = r
+                break
+        seg_mm = real_m * 1000.0 / denom / 5.0
+
+        for i in range(5):
+            svg_content = self._edit_tag_attrs(svg_content, f"rect{18 + i}", {
+                "x": f"{x0 + i * seg_mm:.4f}",
+                "width": f"{seg_mm:.4f}",
+            })
+
+        # Rachele's templates label bars up to 1 m in cm ("0..100 cm"),
+        # longer ones in m ("0..2 m").
+        unit, factor = ("cm", 100.0) if real_m <= 1.0 else ("m", 1.0)
+        for i in range(6):
+            value = real_m * factor * i / 5.0
+            label = f"{value:g}" if i < 5 else f"{value:g} {unit}"
+            svg_content = self._edit_tag_attrs(svg_content, f"text{22 + i}",
+                                               {"x": f"{x0 + i * seg_mm:.4f}"})
+            svg_content = self._edit_text_content(svg_content, f"text{22 + i}", label)
+        # The end label is end-anchored in the templates; with a bar shorter
+        # than the original it would back into the previous label, so centre
+        # it on the bar end instead.
+        m = re.search(r'<text\b[^>]*?(?<![-\w])id="text27"[^>]*?>', svg_content, re.DOTALL)
+        if m:
+            tag = m.group(0).replace('text-anchor:end', 'text-anchor:middle')
+            svg_content = svg_content[:m.start()] + tag + svg_content[m.end():]
+
+        # Keep the 'Scala 1:x' caption centred under the resized bar.
+        svg_content = self._edit_tag_attrs(svg_content, "text28",
+                                           {"x": f"{x0 + 2.5 * seg_mm:.4f}"})
+        return svg_content
+
+
     def format_dimensions(self, dimensions, unit):
         """Format dimensions with the proper unit"""
         if unit == 'm':
@@ -1789,7 +1975,8 @@ def register():
         name="Template Family",
         description="Template family for SVG layout export",
         items=[
-            ('FIXED_SHEET', "Fixed Sheet (A3)", "A3 paper, images fill available space"),
+            ('FIXED_SHEET', "Fixed Sheet (A3)", "A3 paper; with True Metric Scale the views "
+                                                "print at 1:10/1:20 (or the first round scale that fits)"),
             ('FIXED_SCALE', "Fixed Scale", "True metric scale, paper size varies to fit"),
             ('LEGACY', "Legacy", "Original MASTER_*.svg templates"),
         ],
