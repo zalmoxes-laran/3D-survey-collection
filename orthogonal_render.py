@@ -15,13 +15,20 @@ SIZE_CATEGORIES = [
     ("XLARGE", "Extra Large (> 2m)", "Objects larger than 2m", 3.0)
 ]
 
+# Camera positions for the six standard views. The tuple is
+# (code, label, description, direction, rotation) where `direction` is the
+# offset from the target to the camera. NOTE: Right/Left and Top/Bottom were
+# previously on the wrong side (e.g. "Top" sat BELOW the object looking up),
+# which swapped those views in the layout (Rachele/Tommaso feedback). Fixed so
+# each labelled view is shot from the correct side: Right = +X, Left = -X,
+# Top = above (+Z) looking down, Bottom = below (-Z) looking up.
 CAMERA_POSITIONS = [
-    ("FR", "Front", "Front view (Y+)", (0, -1, 0), (0, 0, 0)),
-    ("BA", "Back", "Back view (Y-)", (0, 1, 0), (0, 0, math.pi)),
-    ("RI", "Right", "Right view (X+)", (-1, 0, 0), (0, 0, -math.pi/2)),
-    ("LE", "Left", "Left view (X-)", (1, 0, 0), (0, 0, math.pi/2)),
-    ("TO", "Top", "Top view (Z+)", (0, 0, -1), (-math.pi/2, 0, 0)),
-    ("BO", "Bottom", "Bottom view (Z-)", (0, 0, 1), (math.pi/2, 0, 0))
+    ("FR", "Front", "Front view", (0, -1, 0), (0, 0, 0)),
+    ("BA", "Back", "Back view", (0, 1, 0), (0, 0, math.pi)),
+    ("RI", "Right", "Right view (+X)", (1, 0, 0), (0, 0, math.pi/2)),
+    ("LE", "Left", "Left view (-X)", (-1, 0, 0), (0, 0, -math.pi/2)),
+    ("TO", "Top", "Top view (above, looking down)", (0, 0, 1), (math.pi/2, 0, 0)),
+    ("BO", "Bottom", "Bottom view (below, looking up)", (0, 0, -1), (-math.pi/2, 0, 0))
 ]
 
 RESOLUTION_PRESETS = [
@@ -667,9 +674,10 @@ class RENDER_OT_create_orthogonal_svg(Operator):
                     self.template_select = target if self.template_exists(target) else "MASTER_1m"
 
                 elif family == 'FIXED_SCALE':
-                    if max_dim <= 0.5:
-                        target = "SCALE_1-5_A2_50cm"
-                    elif max_dim <= 1.0:
+                    # Convention (Rachele/Tommaso): small pieces at 1:10,
+                    # medium and large at 1:20.
+                    small_cut = getattr(context.scene, "ortho_render_small_cutoff", 0.5)
+                    if max_dim <= small_cut:
                         target = "SCALE_1-10_A2_1m"
                     else:
                         target = "SCALE_1-20_A2_2m"
