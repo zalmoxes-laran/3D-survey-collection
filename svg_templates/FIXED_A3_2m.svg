@@ -416,5 +416,10 @@
    y="284.13617"
    style="font-size:2.5px;font-family:sans-serif;text-anchor:end;fill:#000000"
    id="text33">A3</text>
+      <text
+   x="10"
+   y="284"
+   style="font-size:2.5px;font-family:sans-serif;fill:#000000"
+   id="text_location">_3dscluogo</text>
   </g>
 </svg>

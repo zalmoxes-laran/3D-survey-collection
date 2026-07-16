@@ -2,7 +2,7 @@ import bpy
 import os
 import re
 import math
-from mathutils import Vector, Matrix
+from mathutils import Vector, Matrix, Euler
 from bpy.props import EnumProperty, IntProperty, StringProperty, BoolProperty, FloatProperty
 from bpy.types import Panel, Operator
 from .functions import make_path_relative
@@ -300,15 +300,15 @@ class OBJECT_OT_setup_orthogonal_render(Operator):
         return target
     
     def setup_camera_constraints(self, camera, target):
-        """Set up camera constraints to track the target"""
-        # Clear existing constraints
+        """Remove any tracking constraint from the camera.
+
+        Poses are baked as keyframed rotations (see setup_camera_positions)
+        instead of a TRACK_TO constraint: the constraint always forces the
+        same up-vector, which makes a per-pose roll (needed for the Bottom
+        view) impossible. Clearing here also cleans cameras created by older
+        versions of the setup.
+        """
         camera.constraints.clear()
-        
-        # Add track to constraint
-        track = camera.constraints.new('TRACK_TO')
-        track.target = target
-        track.track_axis = 'TRACK_NEGATIVE_Z'
-        track.up_axis = 'UP_Y'
     
     def setup_camera_positions(self, camera, target, obj, context):
         """Set up camera positions for each standard view"""
@@ -336,11 +336,20 @@ class OBJECT_OT_setup_orthogonal_render(Operator):
         for i, (code, name, desc, direction, rotation) in enumerate(CAMERA_POSITIONS, 1):
             # Set the current frame
             scene.frame_set(i)
-            
+
             # Position the camera
             camera.location = target.location + Vector(direction) * camera_distance
-            camera.rotation_euler = rotation
-            
+
+            # Aim at the target. For the five non-degenerate poses this bakes
+            # exactly the orientation the old TRACK_TO(-Z, up Y) constraint
+            # produced. For Bottom (view axis parallel to the up hint) the
+            # degenerate case resolves to image-right=+X / image-up=-Y, i.e.
+            # the "sheet-flipped" reading Rachele asked for — 180° rolled
+            # against the old constraint result (whose lights are compensated
+            # in setup_light_rig).
+            look = (target.location - camera.location).normalized()
+            camera.rotation_euler = look.to_track_quat('-Z', 'Y').to_euler()
+
             # Insert keyframes
             camera.keyframe_insert(data_path="location", frame=i)
             camera.keyframe_insert(data_path="rotation_euler", frame=i)
@@ -410,10 +419,24 @@ class OBJECT_OT_setup_orthogonal_render(Operator):
             light_obj.rotation_euler = spec["rotation"]
             light_objs.append(light_obj)
 
-        # Keyframe the local transform on every pose for per-view fine-tuning
+        # Keyframe the local transform on every pose for per-view fine-tuning.
+        # The Bottom camera pose is rolled 180° about the view axis (see
+        # setup_camera_positions); counter-rotate the lights' camera-local
+        # poses on that frame so the WORLD lighting stays identical.
+        bo_frame = next((i for i, p in enumerate(CAMERA_POSITIONS, 1) if p[0] == "BO"), None)
+        roll = Matrix.Rotation(math.pi, 4, 'Z')
         for i in range(scene.frame_start, scene.frame_end + 1):
             scene.frame_set(i)
-            for light_obj in light_objs:
+            for light_obj, spec in zip(light_objs, TRILAMP_RIG):
+                base_loc = Vector(spec["location"]) * factor
+                base_rot = Euler(spec["rotation"]).to_matrix().to_4x4()
+                if i == bo_frame:
+                    m = roll @ Matrix.Translation(base_loc) @ base_rot
+                    light_obj.location = m.to_translation()
+                    light_obj.rotation_euler = m.to_euler()
+                else:
+                    light_obj.location = base_loc
+                    light_obj.rotation_euler = spec["rotation"]
                 light_obj.keyframe_insert(data_path="location", frame=i)
                 light_obj.keyframe_insert(data_path="rotation_euler", frame=i)
 
@@ -472,7 +495,15 @@ class RENDER_OT_orthogonal_views(Operator):
         
         # Store original frame for restoring later
         original_frame = scene.frame_current
-        
+
+        # Stamp the camera scale actually used for these renders on the object:
+        # the SVG export computes the printed size from THIS value, so tavole
+        # stay correct even if the camera is later re-set-up on another piece
+        # (a stale camera scale silently printed wrong scales in multi-piece
+        # sessions — Rachele's 1:20/1:50 report).
+        camera = bpy.data.objects["OrthoRenderCamera"]
+        obj["_3dsc_render_ortho_scale"] = float(camera.data.ortho_scale)
+
         # Render each view
         for code, name, desc, _, _ in CAMERA_POSITIONS:
             # Find the marker
@@ -862,6 +893,9 @@ class RENDER_OT_create_orthogonal_svg(Operator):
         svg_content = svg_content.replace('_3dsctitolo', self.project_title)
         svg_content = svg_content.replace('_3dscnomeblocco', obj.name)
         svg_content = svg_content.replace('_3dscmisure', formatted_dimensions)
+        # Location caption (Sara's request): bottom-left under the silhouette;
+        # empty string simply leaves the slot blank.
+        svg_content = svg_content.replace('_3dscluogo', getattr(context.scene, "ortho_render_location", "") or "")
         
         # Replace image references
         for i in range(1, 7):
@@ -1037,13 +1071,17 @@ class RENDER_OT_create_orthogonal_svg(Operator):
         scene = context.scene
         max_dim = max(self.get_object_dimensions(obj))
 
-        # Metres spanned by each (square) rendered PNG = the camera's ortho
-        # scale used for the renders; fall back to the framing formula.
-        cam = bpy.data.objects.get("OrthoRenderCamera")
-        if cam and cam.type == 'CAMERA' and cam.data.ortho_scale > 0:
-            ortho_scale = cam.data.ortho_scale
-        else:
-            ortho_scale = max_dim * getattr(scene, "ortho_render_frame_margin", 1.1)
+        # Metres spanned by each (square) rendered PNG = the camera ortho
+        # scale used for the renders. Prefer the value stamped on the object
+        # at render time (the live camera may have been re-set-up on another
+        # piece since); fall back to the camera, then the framing formula.
+        ortho_scale = float(obj.get("_3dsc_render_ortho_scale", 0.0) or 0.0)
+        if ortho_scale <= 0:
+            cam = bpy.data.objects.get("OrthoRenderCamera")
+            if cam and cam.type == 'CAMERA' and cam.data.ortho_scale > 0:
+                ortho_scale = cam.data.ortho_scale
+            else:
+                ortho_scale = max_dim * getattr(scene, "ortho_render_frame_margin", 1.1)
         if ortho_scale <= 0:
             return svg_content, None, "Camera ortho scale is zero — true scale skipped"
 
@@ -1066,9 +1104,13 @@ class RENDER_OT_create_orthogonal_svg(Operator):
 
         small_cutoff = getattr(scene, "ortho_render_small_cutoff", 0.5)
         preferred = 10 if max_dim <= small_cutoff else 20
+        # Fit on the OBJECT's printed footprint, not on the rendered frame:
+        # the frame includes the camera margin (air), which may overflow the
+        # box — the template clip-paths trim it. Keying the fit on the frame
+        # made pieces near the box limit skip to the next scale for no reason.
         denom = None
         for d in SCALE_LADDER:
-            if d >= preferred and ortho_scale * 1000.0 / d <= box_mm:
+            if d >= preferred and max_dim * 1000.0 / d <= box_mm:
                 denom = d
                 break
         warning = None
@@ -1755,6 +1797,7 @@ class VIEW3D_PT_orthogonal_render(Panel):
         box.label(text="SVG Layout Export", icon='FILE_IMAGE')
         box.prop(scene, "ortho_template_family", text="Template")
         box.prop(scene, "ortho_render_logo_path", text="Logo")
+        box.prop(scene, "ortho_render_location", text="Location")
         
         # Check if SVG template exists
         template_exists = bool(ensure_svg_templates_folder())
@@ -1959,6 +2002,14 @@ def register():
         options={'PATH_SUPPORTS_BLEND_RELATIVE'} if bpy.app.version >= (4, 5, 0) else set()
     )
 
+    bpy.types.Scene.ortho_render_location = StringProperty(
+        name="Location",
+        description="Optional location/provenance caption printed bottom-left in the "
+                    "title block, under the silhouette (e.g. 'Roma, Basilica Iulia'). "
+                    "Leave empty for none",
+        default=""
+    )
+
     bpy.types.Scene.ortho_render_device = EnumProperty(
         name="Device",
         description="Compute device for Cycles. GPU requires a device configured in "
@@ -2012,6 +2063,7 @@ def unregister():
     del bpy.types.Scene.ortho_render_samples
     del bpy.types.Scene.ortho_render_denoise
     del bpy.types.Scene.ortho_render_device
+    del bpy.types.Scene.ortho_render_location
     del bpy.types.Scene.ortho_render_logo_path
     del bpy.types.Scene.ortho_template_family
 

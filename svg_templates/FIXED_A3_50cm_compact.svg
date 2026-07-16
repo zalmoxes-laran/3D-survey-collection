@@ -152,5 +152,6 @@
     <text x="42" y="286" style="font-family:sans-serif;font-size:2.5px;fill:#fffefe">_3dscmisure</text>
     <text x="402" y="274.5" style="font-family:sans-serif;font-size:3.5px;fill:#fffefe;text-anchor:end">Scala 1:10</text>
     <text x="402" y="280" style="font-family:sans-serif;font-size:2.5px;fill:#fffefe;text-anchor:end">A3</text>
+      <text x="17" y="294" style="font-family:sans-serif;font-size:2.5px;fill:#fffefe" id="text_location">_3dscluogo</text>
   </g>
 </svg>
