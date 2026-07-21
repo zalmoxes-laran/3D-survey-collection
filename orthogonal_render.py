@@ -828,14 +828,11 @@ class RENDER_OT_create_orthogonal_svg(Operator):
                     self.template_select = target if self.template_exists(target) else "MASTER_1m"
 
                 elif family == 'FIXED_SCALE':
-                    # Convention (Rachele/Tommaso): small pieces at 1:10,
-                    # medium and large at 1:20.
-                    small_cut = getattr(context.scene, "ortho_render_small_cutoff", 0.8)
-                    if max_dim <= small_cut:
-                        target = "SCALE_1-10_A2_1m"
-                    else:
-                        target = "SCALE_1-20_A2_2m"
-                    self.template_select = target if self.template_exists(target) else "MASTER_1m"
+                    # Fixed scale, paper adapts: keep the user's chosen scale and
+                    # pick the smallest sheet that fits the piece at that scale.
+                    denom = int(getattr(context.scene, "ortho_render_fixed_scale_denom", '10'))
+                    target, _box, _warn = self.pick_fixed_scale_template(denom, max_dim)
+                    self.template_select = target if target else "MASTER_1m"
 
                 else:  # LEGACY
                     if max_dim <= 0.5:
@@ -890,8 +887,12 @@ class RENDER_OT_create_orthogonal_svg(Operator):
         box.label(text="Object Measurements")
         box.prop(self, "measurement_unit")
         
+        family = getattr(context.scene, "ortho_template_family", 'FIXED_SHEET')
         box = layout.box()
         box.label(text="Template Selection")
+        box.prop(context.scene, "ortho_template_family", text="Mode")
+        if family == 'FIXED_SCALE':
+            box.prop(context.scene, "ortho_render_fixed_scale_denom", text="Fixed scale")
         box.prop(self, "auto_select_template")
 
         if not self.auto_select_template:
@@ -899,7 +900,10 @@ class RENDER_OT_create_orthogonal_svg(Operator):
         else:
             # Mostra il template selezionato automaticamente
             box.label(text=f"Selected sheet: {self.template_select}")
-        box.prop(self, "true_scale")
+        # In 'Scale fixed' mode the drawing is always at the chosen metric scale,
+        # so the True-Scale toggle is not offered (it would be meaningless).
+        if family != 'FIXED_SCALE':
+            box.prop(self, "true_scale")
 
         # Live preview: tell the user WHAT they will get before generating,
         # instead of only discovering the scale from the tavola afterwards.
@@ -941,6 +945,26 @@ class RENDER_OT_create_orthogonal_svg(Operator):
         res = context.scene.render.resolution_x
         col.label(text=f"Render resolution: {res}×{res} px", icon='IMAGE_DATA')
 
+        family = getattr(context.scene, "ortho_template_family", 'FIXED_SHEET')
+
+        if family == 'FIXED_SCALE':
+            # Fixed scale, paper adapts: scale is the user's choice; report the
+            # sheet auto-pick picks and whether it fits.
+            denom = int(getattr(context.scene, "ortho_render_fixed_scale_denom", '10'))
+            name, box_mm, warning = self.pick_fixed_scale_template(denom, max_dim)
+            obj_mm = max_dim * 1000.0 / denom
+            if name is None:
+                wr = col.row(); wr.alert = True
+                wr.label(text=warning or f"No sheet for 1:{denom}", icon='ERROR')
+                return
+            paper = name.split('_')[2] if len(name.split('_')) > 2 else "?"
+            col.label(text=f"Result: fixed 1:{denom}  ·  object prints {obj_mm:.0f} mm  ·  "
+                           f"sheet {paper} (box {box_mm:.0f} mm)", icon='SNAP_INCREMENT')
+            if warning:
+                wr = col.row(); wr.alert = True
+                wr.label(text="Overflows the largest available sheet", icon='ERROR')
+            return
+
         if not self.true_scale:
             col.label(text="True scale OFF: views fill the box (arbitrary scale)",
                       icon='INFO')
@@ -965,7 +989,7 @@ class RENDER_OT_create_orthogonal_svg(Operator):
         small_cutoff = getattr(context.scene, "ortho_render_small_cutoff", 0.8)
         denom, printed_mm, warning = choose_true_scale(max_dim, ortho_scale, box_mm, small_cutoff)
         obj_mm = max_dim * 1000.0 / denom
-        col.label(text=f"Result: scale 1:{denom}  ·  object prints {obj_mm:.0f} mm "
+        col.label(text=f"Result: A3  ·  scale 1:{denom}  ·  object prints {obj_mm:.0f} mm "
                        f"in a {box_mm:.0f} mm box", icon='SNAP_INCREMENT')
         if warning:
             wr = col.row()
@@ -1099,9 +1123,12 @@ class RENDER_OT_create_orthogonal_svg(Operator):
             svg_content = svg_content.replace('_ref_logo', TRANSPARENT_PNG_URI)
 
         # True metric scale: shrink the views to their exact printed size and
-        # make the scale bar / 'Scala 1:x' labels truthful.
+        # make the scale bar / 'Scala 1:x' labels truthful. Always applied in
+        # 'Scale fixed' mode (the scale is the whole point there); in 'A3 fixed'
+        # mode it is opt-in via the True Metric Scale checkbox.
+        family = getattr(context.scene, "ortho_template_family", 'FIXED_SHEET')
         scale_denom = None
-        if self.true_scale:
+        if self.true_scale or family == 'FIXED_SCALE':
             svg_content, scale_denom, scale_warning = self.apply_true_scale(context, svg_content, obj)
             if scale_warning:
                 self.report({'WARNING'}, scale_warning)
@@ -1216,8 +1243,49 @@ class RENDER_OT_create_orthogonal_svg(Operator):
                              re.DOTALL)
         return pattern.sub(lambda m: m.group(1) + new_text + m.group(2), svg_content, count=1)
 
+    def fixed_scale_templates(self, denom):
+        """List (template_name, box_mm) for the 'Scale fixed' sheets available at
+        1:denom, sorted by box size (smallest paper first)."""
+        pat = re.compile(r'^SCALE_1-%d_.*\.svg$' % denom)
+        found = {}
+        for path in get_template_search_paths():
+            if not os.path.isdir(path):
+                continue
+            for f in os.listdir(path):
+                if pat.match(f):
+                    name = os.path.splitext(f)[0]
+                    if name not in found:
+                        box = read_template_box_mm(os.path.join(path, f))
+                        if box:
+                            found[name] = box
+        return sorted(found.items(), key=lambda kv: kv[1])
+
+    def pick_fixed_scale_template(self, denom, max_dim):
+        """Choose the smallest 'Scale fixed' sheet that fits the piece at 1:denom.
+
+        Returns (template_name or None, box_mm or None, warning). Falls back to
+        the largest available sheet (with a warning) if none is big enough."""
+        candidates = self.fixed_scale_templates(denom)
+        if not candidates:
+            return None, None, f"No 'Scale fixed' template exists for 1:{denom}"
+        needed_mm = max_dim * 1000.0 / denom
+        for name, box in candidates:
+            if box + 1e-6 >= needed_mm:
+                return name, box, None
+        name, box = candidates[-1]  # largest we have
+        return name, box, (f"Piece needs {needed_mm:.0f} mm at 1:{denom}, but the largest "
+                           f"available sheet box is {box:.0f} mm — it will overflow")
+
     def apply_true_scale(self, context, svg_content, obj):
         """Resize the six view images so they print at a true metric scale.
+
+        Two modes (scene.ortho_template_family):
+          * FIXED_SHEET — the sheet is fixed (A3); solve the denominator on the
+            round-scale ladder so the piece fits the box.
+          * FIXED_SCALE — the denominator is fixed (ortho_render_fixed_scale_denom);
+            the paper was chosen to fit (see pick_fixed_scale_template).
+        Same image-resize / scale-bar / label code either way — only the source
+        of `denom` differs.
 
         Returns (svg_content, denominator, warning): denominator is None when
         the template has no image_view boxes (nothing was changed); warning is
@@ -1257,8 +1325,21 @@ class RENDER_OT_create_orthogonal_svg(Operator):
 
         box_mm = min(min(b["width"], b["height"]) for b in boxes.values())
 
-        small_cutoff = getattr(scene, "ortho_render_small_cutoff", 0.8)
-        denom, printed_mm, warning = choose_true_scale(max_dim, ortho_scale, box_mm, small_cutoff)
+        family = getattr(scene, "ortho_template_family", 'FIXED_SHEET')
+        if family == 'FIXED_SCALE':
+            # Fixed scale, paper adapts: the denominator is the user's choice;
+            # the sheet was picked to fit. Warn if the object still overflows.
+            denom = int(getattr(scene, "ortho_render_fixed_scale_denom", '10'))
+            printed_mm = ortho_scale * 1000.0 / denom
+            obj_mm = max_dim * 1000.0 / denom
+            warning = None
+            if obj_mm > box_mm + 1e-6:
+                warning = (f"Object prints {obj_mm:.0f} mm at 1:{denom} but the sheet box is "
+                           f"{box_mm:.0f} mm — pick a larger paper or a smaller scale")
+        else:
+            # A3 fixed, scale adapts: solve the denominator to fit the box.
+            small_cutoff = getattr(scene, "ortho_render_small_cutoff", 0.8)
+            denom, printed_mm, warning = choose_true_scale(max_dim, ortho_scale, box_mm, small_cutoff)
 
         # Shrink each view to its printed size, centred in its original box.
         for i, b in boxes.items():
@@ -1868,7 +1949,9 @@ class VIEW3D_PT_orthogonal_render(Panel):
         # Step 3 — SVG layout export
         box = layout.box()
         box.label(text="3 · SVG Layout Export", icon='FILE_IMAGE')
-        box.prop(scene, "ortho_template_family", text="Template Family")
+        box.prop(scene, "ortho_template_family", text="Mode")
+        if scene.ortho_template_family == 'FIXED_SCALE':
+            box.prop(scene, "ortho_render_fixed_scale_denom", text="Fixed scale")
         box.prop(scene, "ortho_render_logo_path", text="Logo")
         box.prop(scene, "ortho_render_location", text="Location")
 
@@ -2206,15 +2289,32 @@ def register():
     )
 
     bpy.types.Scene.ortho_template_family = EnumProperty(
-        name="Template Family",
-        description="Template family for SVG layout export",
+        name="Mode",
+        description="How the drawing scale and the paper size relate",
         items=[
-            ('FIXED_SHEET', "Fixed Sheet (A3)", "A3 paper; with True Metric Scale the views "
-                                                "print at 1:10/1:20 (or the first round scale that fits)"),
-            ('FIXED_SCALE', "Fixed Scale", "True metric scale, paper size varies to fit"),
+            ('FIXED_SHEET', "A3 fixed · scale adapts",
+             "The sheet is always A3; the drawing scale adapts (1:10, 1:20, 1:25, 1:50…) "
+             "so the piece always fits the same paper. Bigger pieces get more render "
+             "resolution, so the A3 stays sharp when zoomed on screen"),
+            ('FIXED_SCALE', "Scale fixed · sheet adapts",
+             "The drawing scale is fixed (you choose it once); the paper grows "
+             "(A2 → A0) to fit the piece. Every plate is at the same scale, paper varies"),
             ('LEGACY', "Legacy", "Original MASTER_*.svg templates"),
         ],
         default='FIXED_SHEET'
+    )
+
+    bpy.types.Scene.ortho_render_fixed_scale_denom = EnumProperty(
+        name="Fixed Scale",
+        description="Drawing scale used in 'Scale fixed · sheet adapts' mode. The paper is "
+                    "chosen as the smallest sheet that fits the piece at this scale",
+        items=[
+            ('2', "1:2", "1:2"),
+            ('5', "1:5", "1:5"),
+            ('10', "1:10", "1:10"),
+            ('20', "1:20", "1:20"),
+        ],
+        default='10'
     )
 
 
@@ -2253,6 +2353,7 @@ def unregister():
     del bpy.types.Scene.ortho_render_location
     del bpy.types.Scene.ortho_render_logo_path
     del bpy.types.Scene.ortho_template_family
+    del bpy.types.Scene.ortho_render_fixed_scale_denom
 
 
 if __name__ == "__main__":
