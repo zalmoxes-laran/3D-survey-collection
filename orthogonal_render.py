@@ -127,6 +127,23 @@ def choose_true_scale(max_dim_m, ortho_scale_m, box_mm, small_cutoff=0.5):
     return denom, printed_mm, warning
 
 
+def clean_display_name(name):
+    """Strip 3D Survey Collection typed prefixes/suffixes for display.
+
+    3DSC-managed objects carry typed affixes — a type prefix (OB_ objects,
+    ME_ meshes) and an LOD suffix (_LOD0.._LODn, optionally with Blender's
+    '.001' duplicate tag). The tavola should show the bare identifier, e.g.
+    'ME_B1_LOD0' -> 'B1'. Names without these affixes are returned unchanged,
+    so this is safe on non-3DSC objects.
+    """
+    if not name:
+        return name
+    n = re.sub(r'\.\d{3}$', '', name)          # Blender '.001' duplicate tag
+    n = re.sub(r'_LOD\d+$', '', n, flags=re.IGNORECASE)  # _LOD<n> suffix
+    n = re.sub(r'^(?:OB|ME)_', '', n)          # type prefix
+    return n or name
+
+
 def object_max_dim(obj):
     """Largest world-space bounding-box side of a mesh object, in meters."""
     corners = [obj.matrix_world @ Vector(c) for c in obj.bound_box]
@@ -845,10 +862,12 @@ class RENDER_OT_create_orthogonal_svg(Operator):
         return "OrthoRenderCamera" in bpy.data.objects and context.active_object is not None
     
     def invoke(self, context, event):
-        # Set default name based on active object
+        # Set default name based on active object, cleaned of 3DSC typed
+        # prefixes/suffixes (ME_B1_LOD0 -> B1) for the document and title.
         if context.active_object:
-            self.document_name = context.active_object.name
-            self.project_title = context.active_object.name
+            clean = clean_display_name(context.active_object.name)
+            self.document_name = clean
+            self.project_title = clean
         
         # Determina automaticamente il template migliore basato sulla dimensione
         if self.auto_select_template:
@@ -1110,7 +1129,9 @@ class RENDER_OT_create_orthogonal_svg(Operator):
         # Make all required replacements
         #svg_content = svg_content.replace('_3dscnamedocument.svg', f"{self.document_name}.svg")
         svg_content = svg_content.replace('_3dsctitolo', self.project_title)
-        svg_content = svg_content.replace('_3dscnomeblocco', obj.name)
+        # The block caption shows the cleaned 3DSC identifier (ME_B1_LOD0 -> B1);
+        # obj.name stays raw everywhere it must match the rendered PNG files.
+        svg_content = svg_content.replace('_3dscnomeblocco', clean_display_name(obj.name))
         svg_content = svg_content.replace('_3dscmisure', formatted_dimensions)
         # Location caption (Sara's request): bottom-left under the silhouette;
         # empty string simply leaves the slot blank.
