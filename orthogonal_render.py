@@ -2,7 +2,7 @@ import bpy
 import os
 import re
 import math
-from mathutils import Vector, Matrix, Euler
+from mathutils import Vector, Matrix
 from bpy.props import EnumProperty, IntProperty, StringProperty, BoolProperty, FloatProperty
 from bpy.types import Panel, Operator
 from .functions import make_path_relative
@@ -475,15 +475,17 @@ class OBJECT_OT_setup_orthogonal_render(Operator):
             # Position the camera
             camera.location = target.location + Vector(direction) * camera_distance
 
-            # Aim at the target. For the five non-degenerate poses this bakes
-            # exactly the orientation the old TRACK_TO(-Z, up Y) constraint
-            # produced. For Bottom (view axis parallel to the up hint) the
-            # degenerate case resolves to image-right=+X / image-up=-Y, i.e.
-            # the "sheet-flipped" reading Rachele asked for — 180° rolled
-            # against the old constraint result (whose lights are compensated
-            # in setup_light_rig).
+            # Aim at the target (baked, so single poses can be tuned). For
+            # Bottom, roll 180° about the view axis so the underside prints
+            # N-up like the Top view (E/W mirrored — the true view from below),
+            # as decided with Emanuele/Rachele. The lights are parented to the
+            # camera, so they roll with it and keep the same image-relative
+            # direction on every view — no per-pose light compensation needed.
             look = (target.location - camera.location).normalized()
-            camera.rotation_euler = look.to_track_quat('-Z', 'Y').to_euler()
+            mat = look.to_track_quat('-Z', 'Y').to_matrix().to_4x4()
+            if code == "BO":
+                mat = mat @ Matrix.Rotation(math.pi, 4, 'Z')
+            camera.rotation_euler = mat.to_euler()
 
             # Insert keyframes
             camera.keyframe_insert(data_path="location", frame=i)
@@ -555,23 +557,16 @@ class OBJECT_OT_setup_orthogonal_render(Operator):
             light_objs.append(light_obj)
 
         # Keyframe the local transform on every pose for per-view fine-tuning.
-        # The Bottom camera pose is rolled 180° about the view axis (see
-        # setup_camera_positions); counter-rotate the lights' camera-local
-        # poses on that frame so the WORLD lighting stays identical.
-        bo_frame = next((i for i, p in enumerate(CAMERA_POSITIONS, 1) if p[0] == "BO"), None)
-        roll = Matrix.Rotation(math.pi, 4, 'Z')
+        # The rig is parented to the camera and keeps its base camera-relative
+        # pose on every frame (Bottom included): because the lights orbit with
+        # the camera, each view — including the 180°-rolled Bottom — is lit from
+        # the same image-relative direction, so no per-pose compensation is
+        # needed.
         for i in range(scene.frame_start, scene.frame_end + 1):
             scene.frame_set(i)
             for light_obj, spec in zip(light_objs, TRILAMP_RIG):
-                base_loc = Vector(spec["location"]) * factor
-                base_rot = Euler(spec["rotation"]).to_matrix().to_4x4()
-                if i == bo_frame:
-                    m = roll @ Matrix.Translation(base_loc) @ base_rot
-                    light_obj.location = m.to_translation()
-                    light_obj.rotation_euler = m.to_euler()
-                else:
-                    light_obj.location = base_loc
-                    light_obj.rotation_euler = spec["rotation"]
+                light_obj.location = Vector(spec["location"]) * factor
+                light_obj.rotation_euler = spec["rotation"]
                 light_obj.keyframe_insert(data_path="location", frame=i)
                 light_obj.keyframe_insert(data_path="rotation_euler", frame=i)
 
