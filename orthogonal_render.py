@@ -127,6 +127,36 @@ def choose_true_scale(max_dim_m, ortho_scale_m, box_mm, small_cutoff=0.5):
     return denom, printed_mm, warning
 
 
+def object_max_dim(obj):
+    """Largest world-space bounding-box side of a mesh object, in meters."""
+    corners = [obj.matrix_world @ Vector(c) for c in obj.bound_box]
+    xs = [c.x for c in corners]
+    ys = [c.y for c in corners]
+    zs = [c.z for c in corners]
+    return max(max(xs) - min(xs), max(ys) - min(ys), max(zs) - min(zs))
+
+
+def size_category_for(scene, max_dim_m):
+    """Return the size-category id for an object's largest side (meters)."""
+    if max_dim_m <= getattr(scene, "ortho_render_small_cutoff", 0.8):
+        return 'SMALL'
+    if max_dim_m <= getattr(scene, "ortho_render_medium_cutoff", 1.0):
+        return 'MEDIUM'
+    if max_dim_m <= getattr(scene, "ortho_render_large_cutoff", 2.0):
+        return 'LARGE'
+    return 'XLARGE'
+
+
+def resolution_for_category(scene, category):
+    """Return the render resolution (px) configured for a size category."""
+    return {
+        'SMALL': getattr(scene, "ortho_render_small_resolution", 2000),
+        'MEDIUM': getattr(scene, "ortho_render_medium_resolution", 4000),
+        'LARGE': getattr(scene, "ortho_render_large_resolution", 6000),
+        'XLARGE': getattr(scene, "ortho_render_xlarge_resolution", 8000),
+    }.get(category, 2000)
+
+
 def read_template_box_mm(template_path):
     """Return the (smallest) image_view box side in mm of an SVG template,
     or None if the file cannot be read or has no image_view boxes."""
@@ -240,12 +270,20 @@ class OBJECT_OT_setup_orthogonal_render(Operator):
         # Position camera for each view and set keyframes
         self.setup_camera_positions(camera, target, obj, context)
 
-        # Create the three-point light rig parented to the camera
+        # Create the three-point light rig parented to the camera. IMPORTANT:
+        # if the rig already exists we do NOT rebuild it by default — rebuilding
+        # resets each light's position/energy/keyframes and would silently throw
+        # away any manual lighting the user has done. It is only (re)built when
+        # missing, or when the user explicitly ticks "Rebuild light rig".
         light_msg = ""
         if getattr(scene, "ortho_render_create_lights", True):
-            max_dim = max(self.get_object_bbox_dimensions(obj))
-            n_lights = self.setup_light_rig(camera, max_dim, context)
-            light_msg = f", {n_lights} lights"
+            rig_exists = any(bpy.data.objects.get(spec["name"]) for spec in TRILAMP_RIG)
+            if rig_exists and not getattr(scene, "ortho_render_rebuild_lights", False):
+                light_msg = ", light rig kept (tick 'Rebuild light rig' to reset)"
+            else:
+                max_dim = max(self.get_object_bbox_dimensions(obj))
+                n_lights = self.setup_light_rig(camera, max_dim, context)
+                light_msg = f", {n_lights} lights"
 
         # Restore to the first pose
         scene.frame_set(scene.frame_start)
@@ -545,6 +583,19 @@ class RENDER_OT_orthogonal_views(Operator):
         output_path = bpy.path.abspath(scene.ortho_render_output_path)
         os.makedirs(output_path, exist_ok=True)
         
+        # Re-apply the current quality and resolution so the Render button is
+        # WYSIWYG: changing Samples/Engine/Denoise/Device or a Resolution value
+        # in the panel takes effect on the next Render, WITHOUT re-running Setup
+        # (which would rebuild the light rig and discard manual light tweaks).
+        # The light rig and the camera framing are NOT touched here — only Setup
+        # builds those.
+        apply_ortho_render_quality(scene)
+        if obj.type == 'MESH':
+            res = resolution_for_category(scene, size_category_for(scene, object_max_dim(obj)))
+            scene.render.resolution_x = res
+            scene.render.resolution_y = res
+            scene.render.resolution_percentage = 100
+
         # Store original frame for restoring later
         original_frame = scene.frame_current
 
@@ -779,7 +830,7 @@ class RENDER_OT_create_orthogonal_svg(Operator):
                 elif family == 'FIXED_SCALE':
                     # Convention (Rachele/Tommaso): small pieces at 1:10,
                     # medium and large at 1:20.
-                    small_cut = getattr(context.scene, "ortho_render_small_cutoff", 0.5)
+                    small_cut = getattr(context.scene, "ortho_render_small_cutoff", 0.8)
                     if max_dim <= small_cut:
                         target = "SCALE_1-10_A2_1m"
                     else:
@@ -911,7 +962,7 @@ class RENDER_OT_create_orthogonal_svg(Operator):
                       icon='INFO')
             return
 
-        small_cutoff = getattr(context.scene, "ortho_render_small_cutoff", 0.5)
+        small_cutoff = getattr(context.scene, "ortho_render_small_cutoff", 0.8)
         denom, printed_mm, warning = choose_true_scale(max_dim, ortho_scale, box_mm, small_cutoff)
         obj_mm = max_dim * 1000.0 / denom
         col.label(text=f"Result: scale 1:{denom}  ·  object prints {obj_mm:.0f} mm "
@@ -1206,7 +1257,7 @@ class RENDER_OT_create_orthogonal_svg(Operator):
 
         box_mm = min(min(b["width"], b["height"]) for b in boxes.values())
 
-        small_cutoff = getattr(scene, "ortho_render_small_cutoff", 0.5)
+        small_cutoff = getattr(scene, "ortho_render_small_cutoff", 0.8)
         denom, printed_mm, warning = choose_true_scale(max_dim, ortho_scale, box_mm, small_cutoff)
 
         # Shrink each view to its printed size, centred in its original box.
@@ -1882,6 +1933,8 @@ class VIEW3D_PT_ortho_framing_sizing(_OrthoSubPanel):
         note.scale_y = 0.8
         note.label(text="Thresholds pick the render resolution.", icon='INFO')
         note.label(text="'Small' is also the 1:10 ↔ 1:20 scale boundary.")
+        note.label(text="Frame Margin: re-run Setup + Render.", icon='FILE_REFRESH')
+        note.label(text="Thresholds: re-run Render (Step 2).")
 
 
 class VIEW3D_PT_ortho_resolution(_OrthoSubPanel):
@@ -1895,6 +1948,10 @@ class VIEW3D_PT_ortho_resolution(_OrthoSubPanel):
         col.prop(scene, "ortho_render_medium_resolution", text="Medium")
         col.prop(scene, "ortho_render_large_resolution", text="Large")
         col.prop(scene, "ortho_render_xlarge_resolution", text="X-Large")
+        note = self.layout.column(align=True)
+        note.scale_y = 0.8
+        note.label(text="One value per size bucket (X-Large = above the", icon='INFO')
+        note.label(text="Large threshold). Re-run Render (Step 2) to apply.")
 
 
 class VIEW3D_PT_ortho_quality(_OrthoSubPanel):
@@ -1932,6 +1989,17 @@ class VIEW3D_PT_ortho_quality(_OrthoSubPanel):
 
         layout.separator()
         layout.prop(scene, "ortho_render_create_lights")
+        rig_exists = any(bpy.data.objects.get(spec["name"]) for spec in TRILAMP_RIG)
+        if rig_exists:
+            layout.prop(scene, "ortho_render_rebuild_lights")
+
+        note = layout.column(align=True)
+        note.scale_y = 0.8
+        note.label(text="Samples/Engine/Denoise/Device re-apply on", icon='INFO')
+        note.label(text="Render — no need to re-run Setup.")
+        if rig_exists:
+            note.label(text="Existing lights are kept; Setup won't reset")
+            note.label(text="them unless 'Rebuild light rig' is on.")
 
 
 # Function to make sure the SVG template folder exists and create it if not
@@ -1993,8 +2061,9 @@ def register():
         description="Objects up to this size (meters) count as 'small'. This has TWO "
                     "effects: it selects the Small render resolution, AND it is the "
                     "boundary for the true metric scale — small pieces print at 1:10, "
-                    "larger ones at 1:20 (climbing further if they overflow the sheet)",
-        default=0.5,
+                    "larger ones at 1:20 (climbing further if they overflow the sheet). "
+                    "Default 0.8 m = the largest piece that fits an A3 box at 1:10",
+        default=0.8,
         min=0.1,
         max=10.0,
         unit='LENGTH'
@@ -2068,6 +2137,14 @@ def register():
         default=True
     )
 
+    bpy.types.Scene.ortho_render_rebuild_lights = BoolProperty(
+        name="Rebuild Light Rig",
+        description="Rebuild the light rig from scratch on the next Setup, resetting "
+                    "positions, energy and keyframes. Leave OFF to keep an existing rig "
+                    "untouched — turning it ON discards any manual light adjustments",
+        default=False
+    )
+
     bpy.types.Scene.ortho_render_frame_margin = FloatProperty(
         name="Frame Margin",
         description="Camera framing padding around the object (1.0 = tight fit, 1.1 = 10%% margin). "
@@ -2088,8 +2165,9 @@ def register():
     bpy.types.Scene.ortho_render_samples = IntProperty(
         name="Samples",
         description="Render samples per pixel (Cycles) / TAA render samples (EEVEE). "
-                    "Higher = cleaner but slower",
-        default=128, min=1, max=8192
+                    "Starts low (20) for a fast look; raise it if the views look noisy "
+                    "(denoising usually keeps 20 clean enough for documentation)",
+        default=20, min=1, max=8192
     )
 
     bpy.types.Scene.ortho_render_denoise = BoolProperty(
@@ -2166,6 +2244,7 @@ def unregister():
     del bpy.types.Scene.ortho_render_xlarge_resolution
     del bpy.types.Scene.ortho_render_output_path
     del bpy.types.Scene.ortho_render_create_lights
+    del bpy.types.Scene.ortho_render_rebuild_lights
     del bpy.types.Scene.ortho_render_frame_margin
     del bpy.types.Scene.ortho_render_engine
     del bpy.types.Scene.ortho_render_samples
