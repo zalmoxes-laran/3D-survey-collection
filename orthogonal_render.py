@@ -102,6 +102,58 @@ TRILAMP_RIG = [
 ]
 
 
+def choose_true_scale(max_dim_m, ortho_scale_m, box_mm, small_cutoff=0.5):
+    """Pick the metric scale denominator and printed size for a view.
+
+    Shared by the SVG export and the dialog preview so both always agree.
+    Policy (Rachele/Tommaso): 1:10 for pieces up to `small_cutoff`, 1:20
+    above; climb the round-scale ladder if the OBJECT footprint would not fit
+    the layout box. Returns (denom, printed_mm, warning). `printed_mm` is the
+    printed size of the rendered frame (= ortho_scale, margin included); the
+    template clip-path trims any overflow. `box_mm` is the template box side.
+    """
+    preferred = 10 if max_dim_m <= small_cutoff else 20
+    denom = None
+    for d in SCALE_LADDER:
+        if d >= preferred and max_dim_m * 1000.0 / d <= box_mm:
+            denom = d
+            break
+    warning = None
+    if denom is None:
+        denom = SCALE_LADDER[-1]
+        warning = (f"Object overflows the layout box even at 1:{denom} — "
+                   "check the object dimensions")
+    printed_mm = ortho_scale_m * 1000.0 / denom
+    return denom, printed_mm, warning
+
+
+def read_template_box_mm(template_path):
+    """Return the (smallest) image_view box side in mm of an SVG template,
+    or None if the file cannot be read or has no image_view boxes."""
+    try:
+        with open(template_path, 'r', encoding='utf-8') as f:
+            svg = f.read()
+    except OSError:
+        return None
+    sides = []
+    for i in range(1, 7):
+        m = re.search(r'<image\b[^>]*?(?<![-\w])id="image_view%d"[^>]*?>' % i, svg, re.DOTALL)
+        if not m:
+            continue
+        tag = m.group(0)
+        vals = []
+        for a in ("width", "height"):
+            am = re.search(r'(?<![-\w])%s="([^"]+)"' % a, tag)
+            if am:
+                try:
+                    vals.append(float(am.group(1)))
+                except ValueError:
+                    pass
+        if len(vals) == 2:
+            sides.append(min(vals))
+    return min(sides) if sides else None
+
+
 def compute_render_resolution(obj_m, family='FIXED_SHEET', scale_denom=10, dpi=300):
     """Compute optimal render resolution in pixels for a given template configuration.
 
@@ -792,12 +844,17 @@ class RENDER_OT_create_orthogonal_svg(Operator):
         box.prop(self, "auto_select_template")
 
         if not self.auto_select_template:
-            box.prop(self, "template_select")
+            box.prop(self, "template_select", text="Sheet")
         else:
             # Mostra il template selezionato automaticamente
-            box.label(text=f"Selected template: {self.template_select}")
+            box.label(text=f"Selected sheet: {self.template_select}")
         box.prop(self, "true_scale")
-        
+
+        # Live preview: tell the user WHAT they will get before generating,
+        # instead of only discovering the scale from the tavola afterwards.
+        self._draw_scale_preview(context, box)
+
+
         box = layout.box()
         box.label(text="Post-Export Options")
         box.prop(self, "open_file")
@@ -817,6 +874,53 @@ class RENDER_OT_create_orthogonal_svg(Operator):
             box.label(text=f"Template '{self.template_select}' not found", icon='ERROR')
             box.label(text="Check the svg_templates folder")
     
+    def _draw_scale_preview(self, context, layout):
+        """Show the resulting scale / printed size / resolution in the dialog."""
+        obj = context.active_object
+        if obj is None:
+            return
+        col = layout.column(align=True)
+
+        dims = self.get_object_dimensions(obj)
+        max_dim = max(dims)
+        unit = "cm" if max_dim < 1.0 else "m"
+        shown = max_dim * (100.0 if unit == "cm" else 1.0)
+        col.label(text=f"Object size: {shown:.1f} {unit} (largest side)", icon='FIXED_SIZE')
+
+        res = context.scene.render.resolution_x
+        col.label(text=f"Render resolution: {res}×{res} px", icon='IMAGE_DATA')
+
+        if not self.true_scale:
+            col.label(text="True scale OFF: views fill the box (arbitrary scale)",
+                      icon='INFO')
+            return
+
+        # Resolve the same inputs apply_true_scale() uses.
+        ortho_scale = float(obj.get("_3dsc_render_ortho_scale", 0.0) or 0.0)
+        if ortho_scale <= 0:
+            cam = bpy.data.objects.get("OrthoRenderCamera")
+            if cam and cam.type == 'CAMERA' and cam.data.ortho_scale > 0:
+                ortho_scale = cam.data.ortho_scale
+            else:
+                ortho_scale = max_dim * getattr(context.scene, "ortho_render_frame_margin", 1.1)
+
+        paths = self.find_template_paths(self.template_select)
+        box_mm = read_template_box_mm(paths[0]) if paths else None
+        if box_mm is None:
+            col.label(text="True scale not available for this sheet (legacy)",
+                      icon='INFO')
+            return
+
+        small_cutoff = getattr(context.scene, "ortho_render_small_cutoff", 0.5)
+        denom, printed_mm, warning = choose_true_scale(max_dim, ortho_scale, box_mm, small_cutoff)
+        obj_mm = max_dim * 1000.0 / denom
+        col.label(text=f"Result: scale 1:{denom}  ·  object prints {obj_mm:.0f} mm "
+                       f"in a {box_mm:.0f} mm box", icon='SNAP_INCREMENT')
+        if warning:
+            wr = col.row()
+            wr.alert = True
+            wr.label(text="Object overflows even at the smallest scale", icon='ERROR')
+
     def execute(self, context):
         if not bpy.data.filepath:
             self.report({'ERROR'}, "Please save your blend file first")
@@ -1103,23 +1207,7 @@ class RENDER_OT_create_orthogonal_svg(Operator):
         box_mm = min(min(b["width"], b["height"]) for b in boxes.values())
 
         small_cutoff = getattr(scene, "ortho_render_small_cutoff", 0.5)
-        preferred = 10 if max_dim <= small_cutoff else 20
-        # Fit on the OBJECT's printed footprint, not on the rendered frame:
-        # the frame includes the camera margin (air), which may overflow the
-        # box — the template clip-paths trim it. Keying the fit on the frame
-        # made pieces near the box limit skip to the next scale for no reason.
-        denom = None
-        for d in SCALE_LADDER:
-            if d >= preferred and max_dim * 1000.0 / d <= box_mm:
-                denom = d
-                break
-        warning = None
-        if denom is None:
-            denom = SCALE_LADDER[-1]
-            warning = (f"Object overflows the layout box even at 1:{denom} — "
-                       "check the object dimensions")
-
-        printed_mm = ortho_scale * 1000.0 / denom
+        denom, printed_mm, warning = choose_true_scale(max_dim, ortho_scale, box_mm, small_cutoff)
 
         # Shrink each view to its printed size, centred in its original box.
         for i, b in boxes.items():
@@ -1682,158 +1770,168 @@ class VIEW3D_PT_orthogonal_render(Panel):
     def draw(self, context):
         layout = self.layout
         scene = context.scene
-        
-        # Object selection
+
+        # Object selection guards
         if context.active_object is None:
             layout.label(text="Select an object to render", icon='ERROR')
             return
-        
         if context.active_object.type != 'MESH':
             layout.label(text="Selected object must be a mesh", icon='ERROR')
             return
-        
-        # Show the selected object
-        box = layout.box()
-        row = box.row()
-        row.label(text=f"Object: {context.active_object.name}", icon='OBJECT_DATA')
-        
-        # Framing
-        box = layout.box()
-        box.label(text="Framing", icon='VIEW_CAMERA')
-        box.prop(scene, "ortho_render_frame_margin", text="Frame Margin")
 
-        # Size categories settings (these drive RESOLUTION only; the camera is
-        # framed to the real object size regardless of category)
+        # --- WORKFLOW (top): the three steps in order ---------------------
         box = layout.box()
-        box.label(text="Size Categories (resolution)", icon='DRIVER_DISTANCE')
+        box.label(text=f"Object: {context.active_object.name}", icon='OBJECT_DATA')
 
-        col = box.column(align=True)
-        col.prop(scene, "ortho_render_small_cutoff", text="Small (≤)")
-        col.prop(scene, "ortho_render_medium_cutoff", text="Medium (≤)")
-        col.prop(scene, "ortho_render_large_cutoff", text="Large (≤)")
-        
-        # Resolution settings
-        box = layout.box()
-        box.label(text="Resolution Settings", icon='IMAGE_DATA')
-        
-        col = box.column(align=True)
-        col.prop(scene, "ortho_render_small_resolution", text="Small")
-        col.prop(scene, "ortho_render_medium_resolution", text="Medium")
-        col.prop(scene, "ortho_render_large_resolution", text="Large")
-        col.prop(scene, "ortho_render_xlarge_resolution", text="X-Large")
-        
-        # Output path
-        box = layout.box()
-        box.label(text="Output Settings", icon='FOLDER_REDIRECT')
-        
-        # Warning if file is not saved
         if not bpy.data.filepath:
             row = box.row()
             row.alert = True
-            row.label(text="Save file first!", icon='ERROR')
-        
-        box.prop(scene, "ortho_render_output_path", text="")
+            row.label(text="Save the .blend first!", icon='ERROR')
+        row = box.row(align=True)
+        row.label(text="Output:")
+        row.prop(scene, "ortho_render_output_path", text="")
 
-        # Render quality / engine
-        box = layout.box()
-        box.label(text="Render Quality", icon='RENDER_STILL')
-        box.prop(scene, "ortho_render_engine")
-        box.prop(scene, "ortho_render_samples")
-        is_cycles = scene.ortho_render_engine == 'CYCLES'
-        if is_cycles:
-            box.prop(scene, "ortho_render_denoise")
-            box.prop(scene, "ortho_render_device")
-            # Warn if GPU is requested but no GPU compute device is configured
-            if scene.ortho_render_device == 'GPU' and not render_benchmark.cycles_gpu_available():
-                box.label(text="No GPU configured (Preferences > System) — will use CPU",
-                          icon='ERROR')
-
-        # Render-time estimate (from the saved per-engine/device benchmark)
-        est = estimate_render_seconds(scene)
-        row = box.row()
-        if est is not None:
-            dev = f" ({render_benchmark.effective_device(scene, scene.ortho_render_device)})" if is_cycles else ""
-            row.label(text=f"Est. {len(CAMERA_POSITIONS)} views: ~{render_benchmark.format_duration(est)}{dev}", icon='TIME')
-            rec = render_benchmark.get_record(scene, scene.ortho_render_engine, scene.ortho_render_device)
-            warm = rec.get("kernel_warmup", 0.0)
-            if warm >= 1.0:
-                box.label(text=f"+ ~{int(round(warm))}s on the first render after launch (kernel load)",
-                          icon='INFO')
-        else:
-            row.label(text="Run benchmark for these settings", icon='QUESTION')
-        box.operator("render.ortho_benchmark", icon='PREVIEW_RANGE')
-
-        # Lighting
-        box = layout.box()
-        box.label(text="Lighting", icon='LIGHT')
-        box.prop(scene, "ortho_render_create_lights")
-
-        # Setup and render buttons
-        row = layout.row(align=True)
+        # Step 1 — Setup
+        col = layout.column(align=True)
+        col.label(text="1 · Camera setup", icon='CAMERA_DATA')
+        row = col.row(align=True)
         row.scale_y = 1.5
-        row.operator("object.setup_orthogonal_render", icon='CAMERA_DATA')
-        
-        # Only show render button if camera is set up
+        row.operator("object.setup_orthogonal_render", text="Setup Orthogonal Render",
+                     icon='CAMERA_DATA')
+
+        # Step 2 — Render (only once the camera exists)
         if "OrthoRenderCamera" in bpy.data.objects:
-            row = layout.row(align=True)
+            col = layout.column(align=True)
+            col.label(text="2 · Render views", icon='RENDER_STILL')
+            row = col.row(align=True)
             row.scale_y = 1.5
-            row.operator("render.orthogonal_views", icon='RENDER_STILL')
-            
-            # Show current size category if it exists
+            row.operator("render.orthogonal_views", text="Render 6 Views",
+                         icon='RENDER_STILL')
             if hasattr(scene, "ortho_render_size_category") and scene.ortho_render_size_category:
-                box = layout.box()
-                
-                # Find the size category info from the SIZE_CATEGORIES list
-                size_info = next((item for item in SIZE_CATEGORIES if item[0] == scene.ortho_render_size_category), None)
-                if size_info:
-                    box.label(text=f"Current Size: {size_info[1]}")
-                else:
-                    box.label(text=f"Current Size: {scene.ortho_render_size_category}")
-                    
-                box.label(text=f"Resolution: {scene.render.resolution_x}x{scene.render.resolution_y}")
-        
-        # SVG Export section
+                size_info = next((item for item in SIZE_CATEGORIES
+                                  if item[0] == scene.ortho_render_size_category), None)
+                label = size_info[1] if size_info else scene.ortho_render_size_category
+                col.label(text=f"Size: {label}  ·  {scene.render.resolution_x}"
+                               f"×{scene.render.resolution_y} px", icon='INFO')
+
+        # Step 3 — SVG layout export
         box = layout.box()
-        box.label(text="SVG Layout Export", icon='FILE_IMAGE')
-        box.prop(scene, "ortho_template_family", text="Template")
+        box.label(text="3 · SVG Layout Export", icon='FILE_IMAGE')
+        box.prop(scene, "ortho_template_family", text="Template Family")
         box.prop(scene, "ortho_render_logo_path", text="Logo")
         box.prop(scene, "ortho_render_location", text="Location")
-        
-        # Check if SVG template exists
+
         template_exists = bool(ensure_svg_templates_folder())
         has_saved_blend = bool(bpy.data.filepath)
         has_renders = False
-        
         if not template_exists:
             box.label(text="SVG template not found", icon='ERROR')
             box.label(text="Please install the template files")
         elif not has_saved_blend:
             box.label(text="Save file before exporting SVG", icon='ERROR')
         else:
-            # Check if we have renders available
             output_path = bpy.path.abspath(context.scene.ortho_render_output_path)
-            if os.path.exists(output_path):
-                # Check for at least one rendered view
-                if context.active_object:
-                    front_view = os.path.join(output_path, f"{context.active_object.name}_FR.png")
-                    if os.path.exists(front_view):
-                        has_renders = True
-            
+            if os.path.exists(output_path) and context.active_object:
+                front_view = os.path.join(output_path, f"{context.active_object.name}_FR.png")
+                has_renders = os.path.exists(front_view)
             if not has_renders:
-                box.label(text="Render views before creating SVG", icon='INFO')
-                box.label(text="At least one view is required")
-        
-        # Create SVG button
+                box.label(text="Render the views before creating the SVG", icon='INFO')
+
         row = box.row(align=True)
         row.scale_y = 1.2
         row.enabled = bool(template_exists and has_saved_blend and has_renders)
-        row.operator("render.create_orthogonal_svg", icon='OUTLINER_OB_FONT')
+        row.operator("render.create_orthogonal_svg", text="Create SVG Layout",
+                     icon='OUTLINER_OB_FONT')
 
         # Templates management
         box = layout.box()
-        box.label(text="Templates Management", icon='FILEBROWSER')
         row = box.row(align=True)
-        row.operator("render.open_templates_folder", icon='FOLDER_REDIRECT', text="Open Templates Folder")
+        row.operator("render.open_templates_folder", icon='FOLDER_REDIRECT',
+                     text="Open Templates Folder")
+
+        # The fine-grained configuration lives in the collapsible sub-panels
+        # below (Framing & Sizing, Resolution, Render Quality). Sensible
+        # defaults mean most users never open them.
+
+
+class _OrthoSubPanel(Panel):
+    """Base for the collapsible configuration sub-panels."""
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "3DSC"
+    bl_parent_id = "VIEW3D_PT_orthogonal_render"
+    bl_options = {'DEFAULT_CLOSED'}
+
+
+class VIEW3D_PT_ortho_framing_sizing(_OrthoSubPanel):
+    bl_label = "Framing & Sizing"
+    bl_idname = "VIEW3D_PT_ortho_framing_sizing"
+
+    def draw(self, context):
+        layout = self.layout
+        scene = context.scene
+
+        layout.prop(scene, "ortho_render_frame_margin", text="Frame Margin")
+
+        col = layout.column(align=True)
+        col.label(text="Size thresholds (meters):", icon='DRIVER_DISTANCE')
+        col.prop(scene, "ortho_render_small_cutoff", text="Small (≤)")
+        col.prop(scene, "ortho_render_medium_cutoff", text="Medium (≤)")
+        col.prop(scene, "ortho_render_large_cutoff", text="Large (≤)")
+        note = layout.column(align=True)
+        note.scale_y = 0.8
+        note.label(text="Thresholds pick the render resolution.", icon='INFO')
+        note.label(text="'Small' is also the 1:10 ↔ 1:20 scale boundary.")
+
+
+class VIEW3D_PT_ortho_resolution(_OrthoSubPanel):
+    bl_label = "Resolution"
+    bl_idname = "VIEW3D_PT_ortho_resolution"
+
+    def draw(self, context):
+        scene = context.scene
+        col = self.layout.column(align=True)
+        col.prop(scene, "ortho_render_small_resolution", text="Small")
+        col.prop(scene, "ortho_render_medium_resolution", text="Medium")
+        col.prop(scene, "ortho_render_large_resolution", text="Large")
+        col.prop(scene, "ortho_render_xlarge_resolution", text="X-Large")
+
+
+class VIEW3D_PT_ortho_quality(_OrthoSubPanel):
+    bl_label = "Render Quality & Lighting"
+    bl_idname = "VIEW3D_PT_ortho_quality"
+
+    def draw(self, context):
+        layout = self.layout
+        scene = context.scene
+
+        layout.prop(scene, "ortho_render_engine")
+        layout.prop(scene, "ortho_render_samples")
+        is_cycles = scene.ortho_render_engine == 'CYCLES'
+        if is_cycles:
+            layout.prop(scene, "ortho_render_denoise")
+            layout.prop(scene, "ortho_render_device")
+            if scene.ortho_render_device == 'GPU' and not render_benchmark.cycles_gpu_available():
+                layout.label(text="No GPU configured (Preferences > System) — will use CPU",
+                             icon='ERROR')
+
+        est = estimate_render_seconds(scene)
+        row = layout.row()
+        if est is not None:
+            dev = f" ({render_benchmark.effective_device(scene, scene.ortho_render_device)})" if is_cycles else ""
+            row.label(text=f"Est. {len(CAMERA_POSITIONS)} views: "
+                           f"~{render_benchmark.format_duration(est)}{dev}", icon='TIME')
+            rec = render_benchmark.get_record(scene, scene.ortho_render_engine, scene.ortho_render_device)
+            warm = rec.get("kernel_warmup", 0.0)
+            if warm >= 1.0:
+                layout.label(text=f"+ ~{int(round(warm))}s on the first render after launch "
+                                  "(kernel load)", icon='INFO')
+        else:
+            row.label(text="Run benchmark for these settings", icon='QUESTION')
+        layout.operator("render.ortho_benchmark", icon='PREVIEW_RANGE')
+
+        layout.separator()
+        layout.prop(scene, "ortho_render_create_lights")
 
 
 # Function to make sure the SVG template folder exists and create it if not
@@ -1877,7 +1975,11 @@ def register():
     bpy.utils.register_class(RENDER_OT_remove_template_folder)
     bpy.utils.register_class(RENDER_OT_create_em_home_folder)
     bpy.utils.register_class(VIEW3D_PT_orthogonal_render)
-    
+    # Child sub-panels must be registered after their parent.
+    bpy.utils.register_class(VIEW3D_PT_ortho_framing_sizing)
+    bpy.utils.register_class(VIEW3D_PT_ortho_resolution)
+    bpy.utils.register_class(VIEW3D_PT_ortho_quality)
+
     # Register properties
     bpy.types.Scene.ortho_render_size_category = EnumProperty(
         items=[(id, name, desc) for id, name, desc, _ in SIZE_CATEGORIES],
@@ -1888,7 +1990,10 @@ def register():
     # Size cutoffs
     bpy.types.Scene.ortho_render_small_cutoff = FloatProperty(
         name="Small Cutoff",
-        description="Maximum size for small objects (meters)",
+        description="Objects up to this size (meters) count as 'small'. This has TWO "
+                    "effects: it selects the Small render resolution, AND it is the "
+                    "boundary for the true metric scale — small pieces print at 1:10, "
+                    "larger ones at 1:20 (climbing further if they overflow the sheet)",
         default=0.5,
         min=0.1,
         max=10.0,
@@ -2036,6 +2141,9 @@ def register():
 
 
 def unregister():
+    bpy.utils.unregister_class(VIEW3D_PT_ortho_quality)
+    bpy.utils.unregister_class(VIEW3D_PT_ortho_resolution)
+    bpy.utils.unregister_class(VIEW3D_PT_ortho_framing_sizing)
     bpy.utils.unregister_class(VIEW3D_PT_orthogonal_render)
     bpy.utils.unregister_class(RENDER_OT_create_em_home_folder)
     bpy.utils.unregister_class(RENDER_OT_remove_template_folder)
