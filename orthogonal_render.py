@@ -147,6 +147,51 @@ def size_category_for(scene, max_dim_m):
     return 'XLARGE'
 
 
+# Cache for the dynamic fixed-scale enum. Blender stores char* pointers from
+# EnumProperty items callbacks, so the returned list MUST stay referenced (a
+# local would be garbage-collected and corrupt the menu) — keep it here.
+_FIXED_SCALE_ENUM_CACHE = []
+
+
+def fixed_scale_denom_items(self, context):
+    """Enum items = the scales that actually have SCALE_1-N_* templates, so the
+    menu grows automatically whenever new templates are added — no code change
+    needed for a new paper/scale that follows the naming convention."""
+    denoms = set()
+    for path in get_template_search_paths():
+        if os.path.isdir(path):
+            for f in os.listdir(path):
+                m = re.match(r'^SCALE_1-(\d+)_.*\.svg$', f)
+                if m:
+                    denoms.add(int(m.group(1)))
+    if not denoms:
+        denoms = {10}
+    items = [(str(d), f"1:{d}", f"Fixed scale 1:{d}") for d in sorted(denoms)]
+    _FIXED_SCALE_ENUM_CACHE.clear()
+    _FIXED_SCALE_ENUM_CACHE.extend(items)
+    return _FIXED_SCALE_ENUM_CACHE
+
+
+def _fmt_len(m):
+    """Format a length in the friendliest unit (cm under 1 m, else m)."""
+    return f"{m * 100:.0f} cm" if m < 1.0 else f"{m:g} m"
+
+
+def size_category_label(scene, category):
+    """Human label for a size category built from the LIVE thresholds, so it
+    always matches the editable Size thresholds (the old hardcoded '≤ 50cm'
+    strings drifted from the real cutoffs)."""
+    small = getattr(scene, "ortho_render_small_cutoff", 0.8)
+    medium = getattr(scene, "ortho_render_medium_cutoff", 1.0)
+    large = getattr(scene, "ortho_render_large_cutoff", 2.0)
+    return {
+        'SMALL': f"Small (≤ {_fmt_len(small)})",
+        'MEDIUM': f"Medium (≤ {_fmt_len(medium)})",
+        'LARGE': f"Large (≤ {_fmt_len(large)})",
+        'XLARGE': f"X-Large (> {_fmt_len(large)})",
+    }.get(category, category)
+
+
 def resolution_for_category(scene, category):
     """Return the render resolution (px) configured for a size category."""
     return {
@@ -1940,9 +1985,7 @@ class VIEW3D_PT_orthogonal_render(Panel):
             row.operator("render.orthogonal_views", text="Render 6 Views",
                          icon='RENDER_STILL')
             if hasattr(scene, "ortho_render_size_category") and scene.ortho_render_size_category:
-                size_info = next((item for item in SIZE_CATEGORIES
-                                  if item[0] == scene.ortho_render_size_category), None)
-                label = size_info[1] if size_info else scene.ortho_render_size_category
+                label = size_category_label(scene, scene.ortho_render_size_category)
                 col.label(text=f"Size: {label}  ·  {scene.render.resolution_x}"
                                f"×{scene.render.resolution_y} px", icon='INFO')
 
@@ -2012,6 +2055,11 @@ class VIEW3D_PT_ortho_framing_sizing(_OrthoSubPanel):
         col.prop(scene, "ortho_render_small_cutoff", text="Small (≤)")
         col.prop(scene, "ortho_render_medium_cutoff", text="Medium (≤)")
         col.prop(scene, "ortho_render_large_cutoff", text="Large (≤)")
+        # X-Large is the open bucket above the Large threshold — no editable
+        # value (it has no upper bound), shown read-only so all four are visible.
+        xl = col.row()
+        xl.enabled = False
+        xl.label(text=f"X-Large (>): {_fmt_len(getattr(scene, 'ortho_render_large_cutoff', 2.0))}")
         note = layout.column(align=True)
         note.scale_y = 0.8
         note.label(text="Thresholds pick the render resolution.", icon='INFO')
@@ -2307,14 +2355,9 @@ def register():
     bpy.types.Scene.ortho_render_fixed_scale_denom = EnumProperty(
         name="Fixed Scale",
         description="Drawing scale used in 'Scale fixed · sheet adapts' mode. The paper is "
-                    "chosen as the smallest sheet that fits the piece at this scale",
-        items=[
-            ('2', "1:2", "1:2"),
-            ('5', "1:5", "1:5"),
-            ('10', "1:10", "1:10"),
-            ('20', "1:20", "1:20"),
-        ],
-        default='10'
+                    "chosen as the smallest sheet that fits the piece at this scale. The list "
+                    "shows the scales that have SCALE_* templates installed",
+        items=fixed_scale_denom_items,
     )
 
 
