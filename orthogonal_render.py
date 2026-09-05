@@ -54,52 +54,375 @@ TRANSPARENT_PNG_URI = (
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
 )
 
-# Three-point "TriLamp" light rig, reproduced from Rachele's reference
-# Luci.blend (the lights parented to the base OrthoRenderCamera, ortho_scale
-# 1.0 -> calibrated for a ~1m object).
+# ---------------------------------------------------------------------------
+# Three-point "TriLamp" light rig
 #
-# IMPORTANT: location/rotation are the light's pose in CAMERA space, i.e.
-# camera.matrix_world.inverted() @ light.matrix_world, extracted from the
-# reference file. They must be applied with matrix_parent_inverse = Identity.
-# Using the raw object-local ("basis") values instead would drop the original
-# parent-inverse and, because our TRACK_TO camera uses +Y-up while Rachele's
-# camera was tilted, would flip the rig below the horizon (lit from below).
-# Camera convention: +X right, +Y up, -Z toward the subject. The rig is
-# parented to the camera so it orbits with the viewpoint; positions/energies
-# scale to object size at setup (see LIGHT_RIG_SIZE_REF) and are keyframed on
-# every pose for per-view manual fine-tuning.
+# The rig descends from Rachele's reference Luci.blend, but it is no longer
+# stored as raw camera-space vectors: those were impossible to reason about and
+# hid the fact that the key light was almost frontal (~24 degrees off the face
+# normal), so it produced no raking light at all. Each lamp is now described by
+# three angles around the SUBJECT:
+#
+#   azimuth   degrees around the vertical axis, measured from the camera axis.
+#             0 = between camera and subject (frontal), +/-90 = at the subject's
+#             own depth (fully raking on the framed face), >90 = behind it.
+#   elevation degrees above the horizontal plane through the subject.
+#   distance  distance from the subject centre, in units of the object size.
+#
+# The incidence angle on the framed face follows from those two angles
+# (see `trilamp_incidence_deg`): 0 = flat frontal light, 90 = perfectly
+# grazing. Key sits at ~76 degrees, which is what "radente" actually means.
+#
+# `ratio` is the lamp's power relative to the key, corrected for its distance,
+# so the printed ratios (key 1.00, fill 0.20, rim 0.35) are the ratios that
+# actually reach the stone rather than raw wattages. The old rig had the FILL
+# as the brightest lamp of the three (250 W against the key's 150 W).
+#
+# Positions are computed in CAMERA space and applied with
+# matrix_parent_inverse = Identity, so the rig orbits rigidly with the viewpoint
+# and every view — including the 180-degree-rolled Bottom — is lit from the same
+# image-relative direction. Location, rotation AND energy are keyframed on every
+# pose so a single view can be re-lit by hand.
+#
+# `legacy_names` lets an existing scene be adopted instead of duplicated: the
+# rim lamp used to be called "-Back", and rigs appended straight from
+# Luci.blend carry the bare names Key/Fill/Back.
+# ---------------------------------------------------------------------------
 LIGHT_RIG_COLLECTION = "OrthoRender_Lights"
 LIGHT_RIG_SIZE_REF = 1.0  # meters: object size the reference rig was tuned for
+LIGHT_RIG_KEY_ENERGY = 200.0  # watts for the key on a LIGHT_RIG_SIZE_REF object
 
 TRILAMP_RIG = [
     {
         "name": "OrthoRender_TriLamp-Key",
+        "legacy_names": ("Key", "OrthoRender_TriLamp-Key"),
+        "role": "KEY",
         "type": "POINT",
-        "energy": 150.0,
         "color": (1.0, 1.0, 1.0),
-        "location": (-1.185, 0.6334, 0.1792),
-        "rotation": (-0.1982, -0.6592, -0.0624),
+        # Raking: pushed back almost to the subject's own depth, low over it.
+        "azimuth": -75.0,
+        "elevation": 20.0,
+        "distance": 1.8,
+        "ratio": 1.0,
     },
     {
         "name": "OrthoRender_TriLamp-Fill",
+        "legacy_names": ("Fill", "OrthoRender_TriLamp-Fill"),
+        "role": "FILL",
         "type": "POINT",
-        "energy": 250.0,
         "color": (1.0, 1.0, 1.0),
-        "location": (1.6488, 0.4025, -0.9282),
-        "rotation": (0.1435, 1.3003, 0.2942),
+        # Opposite side, high-ish, deliberately weak: it opens the shadows the
+        # key carves without flattening them.
+        "azimuth": 45.0,
+        "elevation": 10.0,
+        "distance": 2.2,
+        "ratio": 0.20,
     },
     {
-        "name": "OrthoRender_TriLamp-Back",
+        "name": "OrthoRender_TriLamp-Rim",
+        # "-Back" is the pre-1.7.0-dev.16 name; "Back" comes from Luci.blend.
+        "legacy_names": ("OrthoRender_TriLamp-Back", "Back", "OrthoRender_TriLamp-Rim"),
+        "role": "RIM",
         "type": "AREA",
-        "energy": 200.0,
         "color": (1.0, 1.0, 1.0),
-        "location": (-4.2033, 0.7291, -1.6966),
-        "rotation": (-0.8891, -1.6872, 0.7581),
+        # Genuinely behind the subject (azimuth > 90), so it detaches the
+        # silhouette from the transparent film instead of lighting the face.
+        "azimuth": 150.0,
+        "elevation": 35.0,
+        "distance": 2.0,
+        "ratio": 0.35,
         "shape": "SQUARE",
         "size": 1.0,
         "size_y": 0.25,
     },
 ]
+
+# Channels keyframed on every pose. Object-level channels are keyed on the
+# light OBJECT, data-level ones on the light DATA (energy lives on the data,
+# which is why per-view intensity was not adjustable before dev.16).
+LIGHT_OBJECT_CHANNELS = ("location", "rotation_euler")
+LIGHT_DATA_CHANNELS = ("energy", "color")
+LIGHT_DATA_AREA_CHANNELS = ("size", "size_y")
+
+
+def trilamp_incidence_deg(spec):
+    """Angle between the lamp direction and the framed face's normal, degrees.
+
+    0 = flat frontal light, 90 = perfectly grazing, >90 = behind the subject.
+    Depends only on the two angles, not on the object size.
+    """
+    az = math.radians(spec["azimuth"])
+    el = math.radians(spec["elevation"])
+    return math.degrees(math.acos(max(-1.0, min(1.0, math.cos(el) * math.cos(az)))))
+
+
+def trilamp_pose(spec, max_dim, camera_distance):
+    """Camera-space (location, rotation_euler) for one rig lamp.
+
+    Camera convention: +X right, +Y up, -Z toward the subject; the subject
+    centre sits at (0, 0, -camera_distance). The lamp is placed on the sphere
+    around that centre described by the spec's angles, then aimed back at it
+    (which only matters for the AREA rim, but is harmless for the points).
+    """
+    az = math.radians(spec["azimuth"])
+    el = math.radians(spec["elevation"])
+    d = spec["distance"] * max(max_dim, 1e-4)
+    subject = Vector((0.0, 0.0, -camera_distance))
+    offset = Vector((
+        d * math.cos(el) * math.sin(az),
+        d * math.sin(el),
+        d * math.cos(el) * math.cos(az),
+    ))
+    location = subject + offset
+    rotation = (subject - location).normalized().to_track_quat('-Z', 'Y').to_euler()
+    return location, rotation
+
+
+def trilamp_energy(spec, factor):
+    """Watts for one lamp on an object `factor` times the reference size.
+
+    `ratio` is the share of the key's illumination that should reach the
+    subject, so the raw power is corrected by the inverse-square distance
+    penalty of the lamp's own standoff. Power then scales with factor**2 to
+    keep the irradiance constant as the object grows.
+    """
+    key = next((s for s in TRILAMP_RIG if s.get("role") == "KEY"), TRILAMP_RIG[0])
+    dist_penalty = (spec["distance"] / key["distance"]) ** 2
+    return LIGHT_RIG_KEY_ENERGY * spec["ratio"] * dist_penalty * factor * factor
+
+
+def find_rig_light(spec):
+    """Return the scene light object for a rig spec, canonical name first.
+
+    Looking up the legacy names is what stops the tool from silently building a
+    fourth lamp next to a rig that came from an older 3DSC or straight from
+    Luci.blend.
+    """
+    obj = bpy.data.objects.get(spec["name"])
+    if obj is not None and obj.type == 'LIGHT':
+        return obj
+    for legacy in spec.get("legacy_names", ()):
+        obj = bpy.data.objects.get(legacy)
+        if obj is not None and obj.type == 'LIGHT':
+            return obj
+    return None
+
+
+def rig_light_objects():
+    """Every rig lamp currently in the file, as (spec, object) pairs."""
+    out = []
+    for spec in TRILAMP_RIG:
+        obj = find_rig_light(spec)
+        if obj is not None:
+            out.append((spec, obj))
+    return out
+
+
+def action_fcurves(anim_data):
+    """Every F-curve of an ID's active action, across Blender's two action APIs.
+
+    Blender 4.4 replaced the flat `Action.fcurves` list with slotted actions and
+    5.0 removed the old attribute outright: on Blender 5.x the curves only exist
+    inside the channelbag of the slot the datablock is assigned to. Reading them
+    the old way raises AttributeError on exactly the version 3DSC targets, so
+    everything that inspects keyframes goes through here.
+    """
+    if anim_data is None or anim_data.action is None:
+        return []
+    action = anim_data.action
+
+    legacy = getattr(action, "fcurves", None)
+    if legacy is not None:  # Blender <= 4.3
+        return list(legacy)
+
+    slot = getattr(anim_data, "action_slot", None)
+    if slot is None:
+        return []
+    curves = []
+    for layer in action.layers:
+        for strip in layer.strips:
+            channelbag = getattr(strip, "channelbag", None)
+            if channelbag is None:
+                continue
+            bag = channelbag(slot)
+            if bag is not None:
+                curves.extend(bag.fcurves)
+    return curves
+
+
+def _has_fcurve(anim_data, data_path):
+    return any(fc.data_path == data_path for fc in action_fcurves(anim_data))
+
+
+def rig_migration_issues():
+    """What is wrong with the rig already in this file, in plain sentences.
+
+    Returns a list of (object_name, issue) pairs; empty means the rig is
+    already in the shape the tool expects. This is what the panel uses to
+    decide whether to offer the migration button, and it is deliberately
+    read-only: a scene from the Basilica Iulia sessions must be diagnosed
+    without being touched.
+    """
+    issues = []
+    camera = bpy.data.objects.get("OrthoRenderCamera")
+    for spec, obj in rig_light_objects():
+        if obj.name != spec["name"]:
+            issues.append((obj.name, f"named '{obj.name}', expected '{spec['name']}'"))
+        if camera is not None and obj.parent is not camera:
+            issues.append((obj.name, "not parented to OrthoRenderCamera"))
+        for path in LIGHT_OBJECT_CHANNELS:
+            if not _has_fcurve(obj.animation_data, path):
+                issues.append((obj.name, f"no keyframes on {path}"))
+        for path in LIGHT_DATA_CHANNELS:
+            if not _has_fcurve(obj.data.animation_data, path):
+                issues.append((obj.name, f"no keyframes on data.{path}"))
+    return issues
+
+
+def rig_light_channels(light_obj):
+    """(object_paths, data_paths) that this lamp should carry keys on."""
+    data_paths = list(LIGHT_DATA_CHANNELS)
+    if light_obj.data.type == 'AREA':
+        data_paths += list(LIGHT_DATA_AREA_CHANNELS)
+    return list(LIGHT_OBJECT_CHANNELS), data_paths
+
+
+def missing_rig_channels(light_obj):
+    """The subset of `rig_light_channels` that has no F-curve yet.
+
+    Computed ONCE before keying, never inside the frame loop: the first
+    insert creates the curve, so a per-frame test would key frame 1 and
+    silently skip the other five.
+    """
+    obj_paths, data_paths = rig_light_channels(light_obj)
+    return (
+        [p for p in obj_paths if not _has_fcurve(light_obj.animation_data, p)],
+        [p for p in data_paths if not _has_fcurve(light_obj.data.animation_data, p)],
+    )
+
+
+def keyframe_rig_light(light_obj, frame, obj_paths=None, data_paths=None):
+    """Key one rig lamp on `frame`, transform and data channels alike.
+
+    Pass explicit channel lists to key only some of them (the migration keys
+    only what is missing, so existing manual work survives untouched).
+    """
+    default_obj, default_data = rig_light_channels(light_obj)
+    for path in (default_obj if obj_paths is None else obj_paths):
+        light_obj.keyframe_insert(data_path=path, frame=frame)
+    for path in (default_data if data_paths is None else data_paths):
+        try:
+            light_obj.data.keyframe_insert(data_path=path, frame=frame)
+        except (TypeError, RuntimeError) as e:
+            # size_y only exists on rectangular area lights, etc.
+            print(f"[ortho] could not key {light_obj.name}.data.{path}: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Output folder resolution
+#
+# The output folder is read from five places (render, SVG poll, SVG export,
+# panel state, and the render itself). They MUST all go through
+# `resolve_output_dir`, or versioning silently splits them apart: the render
+# writes into _v03 while the SVG export keeps looking for PNGs in _v02.
+#
+# Version folders are siblings of the base folder — //ortho_renders/ becomes
+# //ortho_renders_v01/ — so nothing is nested and the base stays readable.
+# Reads always resolve to the LATEST existing version; only a render with
+# mode 'NEW' ever creates the next one, which then becomes the latest. That
+# way no hidden "current version" state has to be stored in the scene.
+# ---------------------------------------------------------------------------
+
+OUTPUT_VERSION_RE = re.compile(r'_v(\d{2,})$')
+
+
+def output_dir_base(scene):
+    """Absolute, separator-free base output folder (no version suffix)."""
+    raw = getattr(scene, "ortho_render_output_path", "") or "//ortho_renders/"
+    base = bpy.path.abspath(raw)
+    return base.rstrip("/\\") or base
+
+
+def existing_output_versions(base):
+    """Version numbers of the `<base>_vNN` folders that already exist."""
+    parent = os.path.dirname(base)
+    leaf = os.path.basename(base)
+    if not leaf or not os.path.isdir(parent):
+        return []
+    versions = []
+    for entry in os.listdir(parent):
+        if not entry.startswith(leaf + "_v"):
+            continue
+        m = OUTPUT_VERSION_RE.search(entry)
+        if m and os.path.isdir(os.path.join(parent, entry)):
+            versions.append(int(m.group(1)))
+    return sorted(versions)
+
+
+def resolve_output_dir(scene, create=False):
+    """Where this scene's ortho renders live right now.
+
+    `create=True` marks the write path (the Render operator): only then may a
+    new version folder come into existence.
+    """
+    base = output_dir_base(scene)
+    mode = getattr(scene, "ortho_render_versioning", 'OFF')
+    if mode == 'OFF':
+        if create:
+            os.makedirs(base, exist_ok=True)
+        return base
+
+    versions = existing_output_versions(base)
+    if mode == 'NEW' and create:
+        number = (versions[-1] + 1) if versions else 1
+    else:
+        number = versions[-1] if versions else 1
+    path = f"{base}_v{number:02d}"
+    if create:
+        os.makedirs(path, exist_ok=True)
+    return path
+
+
+def output_dir_label(scene):
+    """Short, human description of where the next render will land."""
+    mode = getattr(scene, "ortho_render_versioning", 'OFF')
+    if mode == 'OFF':
+        return os.path.basename(output_dir_base(scene)) or "."
+    base = output_dir_base(scene)
+    versions = existing_output_versions(base)
+    if mode == 'NEW':
+        number = (versions[-1] + 1) if versions else 1
+        return f"{os.path.basename(base)}_v{number:02d} (new)"
+    number = versions[-1] if versions else 1
+    return f"{os.path.basename(base)}_v{number:02d}"
+
+
+def view_image_path(scene, obj_name, code, output_path=None):
+    """Full path of one rendered view, extension included.
+
+    The extension comes from `scene.render.file_extension` rather than a
+    hardcoded '.png', so the skip-existing check keeps working if the output
+    format is ever changed.
+    """
+    if output_path is None:
+        output_path = resolve_output_dir(scene)
+    return os.path.join(output_path, f"{obj_name}_{code}{scene.render.file_extension}")
+
+
+def ortho_pose_frames(scene):
+    """The six frames the views live on, from the timeline markers.
+
+    Falls back to the scene frame range when the markers are missing, so the
+    helpers still do something sensible on a half-built scene.
+    """
+    frames = []
+    for code, _, _, _, _ in CAMERA_POSITIONS:
+        marker = scene.timeline_markers.get(code)
+        if marker is not None:
+            frames.append(marker.frame)
+    if not frames:
+        frames = list(range(scene.frame_start, scene.frame_end + 1))
+    return sorted(set(frames))
 
 
 def choose_true_scale(max_dim_m, ortho_scale_m, box_mm, small_cutoff=0.5):
@@ -171,19 +494,31 @@ _FIXED_SCALE_ENUM_CACHE = []
 
 
 def fixed_scale_denom_items(self, context):
-    """Enum items = the scales that actually have SCALE_1-N_* templates, so the
-    menu grows automatically whenever new templates are added — no code change
-    needed for a new paper/scale that follows the naming convention."""
-    denoms = set()
+    """Enum items for the fixed-scale menu.
+
+    Two sources, merged: the scales that actually have SCALE_1-N_* templates
+    installed (so the menu grows by itself when a template is dropped into a
+    folder — no code change for a new paper/scale), plus a baseline set that is
+    always offered because the RESOLUTION can honour any scale even when no
+    plate template exists for it yet. Entries without a template say so in
+    their tooltip, and the export reports it rather than failing silently.
+    """
+    with_template = set()
     for path in get_template_search_paths():
         if os.path.isdir(path):
             for f in os.listdir(path):
                 m = re.match(r'^SCALE_1-(\d+)_.*\.svg$', f)
                 if m:
-                    denoms.add(int(m.group(1)))
-    if not denoms:
-        denoms = {10}
-    items = [(str(d), f"1:{d}", f"Fixed scale 1:{d}") for d in sorted(denoms)]
+                    with_template.add(int(m.group(1)))
+    denoms = with_template | set(BASELINE_SCALE_DENOMS)
+    items = []
+    for d in sorted(denoms):
+        if d in with_template:
+            desc = f"Fixed scale 1:{d} — plate templates installed"
+        else:
+            desc = (f"Fixed scale 1:{d} — no SCALE_1-{d}_* plate template installed; "
+                    "renders will be at this scale but the SVG layout needs one")
+        items.append((str(d), f"1:{d}", desc))
     _FIXED_SCALE_ENUM_CACHE.clear()
     _FIXED_SCALE_ENUM_CACHE.extend(items)
     return _FIXED_SCALE_ENUM_CACHE
@@ -246,17 +581,129 @@ def read_template_box_mm(template_path):
     return min(sides) if sides else None
 
 
-def compute_render_resolution(obj_m, family='FIXED_SHEET', scale_denom=10, dpi=300):
-    """Compute optimal render resolution in pixels for a given template configuration.
+# ---------------------------------------------------------------------------
+# Render resolution
+#
+# Two ways of deciding how many pixels a view gets:
+#
+#   BUCKET     the historical behaviour — one fixed resolution per size
+#              bucket (2000/4000/6000/8000). Simple, but the printed dot
+#              density is whatever falls out of it, which is why 1:5 plates
+#              were being produced by rendering at 1:10 and doubling the
+#              image by hand in Inkscape.
+#   SCALE_DPI  the resolution is DERIVED from the drawing scale and a target
+#              DPI, so the PNG carries exactly the dots the plate needs and
+#              nothing has to be resampled downstream.
+#
+# The rendered PNG spans the camera's ortho_scale (NOT the object size: the
+# frame margin is inside the image and the template clips it), so the printed
+# width is ortho_scale * 1000 / denominator millimetres. That is the number
+# the DPI applies to — see apply_true_scale, which prints exactly that.
+# ---------------------------------------------------------------------------
 
-    For FIXED_SHEET: uses 1:10 equivalent resolution (high-res for on-screen zoom).
-    For FIXED_SCALE: uses the actual declared scale at the given DPI.
+MAX_RENDER_PX = 16000  # a 1:1 metre-wide block at 300 dpi asks for ~13000 px
+
+# Scales always offered in the fixed-scale menu, whether or not a matching
+# template ships. The resolution can honour any of them; the plate can only be
+# laid out if a SCALE_1-<n>_* template exists, and the export says so.
+BASELINE_SCALE_DENOMS = [1, 2, 5, 10, 20, 25, 50]
+
+
+# Memo for default_sheet_box_mm: this is read from disk, and the panel asks
+# for it on every redraw. Keyed on the search paths, so adding a template
+# folder invalidates it; a template edited in place needs a Blender restart,
+# which is an acceptable trade for not stat-ing the disk 60 times a second.
+_SHEET_BOX_CACHE = {}
+
+
+def default_sheet_box_mm(scene=None):
+    """Side of the view box on the standard A3 sheet, in mm.
+
+    Read from an installed FIXED_A3_* template so it follows the templates
+    instead of a hardcoded number; falls back to 80 mm (the shipped geometry)
+    when none can be read.
     """
-    if family == 'FIXED_SHEET':
-        image_mm = obj_m * 1000 / 10  # Always 1:10 equivalent
-    else:
-        image_mm = obj_m * 1000 / scale_denom
+    paths = tuple(get_template_search_paths())
+    if paths in _SHEET_BOX_CACHE:
+        return _SHEET_BOX_CACHE[paths]
+
+    box_mm = 80.0
+    for path in paths:
+        if not os.path.isdir(path):
+            continue
+        found = None
+        for f in sorted(os.listdir(path)):
+            if f.startswith("FIXED_A3_") and f.endswith(".svg"):
+                found = read_template_box_mm(os.path.join(path, f))
+                if found:
+                    break
+        if found:
+            box_mm = found
+            break
+
+    _SHEET_BOX_CACHE[paths] = box_mm
+    return box_mm
+
+
+def print_scale_denominator(scene, max_dim_m, ortho_scale_m):
+    """The denominator the plate will actually be drawn at.
+
+    Mirrors apply_true_scale so the resolution is computed for the SAME scale
+    the export will print — otherwise the DPI promise is a lie.
+    """
+    family = getattr(scene, "ortho_template_family", 'FIXED_SHEET')
+    if family == 'FIXED_SCALE':
+        try:
+            return int(getattr(scene, "ortho_render_fixed_scale_denom", '10'))
+        except (TypeError, ValueError):
+            return 10
+    if family == 'LEGACY':
+        return 10
+    small_cutoff = getattr(scene, "ortho_render_small_cutoff", 0.8)
+    denom, _printed_mm, _warning = choose_true_scale(
+        max_dim_m, ortho_scale_m, default_sheet_box_mm(scene), small_cutoff)
+    return denom
+
+
+def compute_render_resolution(span_m, scale_denom=10, dpi=300):
+    """Pixels per side so that `span_m` printed at 1:scale_denom holds `dpi`.
+
+    `span_m` is the metric width of the rendered frame (the camera ortho
+    scale), not the object size.
+    """
+    image_mm = span_m * 1000.0 / max(scale_denom, 1)
     return int(round(image_mm / 25.4 * dpi))
+
+
+def render_span_for(scene, obj):
+    """Metres spanned by one rendered view — the camera ortho scale."""
+    camera = bpy.data.objects.get("OrthoRenderCamera")
+    if camera is not None and camera.type == 'CAMERA' and camera.data.ortho_scale > 0:
+        return float(camera.data.ortho_scale)
+    return object_max_dim(obj) * getattr(scene, "ortho_render_frame_margin", 1.1)
+
+
+def render_resolution_for(scene, obj):
+    """(pixels per side, warning or None) for the current settings."""
+    if getattr(scene, "ortho_render_res_mode", 'BUCKET') != 'SCALE_DPI':
+        return resolution_for_category(scene, size_category_for(scene, object_max_dim(obj))), None
+
+    max_dim = object_max_dim(obj)
+    span = render_span_for(scene, obj)
+    denom = print_scale_denominator(scene, max_dim, span)
+    dpi = getattr(scene, "ortho_render_target_dpi", 300)
+    px = compute_render_resolution(span, denom, dpi)
+
+    note = None
+    if px > MAX_RENDER_PX:
+        note = (f"1:{denom} at {dpi} dpi asks for {px} px per side; capped at "
+                f"{MAX_RENDER_PX} px (~{int(round(MAX_RENDER_PX * 25.4 / (span * 1000.0 / denom)))} dpi). "
+                "Lower the DPI or choose a smaller scale.")
+        px = MAX_RENDER_PX
+    elif px < 500:
+        note = f"1:{denom} at {dpi} dpi gives only {px} px per side; raised to 500 px."
+        px = 500
+    return px, note
 
 
 def get_text_dimensions(text, font, draw=None):
@@ -339,7 +786,7 @@ class OBJECT_OT_setup_orthogonal_render(Operator):
         # missing, or when the user explicitly ticks "Rebuild light rig".
         light_msg = ""
         if getattr(scene, "ortho_render_create_lights", True):
-            rig_exists = any(bpy.data.objects.get(spec["name"]) for spec in TRILAMP_RIG)
+            rig_exists = bool(rig_light_objects())
             if rig_exists and not getattr(scene, "ortho_render_rebuild_lights", False):
                 light_msg = ", light rig kept (tick 'Rebuild light rig' to reset)"
             else:
@@ -525,26 +972,41 @@ class OBJECT_OT_setup_orthogonal_render(Operator):
     def setup_light_rig(self, camera, max_dim, context):
         """Create/refresh the three-point light rig parented to the camera.
 
-        The rig reproduces Rachele's reference Luci.blend (Key/Fill/Back).
-        Positions and area-light size scale linearly with the object size,
-        and energy scales with the square of that factor (inverse-square law),
-        using LIGHT_RIG_SIZE_REF as the reference. Each light's LOCAL transform
-        is keyframed on every pose so each of the six views can be fine-tuned
-        by hand afterwards; because the lights are parented to the camera they
-        otherwise orbit rigidly with the viewpoint.
+        Lamps are placed from the angular spec (see TRILAMP_RIG) so the key is
+        genuinely raking and the fill is genuinely subordinate. Distances scale
+        linearly with the object size and energies with its square
+        (inverse-square law), using LIGHT_RIG_SIZE_REF as the reference.
+
+        Location, rotation AND the data-level channels (energy, colour, and the
+        area size for the rim) are keyframed on every pose, so any single view
+        can be re-lit — including its intensity, which before dev.16 lived on an
+        unkeyframed light datablock and could only be changed globally.
+
+        This REBUILDS: it is only reached when the rig is missing or when the
+        user explicitly asked for a rebuild. Adopting an existing rig without
+        disturbing it is RENDER_OT_ortho_migrate_light_rig's job.
         """
         scene = context.scene
         factor = max(max_dim, 1e-4) / LIGHT_RIG_SIZE_REF
+        camera_distance = max_dim * 2.5  # must match setup_camera_positions
         coll = self._get_light_rig_collection(context)
         identity = Matrix.Identity(4)
 
         light_objs = []
         for spec in TRILAMP_RIG:
-            name = spec["name"]
-            light_obj = bpy.data.objects.get(name)
-            if light_obj is None or light_obj.type != 'LIGHT':
-                light_data = bpy.data.lights.new(name, type=spec["type"])
-                light_obj = bpy.data.objects.new(name, light_data)
+            # Adopt an existing lamp under any of its known names rather than
+            # creating a duplicate, then normalise the name.
+            light_obj = find_rig_light(spec)
+            if light_obj is None:
+                light_data = bpy.data.lights.new(spec["name"], type=spec["type"])
+                light_obj = bpy.data.objects.new(spec["name"], light_data)
+            # Claim the canonical name only if it is free: forcing it would
+            # make Blender push a '.001' onto whatever unrelated object is
+            # already holding it.
+            clash = bpy.data.objects.get(spec["name"])
+            if clash is None or clash is light_obj:
+                light_obj.name = spec["name"]
+                light_obj.data.name = spec["name"]
             light_data = light_obj.data
 
             # Link into the rig collection (and nowhere else)
@@ -555,37 +1017,40 @@ class OBJECT_OT_setup_orthogonal_render(Operator):
             # Light data
             light_data.type = spec["type"]
             light_data.color = spec["color"]
-            light_data.energy = spec["energy"] * factor * factor
+            light_data.energy = trilamp_energy(spec, factor)
             if spec["type"] == 'AREA':
                 light_data.shape = spec.get("shape", 'SQUARE')
                 light_data.size = spec.get("size", 1.0) * factor
                 if "size_y" in spec:
-                    light_data.size_y = spec["size_y"] * factor
+                    light_data.size_y = spec.get("size_y", 1.0) * factor
 
             # Clear any previous animation so re-running gives a clean rig
             if light_obj.animation_data:
                 light_obj.animation_data_clear()
+            if light_data.animation_data:
+                light_data.animation_data_clear()
 
-            # Parent to the camera with local transform == the spec offset
+            # Parent to the camera with local transform == the computed pose
             light_obj.parent = camera
             light_obj.matrix_parent_inverse = identity
-            light_obj.location = Vector(spec["location"]) * factor
-            light_obj.rotation_euler = spec["rotation"]
+            light_obj.rotation_mode = 'XYZ'
+            light_obj.location, light_obj.rotation_euler = trilamp_pose(
+                spec, max_dim, camera_distance)
             light_objs.append(light_obj)
 
-        # Keyframe the local transform on every pose for per-view fine-tuning.
-        # The rig is parented to the camera and keeps its base camera-relative
-        # pose on every frame (Bottom included): because the lights orbit with
-        # the camera, each view — including the 180°-rolled Bottom — is lit from
-        # the same image-relative direction, so no per-pose compensation is
-        # needed.
+        # Keyframe the local transform and the data channels on every pose.
+        # The rig keeps its base camera-relative pose on every frame (Bottom
+        # included): because the lights orbit with the camera, each view is lit
+        # from the same image-relative direction, so no per-pose compensation is
+        # needed — the keys exist so the user can BREAK that uniformity on a
+        # single view when a face needs different light.
         for i in range(scene.frame_start, scene.frame_end + 1):
             scene.frame_set(i)
             for light_obj, spec in zip(light_objs, TRILAMP_RIG):
-                light_obj.location = Vector(spec["location"]) * factor
-                light_obj.rotation_euler = spec["rotation"]
-                light_obj.keyframe_insert(data_path="location", frame=i)
-                light_obj.keyframe_insert(data_path="rotation_euler", frame=i)
+                light_obj.location, light_obj.rotation_euler = trilamp_pose(
+                    spec, max_dim, camera_distance)
+                light_obj.data.energy = trilamp_energy(spec, factor)
+                keyframe_rig_light(light_obj, i)
 
         return len(light_objs)
 
@@ -604,7 +1069,152 @@ class OBJECT_OT_setup_orthogonal_render(Operator):
         # Output path template
         if not scene.ortho_render_output_path:
             scene.ortho_render_output_path = "//ortho_renders/"
-        scene.render.filepath = scene.ortho_render_output_path
+        scene.render.filepath = resolve_output_dir(scene)
+
+
+class RENDER_OT_ortho_migrate_light_rig(Operator):
+    """Adopt an existing light rig: rename, re-parent and add the missing keyframes
+
+    For scenes built before 1.7.0-dev.16, or whose rig was appended by hand from
+    Rachele's Luci.blend. Those lamps follow the camera but hold no keyframes of
+    their own, so a single view cannot be re-lit — and Setup deliberately leaves
+    an existing rig alone, which means the scene never repairs itself.
+
+    This adopts what is already there WITHOUT moving it: lamps keep their exact
+    world pose, their energy and their colour. Only the missing pieces are
+    added — the canonical name, the parenting to the render camera, and
+    keyframes on the six poses for the channels that have none.
+    """
+    bl_idname = "render.ortho_migrate_light_rig"
+    bl_label = "Migrate Light Rig"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return bool(rig_light_objects())
+
+    def execute(self, context):
+        scene = context.scene
+        camera = bpy.data.objects.get("OrthoRenderCamera")
+        if camera is None:
+            self.report({'ERROR'}, "No OrthoRenderCamera in the file. "
+                                   "Run Setup Orthogonal Render first.")
+            return {'CANCELLED'}
+
+        pairs = rig_light_objects()
+        if not pairs:
+            self.report({'INFO'}, "No TriLamp rig found — nothing to migrate.")
+            return {'CANCELLED'}
+
+        frames = ortho_pose_frames(scene)
+        original_frame = scene.frame_current
+        identity = Matrix.Identity(4)
+        coll = bpy.data.collections.get(LIGHT_RIG_COLLECTION)
+        if coll is None:
+            coll = bpy.data.collections.new(LIGHT_RIG_COLLECTION)
+            scene.collection.children.link(coll)
+
+        renamed, reparented, keyed = [], [], []
+
+        # Everything below happens on the first pose: the camera is animated,
+        # so "the lamp's world pose" only means something at a definite frame.
+        scene.frame_set(frames[0])
+
+        for spec, light_obj in pairs:
+            # 1. canonical name (the rim used to be called "-Back")
+            if light_obj.name != spec["name"]:
+                clash = bpy.data.objects.get(spec["name"])
+                if clash is not None and clash is not light_obj:
+                    self.report({'WARNING'},
+                                f"'{light_obj.name}' not renamed: '{spec['name']}' "
+                                "is already taken by another object")
+                else:
+                    renamed.append(f"{light_obj.name} -> {spec['name']}")
+                    light_obj.name = spec["name"]
+                    light_obj.data.name = spec["name"]
+
+            # 2. live in the rig collection
+            if coll not in list(light_obj.users_collection):
+                for c in list(light_obj.users_collection):
+                    c.objects.unlink(light_obj)
+                coll.objects.link(light_obj)
+
+            # 3. parent to the camera KEEPING the world pose. Solving the local
+            #    matrix by hand (instead of letting Blender store a
+            #    parent-inverse) keeps the rig's identity-parent-inverse
+            #    convention, so a later Rebuild starts from a clean slate.
+            if light_obj.parent is not camera:
+                world = light_obj.matrix_world.copy()
+                light_obj.parent = camera
+                light_obj.matrix_parent_inverse = identity
+                local = camera.matrix_world.inverted() @ world
+                loc, rot, scale = local.decompose()
+                light_obj.rotation_mode = 'XYZ'
+                light_obj.location = loc
+                light_obj.rotation_euler = rot.to_euler('XYZ')
+                light_obj.scale = scale
+                reparented.append(light_obj.name)
+
+            # 4. keyframe only what is missing, on all six poses
+            obj_paths, data_paths = missing_rig_channels(light_obj)
+            if obj_paths or data_paths:
+                for frame in frames:
+                    scene.frame_set(frame)
+                    keyframe_rig_light(light_obj, frame, obj_paths, data_paths)
+                keyed.append(f"{light_obj.name} ({len(obj_paths) + len(data_paths)} ch)")
+                scene.frame_set(frames[0])
+
+        scene.frame_set(original_frame)
+
+        parts = []
+        if renamed:
+            parts.append("renamed " + ", ".join(renamed))
+        if reparented:
+            parts.append("re-parented " + ", ".join(reparented))
+        if keyed:
+            parts.append("keyframed " + ", ".join(keyed))
+        if not parts:
+            self.report({'INFO'}, "Light rig was already up to date — nothing changed.")
+        else:
+            self.report({'INFO'}, "Light rig migrated: " + "; ".join(parts))
+        return {'FINISHED'}
+
+
+class RENDER_OT_ortho_key_lights_here(Operator):
+    """Record the current light positions and intensities on THIS view
+
+    The manual way is to select the three lamps and press I over the viewport,
+    then repeat it on the light data for the intensity. This does both, on the
+    current frame only, for every lamp of the rig.
+    """
+    bl_idname = "render.ortho_key_lights_here"
+    bl_label = "Key Lights on This View"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return bool(rig_light_objects())
+
+    def execute(self, context):
+        scene = context.scene
+        frame = scene.frame_current
+        pairs = rig_light_objects()
+        if not pairs:
+            self.report({'ERROR'}, "No TriLamp rig found.")
+            return {'CANCELLED'}
+
+        for _spec, light_obj in pairs:
+            keyframe_rig_light(light_obj, frame)
+
+        view = None
+        for code, name, _, _, _ in CAMERA_POSITIONS:
+            marker = scene.timeline_markers.get(code)
+            if marker is not None and marker.frame == frame:
+                view = name
+                break
+        where = f"the {view} view" if view else f"frame {frame}"
+        self.report({'INFO'}, f"{len(pairs)} lights keyed on {where}.")
+        return {'FINISHED'}
 
 
 class RENDER_OT_orthogonal_views(Operator):
@@ -636,9 +1246,9 @@ class RENDER_OT_orthogonal_views(Operator):
             self.report({'ERROR'}, "Camera positions not set up correctly. Please run Setup Orthogonal Render first.")
             return {'CANCELLED'}
         
-        # Create output directory if it doesn't exist
-        output_path = bpy.path.abspath(scene.ortho_render_output_path)
-        os.makedirs(output_path, exist_ok=True)
+        # Resolve (and, in 'New version' mode, create) the output folder. This
+        # is the only call site allowed to pass create=True.
+        output_path = resolve_output_dir(scene, create=True)
         
         # Re-apply the current quality and resolution so the Render button is
         # WYSIWYG: changing Samples/Engine/Denoise/Device or a Resolution value
@@ -648,10 +1258,12 @@ class RENDER_OT_orthogonal_views(Operator):
         # builds those.
         apply_ortho_render_quality(scene)
         if obj.type == 'MESH':
-            res = resolution_for_category(scene, size_category_for(scene, object_max_dim(obj)))
+            res, res_note = render_resolution_for(scene, obj)
             scene.render.resolution_x = res
             scene.render.resolution_y = res
             scene.render.resolution_percentage = 100
+            if res_note:
+                self.report({'WARNING'}, res_note)
 
         # Store original frame for restoring later
         original_frame = scene.frame_current
@@ -664,29 +1276,236 @@ class RENDER_OT_orthogonal_views(Operator):
         camera = bpy.data.objects["OrthoRenderCamera"]
         obj["_3dsc_render_ortho_scale"] = float(camera.data.ortho_scale)
 
+        # Skip-existing is enforced here by hand, NOT through
+        # scene.render.use_overwrite: that flag is only honoured by the
+        # animation path (bpy.ops.render.render(animation=True)) and is
+        # silently ignored by write_still, so a checkbox wired straight to it
+        # would look like a broken feature. The flag is still mirrored, so the
+        # Output properties tab agrees with our panel.
+        skip_existing = getattr(scene, "ortho_render_skip_existing", False)
+        scene.render.use_overwrite = not skip_existing
+
+        rendered, skipped = 0, []
+
         # Render each view
         for code, name, desc, _, _ in CAMERA_POSITIONS:
             # Find the marker
             marker = scene.timeline_markers.get(code)
             if not marker:
                 continue
-            
+
+            target = view_image_path(scene, obj.name, code, output_path)
+            if skip_existing and os.path.exists(target):
+                skipped.append(name)
+                continue
+
             # Set the frame to the marker position
             scene.frame_set(marker.frame)
-            
-            # Set the output file path
-            output_file = f"{obj.name}_{code}"
-            scene.render.filepath = os.path.join(output_path, output_file)
-            
+
+            # Set the output file path (Blender appends the extension)
+            scene.render.filepath = os.path.splitext(target)[0]
+
             # Render the view
             bpy.ops.render.render(write_still=True)
-            
+            rendered += 1
+
             self.report({'INFO'}, f"Rendered {name} view to {scene.render.filepath}")
-        
+
         # Restore original frame
         scene.frame_set(original_frame)
-        
-        self.report({'INFO'}, f"All orthogonal views rendered to {output_path}")
+
+        where = os.path.basename(output_path) or output_path
+        if skipped:
+            self.report({'INFO'},
+                        f"{rendered} views rendered to {where}; "
+                        f"{len(skipped)} already on disk and kept ({', '.join(skipped)}). "
+                        "Delete a file to regenerate just that view.")
+        else:
+            self.report({'INFO'}, f"All {rendered} orthogonal views rendered to {output_path}")
+        return {'FINISHED'}
+
+
+# ---------------------------------------------------------------------------
+# Black & white pass
+#
+# An ALTERNATIVE pass, not a change to the main lighting: the colour rig stays
+# exactly as the user left it, keyframes included. The pass borrows the rig for
+# the duration of the render, pushing the key and the rim up and the fill down
+# so the tooling on the stone reads as relief rather than as colour, writes into
+# its own subfolder with a _BW suffix, and puts everything back.
+#
+# Per-view light tuning is preserved: the keyed energy is read off the F-curve
+# for each pose and multiplied by the gain, rather than being replaced by a flat
+# value. The curves have to be muted while rendering, because the depsgraph
+# re-evaluates them on every frame and would otherwise undo the gain.
+# ---------------------------------------------------------------------------
+
+BW_LIGHT_GAIN = {"KEY": 1.6, "FILL": 0.35, "RIM": 1.5}
+
+# The looks Blender offers depend on the active view transform, and
+# "AgX - Greyscale" only exists under AgX — so the pass sets the transform
+# itself instead of hoping the scene is already on it. Both are restored.
+BW_VIEW_TRANSFORM = "AgX"
+
+# Tried in order; the first one Blender accepts wins. A greyscale look keeps
+# the render RGBA (so the transparent background survives for the layout); if
+# none is available we fall back to a BW file format, which costs the alpha.
+BW_LOOK_CANDIDATES = (
+    "AgX - Greyscale",
+    "Greyscale",
+    "AgX - High Contrast",
+    "High Contrast",
+    "AgX - Punchy",
+    "Punchy",
+)
+BW_GREYSCALE_LOOKS = ("AgX - Greyscale", "Greyscale")
+
+
+def _try_set_look(view_settings, candidates):
+    """Set the first look Blender accepts. Returns the name used, or None."""
+    for look in candidates:
+        try:
+            view_settings.look = look
+            return look
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+class RENDER_OT_orthogonal_views_bw(Operator):
+    """Render an extra black & white pass, tonemapped for reading the stone working
+
+    An alternative pass, not a change to the setup: the main light rig and all
+    its keyframes are left exactly as they are. Files land in a 'bw' subfolder
+    with a _BW suffix, so the colour plate and the B/W plate can coexist.
+    """
+    bl_idname = "render.orthogonal_views_bw"
+    bl_label = "Render B/W Pass"
+    bl_options = {'REGISTER'}
+
+    @classmethod
+    def poll(cls, context):
+        if not bpy.data.filepath:
+            return False
+        return (context.scene.camera is not None and
+                "OrthoRenderCamera" in bpy.data.objects and
+                context.active_object is not None)
+
+    def execute(self, context):
+        scene = context.scene
+        obj = context.active_object
+
+        if "OrthoRenderCamera" not in bpy.data.objects:
+            self.report({'ERROR'}, "Orthogonal camera setup not found. "
+                                   "Please run Setup Orthogonal Render first.")
+            return {'CANCELLED'}
+        if len(scene.timeline_markers) < len(CAMERA_POSITIONS):
+            self.report({'ERROR'}, "Camera positions not set up correctly. "
+                                   "Please run Setup Orthogonal Render first.")
+            return {'CANCELLED'}
+
+        output_path = os.path.join(resolve_output_dir(scene, create=True), "bw")
+        os.makedirs(output_path, exist_ok=True)
+
+        apply_ortho_render_quality(scene)
+        if obj.type == 'MESH':
+            res, res_note = render_resolution_for(scene, obj)
+            scene.render.resolution_x = res
+            scene.render.resolution_y = res
+            scene.render.resolution_percentage = 100
+            if res_note:
+                self.report({'WARNING'}, res_note)
+
+        view_settings = scene.view_settings
+        saved = {
+            "frame": scene.frame_current,
+            "view_transform": view_settings.view_transform,
+            "look": view_settings.look,
+            "color_mode": scene.render.image_settings.color_mode,
+            "filepath": scene.render.filepath,
+            "use_overwrite": scene.render.use_overwrite,
+        }
+        pairs = rig_light_objects()
+        saved_energy = {o.name: o.data.energy for _spec, o in pairs}
+        muted_curves = []
+
+        skip_existing = getattr(scene, "ortho_render_skip_existing", False)
+        scene.render.use_overwrite = not skip_existing
+        rendered, skipped = 0, []
+        look = None
+
+        try:
+            try:
+                view_settings.view_transform = BW_VIEW_TRANSFORM
+            except (TypeError, ValueError):
+                pass  # exotic OCIO config: keep whatever the scene has
+            look = _try_set_look(view_settings, BW_LOOK_CANDIDATES)
+            if look not in BW_GREYSCALE_LOOKS:
+                # No greyscale look on this build: force a greyscale FILE, and
+                # say out loud that the alpha channel is the price.
+                scene.render.image_settings.color_mode = 'BW'
+                self.report({'WARNING'},
+                            "No greyscale look available — writing 8-bit BW files, "
+                            "which drop the transparent background.")
+
+            # Read the keyed energies BEFORE muting, then mute so the depsgraph
+            # cannot undo the gain at render time.
+            per_frame_energy = {}
+            for _spec, light_obj in pairs:
+                data = light_obj.data
+                curve = next((fc for fc in action_fcurves(data.animation_data)
+                               if fc.data_path == "energy"), None)
+                for frame in ortho_pose_frames(scene):
+                    base = curve.evaluate(frame) if curve is not None else data.energy
+                    per_frame_energy[(light_obj.name, frame)] = base
+                if curve is not None and not curve.mute:
+                    curve.mute = True
+                    muted_curves.append(curve)
+
+            for code, name, _desc, _dir, _rot in CAMERA_POSITIONS:
+                marker = scene.timeline_markers.get(code)
+                if not marker:
+                    continue
+
+                target = os.path.join(
+                    output_path,
+                    f"{obj.name}_{code}_BW{scene.render.file_extension}")
+                if skip_existing and os.path.exists(target):
+                    skipped.append(name)
+                    continue
+
+                scene.frame_set(marker.frame)
+                for spec, light_obj in pairs:
+                    gain = BW_LIGHT_GAIN.get(spec.get("role", ""), 1.0)
+                    base = per_frame_energy.get((light_obj.name, marker.frame),
+                                                light_obj.data.energy)
+                    light_obj.data.energy = base * gain
+
+                scene.render.filepath = os.path.splitext(target)[0]
+                bpy.ops.render.render(write_still=True)
+                rendered += 1
+
+        finally:
+            for curve in muted_curves:
+                curve.mute = False
+            for _spec, light_obj in pairs:
+                if light_obj.name in saved_energy:
+                    light_obj.data.energy = saved_energy[light_obj.name]
+            view_settings.view_transform = saved["view_transform"]
+            try:
+                view_settings.look = saved["look"]
+            except (TypeError, ValueError):
+                pass
+            scene.render.image_settings.color_mode = saved["color_mode"]
+            scene.render.filepath = saved["filepath"]
+            scene.render.use_overwrite = saved["use_overwrite"]
+            scene.frame_set(saved["frame"])
+
+        tone = f"{saved['view_transform']} -> {look}" if look else "greyscale file output"
+        msg = f"B/W pass ({tone}): {rendered} views written to {output_path}"
+        if skipped:
+            msg += f"; {len(skipped)} already on disk and kept ({', '.join(skipped)})"
+        self.report({'INFO'}, msg)
         return {'FINISHED'}
 
 
@@ -852,7 +1671,7 @@ class RENDER_OT_create_orthogonal_svg(Operator):
         if not bpy.data.filepath:
             return False
         
-        output_path = bpy.path.abspath(context.scene.ortho_render_output_path)
+        output_path = resolve_output_dir(context.scene)
         
         # Check if output directory exists and contains rendered images
         if not os.path.exists(output_path):
@@ -1061,7 +1880,7 @@ class RENDER_OT_create_orthogonal_svg(Operator):
             return {'CANCELLED'}
         
         obj = context.active_object
-        output_path = bpy.path.abspath(context.scene.ortho_render_output_path)
+        output_path = resolve_output_dir(context.scene)
         
         # If output directory doesn't exist, create it
         if not os.path.exists(output_path):
@@ -1983,6 +2802,12 @@ class VIEW3D_PT_orthogonal_render(Panel):
         row = box.row(align=True)
         row.label(text="Output:")
         row.prop(scene, "ortho_render_output_path", text="")
+        box.prop(scene, "ortho_render_versioning", text="Versioning")
+        box.prop(scene, "ortho_render_skip_existing")
+        if scene.ortho_render_versioning != 'OFF':
+            sub = box.row()
+            sub.enabled = False
+            sub.label(text=f"Next render → {output_dir_label(scene)}", icon='FILE_FOLDER')
 
         # Step 1 — Setup
         col = layout.column(align=True)
@@ -1992,6 +2817,23 @@ class VIEW3D_PT_orthogonal_render(Panel):
         row.operator("object.setup_orthogonal_render", text="Setup Orthogonal Render",
                      icon='CAMERA_DATA')
 
+        # A rig inherited from an older 3DSC (or appended by hand from
+        # Luci.blend) follows the camera but holds no keyframes of its own, and
+        # Setup deliberately leaves an existing rig alone — so the scene never
+        # repairs itself. Say so here, where it is noticed, not in a sub-panel.
+        issues = rig_migration_issues()
+        if issues:
+            warn = col.box()
+            warn.label(text="Light rig needs migrating", icon='ERROR')
+            note = warn.column(align=True)
+            note.scale_y = 0.8
+            for name, issue in issues[:4]:
+                note.label(text=f"· {name}: {issue}")
+            if len(issues) > 4:
+                note.label(text=f"· …and {len(issues) - 4} more")
+            warn.operator("render.ortho_migrate_light_rig", icon='FILE_REFRESH',
+                          text="Migrate Light Rig")
+
         # Step 2 — Render (only once the camera exists)
         if "OrthoRenderCamera" in bpy.data.objects:
             col = layout.column(align=True)
@@ -2000,10 +2842,49 @@ class VIEW3D_PT_orthogonal_render(Panel):
             row.scale_y = 1.5
             row.operator("render.orthogonal_views", text="Render 6 Views",
                          icon='RENDER_STILL')
+            col.operator("render.orthogonal_views_bw", text="Render B/W Pass",
+                         icon='IMAGE_ZDEPTH')
+
+            # Engine / samples / device used to live only in a collapsed
+            # sub-panel, which is how a whole afternoon got rendered on the CPU
+            # without anyone noticing. They are now visible where the Render
+            # button is, and editable from here.
+            quality = col.box()
+            qrow = quality.row(align=True)
+            qrow.prop(scene, "ortho_render_engine", text="")
+            qrow.prop(scene, "ortho_render_samples", text="Samples")
+            if scene.ortho_render_engine == 'CYCLES':
+                drow = quality.row(align=True)
+                drow.prop(scene, "ortho_render_device", text="Device")
+                drow.prop(scene, "ortho_render_denoise", text="Denoise")
+                if scene.ortho_render_device == 'GPU' and not render_benchmark.cycles_gpu_available():
+                    alert = quality.row()
+                    alert.alert = True
+                    alert.label(text="No GPU configured (Preferences > System) — will run on CPU",
+                                icon='ERROR')
+                elif scene.ortho_render_device == 'CPU':
+                    alert = quality.row()
+                    alert.alert = True
+                    alert.label(text="Forced to CPU — expect slow renders", icon='ERROR')
+
+            res_px, res_note = None, None
+            if context.active_object.type == 'MESH':
+                res_px, res_note = render_resolution_for(scene, context.active_object)
             if hasattr(scene, "ortho_render_size_category") and scene.ortho_render_size_category:
                 label = size_category_label(scene, scene.ortho_render_size_category)
-                col.label(text=f"Size: {label}  ·  {scene.render.resolution_x}"
-                               f"×{scene.render.resolution_y} px", icon='INFO')
+                shown = res_px if res_px else scene.render.resolution_x
+                if scene.ortho_render_res_mode == 'SCALE_DPI':
+                    span = render_span_for(scene, context.active_object)
+                    denom = print_scale_denominator(
+                        scene, object_max_dim(context.active_object), span)
+                    col.label(text=f"1:{denom} @ {scene.ortho_render_target_dpi} dpi  ·  "
+                                   f"{shown}×{shown} px", icon='INFO')
+                else:
+                    col.label(text=f"Size: {label}  ·  {shown}×{shown} px", icon='INFO')
+            if res_note:
+                alert = col.row()
+                alert.alert = True
+                alert.label(text=res_note, icon='ERROR')
 
         # Step 3 — SVG layout export
         box = layout.box()
@@ -2023,9 +2904,10 @@ class VIEW3D_PT_orthogonal_render(Panel):
         elif not has_saved_blend:
             box.label(text="Save file before exporting SVG", icon='ERROR')
         else:
-            output_path = bpy.path.abspath(context.scene.ortho_render_output_path)
+            output_path = resolve_output_dir(context.scene)
             if os.path.exists(output_path) and context.active_object:
-                front_view = os.path.join(output_path, f"{context.active_object.name}_FR.png")
+                front_view = view_image_path(context.scene, context.active_object.name,
+                                             "FR", output_path)
                 has_renders = os.path.exists(front_view)
             if not has_renders:
                 box.label(text="Render the views before creating the SVG", icon='INFO')
@@ -2089,16 +2971,66 @@ class VIEW3D_PT_ortho_resolution(_OrthoSubPanel):
     bl_idname = "VIEW3D_PT_ortho_resolution"
 
     def draw(self, context):
+        layout = self.layout
         scene = context.scene
-        col = self.layout.column(align=True)
-        col.prop(scene, "ortho_render_small_resolution", text="Small")
-        col.prop(scene, "ortho_render_medium_resolution", text="Medium")
-        col.prop(scene, "ortho_render_large_resolution", text="Large")
-        col.prop(scene, "ortho_render_xlarge_resolution", text="X-Large")
-        note = self.layout.column(align=True)
+
+        layout.prop(scene, "ortho_render_res_mode", text="From")
+
+        if scene.ortho_render_res_mode == 'SCALE_DPI':
+            layout.prop(scene, "ortho_render_target_dpi", text="Target DPI")
+            info = layout.column(align=True)
+            info.scale_y = 0.8
+            family = scene.ortho_template_family
+            if family == 'FIXED_SCALE':
+                info.label(text="Scale comes from Step 3 · Fixed scale.", icon='INFO')
+            elif family == 'FIXED_SHEET':
+                info.label(text="Scale is solved for the A3 box, same as", icon='INFO')
+                info.label(text="the export — set it in Step 3 · Mode.")
+            else:
+                info.label(text="Legacy templates: assumed 1:10.", icon='INFO')
+
+            obj = context.active_object
+            if obj is not None and obj.type == 'MESH':
+                span = render_span_for(scene, obj)
+                denom = print_scale_denominator(scene, object_max_dim(obj), span)
+                px, note = render_resolution_for(scene, obj)
+                preview = layout.column(align=True)
+                preview.label(text=f"1:{denom}  ·  {span * 1000.0 / denom:.0f} mm printed  ·  "
+                                   f"{px}×{px} px", icon='IMAGE_DATA')
+                if note:
+                    alert = preview.row()
+                    alert.alert = True
+                    alert.label(text=note, icon='ERROR')
+            layout.label(text=f"Hard cap: {MAX_RENDER_PX} px per side.", icon='INFO')
+        else:
+            col = layout.column(align=True)
+            col.prop(scene, "ortho_render_small_resolution", text="Small")
+            col.prop(scene, "ortho_render_medium_resolution", text="Medium")
+            col.prop(scene, "ortho_render_large_resolution", text="Large")
+            col.prop(scene, "ortho_render_xlarge_resolution", text="X-Large")
+            note = layout.column(align=True)
+            note.scale_y = 0.8
+            note.label(text="One value per size bucket (X-Large = above the", icon='INFO')
+            note.label(text="Large threshold).")
+
+            # What the chosen bucket is really worth in print terms. Without
+            # this the two modes cannot be compared, and switching to
+            # 'Drawing scale + DPI' at 300 dpi looks like a bug rather than
+            # like the deliberate downgrade it would be.
+            obj = context.active_object
+            if obj is not None and obj.type == 'MESH':
+                span = render_span_for(scene, obj)
+                denom = print_scale_denominator(scene, object_max_dim(obj), span)
+                px = resolution_for_category(scene, size_category_for(scene, object_max_dim(obj)))
+                printed_mm = span * 1000.0 / max(denom, 1)
+                if printed_mm > 0:
+                    eff_dpi = px * 25.4 / printed_mm
+                    note.label(text=f"This bucket = {px} px = ~{eff_dpi:.0f} dpi at 1:{denom}.",
+                               icon='IMAGE_DATA')
+
+        note = layout.column(align=True)
         note.scale_y = 0.8
-        note.label(text="One value per size bucket (X-Large = above the", icon='INFO')
-        note.label(text="Large threshold). Re-run Render (Step 2) to apply.")
+        note.label(text="Re-run Render (Step 2) to apply.", icon='FILE_REFRESH')
 
 
 class VIEW3D_PT_ortho_quality(_OrthoSubPanel):
@@ -2135,10 +3067,37 @@ class VIEW3D_PT_ortho_quality(_OrthoSubPanel):
         layout.operator("render.ortho_benchmark", icon='PREVIEW_RANGE')
 
         layout.separator()
+        layout.label(text="Light rig (Key / Fill / Rim)", icon='LIGHT_POINT')
         layout.prop(scene, "ortho_render_create_lights")
-        rig_exists = any(bpy.data.objects.get(spec["name"]) for spec in TRILAMP_RIG)
+        rig_exists = bool(rig_light_objects())
         if rig_exists:
             layout.prop(scene, "ortho_render_rebuild_lights")
+
+        issues = rig_migration_issues()
+        if issues:
+            warn = layout.box()
+            warn.label(text="Rig from an older setup", icon='ERROR')
+            wnote = warn.column(align=True)
+            wnote.scale_y = 0.8
+            for name, issue in issues[:6]:
+                wnote.label(text=f"· {name}: {issue}")
+            if len(issues) > 6:
+                wnote.label(text=f"· …and {len(issues) - 6} more")
+            warn.operator("render.ortho_migrate_light_rig", icon='FILE_REFRESH',
+                          text="Migrate Light Rig")
+
+        if rig_exists:
+            layout.operator("render.ortho_key_lights_here", icon='KEYFRAME_HLT',
+                            text="Key Lights on This View")
+
+        # The angles are the whole point of the rig, so show them: "radente"
+        # is the incidence number, not an adjective.
+        geo = layout.column(align=True)
+        geo.scale_y = 0.8
+        for spec in TRILAMP_RIG:
+            geo.label(text=f"{spec['role'].title()}: incidence "
+                           f"{trilamp_incidence_deg(spec):.0f}°  ·  "
+                           f"power ×{spec['ratio']:.2f}")
 
         note = layout.column(align=True)
         note.scale_y = 0.8
@@ -2147,6 +3106,8 @@ class VIEW3D_PT_ortho_quality(_OrthoSubPanel):
         if rig_exists:
             note.label(text="Existing lights are kept; Setup won't reset")
             note.label(text="them unless 'Rebuild light rig' is on.")
+            note.label(text="Move a lamp, then Key Lights on This View")
+            note.label(text="to change one view only.")
 
 
 # Function to make sure the SVG template folder exists and create it if not
@@ -2182,6 +3143,9 @@ def ensure_svg_templates_folder():
 def register():
     bpy.utils.register_class(OBJECT_OT_setup_orthogonal_render)
     bpy.utils.register_class(RENDER_OT_orthogonal_views)
+    bpy.utils.register_class(RENDER_OT_orthogonal_views_bw)
+    bpy.utils.register_class(RENDER_OT_ortho_migrate_light_rig)
+    bpy.utils.register_class(RENDER_OT_ortho_key_lights_here)
     bpy.utils.register_class(RENDER_OT_create_orthogonal_svg)
     bpy.utils.register_class(RENDER_OT_ortho_benchmark)
     bpy.utils.register_class(RENDER_OT_open_templates_folder)
@@ -2275,6 +3239,55 @@ def register():
         # Blender 4.5+ flags blend-relative ("//") paths red unless the
         # property opts in. The option does not exist before 4.5.
         options={'PATH_SUPPORTS_BLEND_RELATIVE'} if bpy.app.version >= (4, 5, 0) else set()
+    )
+
+    bpy.types.Scene.ortho_render_skip_existing = BoolProperty(
+        name="Don't overwrite existing",
+        description="Skip views whose image file is already on disk and render only the "
+                    "missing ones. Delete a single view's file to regenerate just that "
+                    "view. Off = every Render redoes all six",
+        default=False
+    )
+
+    bpy.types.Scene.ortho_render_versioning = EnumProperty(
+        name="Versioning",
+        description="How the output folder is versioned. Version folders are siblings of "
+                    "the output folder (ortho_renders_v01, _v02...). Reads always use the "
+                    "latest existing version, so the SVG export never looks in the wrong one",
+        items=[
+            ('OFF', "No versioning",
+             "Write straight into the output folder (the behaviour of every earlier version)"),
+            ('LATEST', "Write into latest version",
+             "Reuse the highest existing _vNN folder, creating _v01 if there is none"),
+            ('NEW', "Create new version",
+             "Each Render creates the next _vNN folder and leaves the previous ones alone"),
+        ],
+        default='OFF'
+    )
+
+    bpy.types.Scene.ortho_render_res_mode = EnumProperty(
+        name="Resolution from",
+        description="How the render resolution is decided",
+        items=[
+            ('BUCKET', "Size buckets",
+             "One fixed resolution per size bucket (Small/Medium/Large/X-Large)"),
+            ('SCALE_DPI', "Drawing scale + DPI",
+             "Derive the resolution from the drawing scale and a target print DPI, so the "
+             "PNG carries exactly the dots the plate needs and nothing has to be resampled "
+             "by hand afterwards"),
+        ],
+        default='BUCKET'
+    )
+
+    bpy.types.Scene.ortho_render_target_dpi = IntProperty(
+        name="Target DPI",
+        description="Print resolution the views are computed for, in 'Drawing scale + DPI' "
+                    "mode. 300 dpi is the print minimum, but note what the size buckets were "
+                    "actually delivering: 4000 px across a 1.1 m frame at 1:10 is about "
+                    "920 dpi, which is why those renders could be enlarged by hand and still "
+                    "hold up. 600 dpi keeps a comparable margin; 300 dpi would be a visible "
+                    "step down from the current plates",
+        default=600, min=72, max=1200
     )
 
     bpy.types.Scene.ortho_render_create_lights = BoolProperty(
@@ -2389,6 +3402,9 @@ def unregister():
     bpy.utils.unregister_class(RENDER_OT_open_templates_folder)
     bpy.utils.unregister_class(RENDER_OT_ortho_benchmark)
     bpy.utils.unregister_class(RENDER_OT_create_orthogonal_svg)
+    bpy.utils.unregister_class(RENDER_OT_ortho_key_lights_here)
+    bpy.utils.unregister_class(RENDER_OT_ortho_migrate_light_rig)
+    bpy.utils.unregister_class(RENDER_OT_orthogonal_views_bw)
     bpy.utils.unregister_class(RENDER_OT_orthogonal_views)
     bpy.utils.unregister_class(OBJECT_OT_setup_orthogonal_render)
     
@@ -2402,6 +3418,10 @@ def unregister():
     del bpy.types.Scene.ortho_render_large_resolution
     del bpy.types.Scene.ortho_render_xlarge_resolution
     del bpy.types.Scene.ortho_render_output_path
+    del bpy.types.Scene.ortho_render_skip_existing
+    del bpy.types.Scene.ortho_render_versioning
+    del bpy.types.Scene.ortho_render_res_mode
+    del bpy.types.Scene.ortho_render_target_dpi
     del bpy.types.Scene.ortho_render_create_lights
     del bpy.types.Scene.ortho_render_rebuild_lights
     del bpy.types.Scene.ortho_render_frame_margin
