@@ -135,7 +135,7 @@ from .utils import circumcenter_tool
 
 from .utils import alignment_orientation_tool
 
-from .importer import import_dxf, import_linked_lod
+from .importer import import_dxf, import_linked_lod, import_gpr
 
 from . import TSM
 
@@ -794,6 +794,7 @@ def register():
     circumcenter_tool.register()
     import_dxf.register()
     import_linked_lod.register()
+    import_gpr.register()
     orthogonal_render.register()
     alignment_orientation_tool.register()
     #mets_exporter.register()
@@ -1019,6 +1020,7 @@ def unregister():
     circumcenter_tool.unregister()
     import_dxf.unregister()
     import_linked_lod.unregister()
+    import_gpr.unregister()
     orthogonal_render.unregister()
     alignment_orientation_tool.unregister()
     cesium_exporter.unregister()
