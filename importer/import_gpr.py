@@ -133,7 +133,7 @@ class GPRSettings(PropertyGroup):
         description="Pixel size in metres, used when no world file sits "
                     "beside the images")  # type: ignore
     source_dir: StringProperty(
-        name="Slice folder", subtype='DIR_PATH',
+        name="Slices", subtype='DIR_PATH',
         description="Folder holding the CSV (or image) depth slices")  # type: ignore
     cache_dir: StringProperty(
         name="Cache", subtype='DIR_PATH',
@@ -146,15 +146,15 @@ class GPRSettings(PropertyGroup):
                ('VIRIDIS', "Viridis", "Perceptually uniform colour ramp")],
         default='GRAY')  # type: ignore
     normalize: EnumProperty(
-        name="Normalisation",
+        name="Normalise",
         items=[('STACK', "Whole stack", "One range for every slice: slices "
                                         "stay comparable with each other"),
                ('SLICE', "Per slice", "Each slice stretched to its own range: "
                                       "shows faint deep anomalies but "
                                       "misrepresents relative amplitude")],
         default='STACK')  # type: ignore
-    clip_lo: FloatProperty(name="Clip low %", default=2.0, min=0.0, max=49.0)  # type: ignore
-    clip_hi: FloatProperty(name="Clip high %", default=98.0, min=51.0, max=100.0)  # type: ignore
+    clip_lo: FloatProperty(name="Clip lo %", default=2.0, min=0.0, max=49.0)  # type: ignore
+    clip_hi: FloatProperty(name="Clip hi %", default=98.0, min=51.0, max=100.0)  # type: ignore
     limit: IntProperty(name="Max slices", default=0, min=0,
                        description="0 = every slice")  # type: ignore
 
@@ -991,8 +991,8 @@ class VIEW3D_PT_dsc_GPR(Panel):
         box = layout.box()
         box.label(text="Georeferencing", icon='WORLD')
         r = box.row(align=True)
-        r.prop(s, "origin_e")
-        r.prop(s, "origin_n")
+        r.prop(s, "origin_e", text="E")
+        r.prop(s, "origin_n", text="N")
         box.prop(s, "rotation_deg")
         box.prop(s, "shift_round_to")
         box.prop(s, "use_shift")
