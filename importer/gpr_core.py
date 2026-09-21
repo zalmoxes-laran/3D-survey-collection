@@ -122,6 +122,18 @@ class SliceSpec:
         return "%.3f-%.3fm" % (self.depth_top, self.depth_bottom)
 
 
+def document_id(folder, spec):
+    """Stable identity of one slice AS A DOCUMENT.
+
+    A single slice is a document; reading several of them produces extractions
+    that combine into one proxy (E.D., 2026-09-21). So the identity has to be
+    per slice, and has to be the depth band rather than the file name, which
+    changes when the geophysicist re-exports the stack.
+    """
+    stack = os.path.basename(os.path.normpath(folder)) or "gpr"
+    return "gpr:%s#d%.3f-%.3fm" % (stack, spec.depth_top, spec.depth_bottom)
+
+
 @dataclass
 class SliceData:
     """A slice with its raster loaded."""
@@ -525,6 +537,10 @@ def build_cache_steps(folder, out_dir=None, colormap="GRAY", normalize="STACK",
         t_png += time.time() - t1
         entries.append({
             "index": i,
+            # One slice is one document (E.D., 2026-09-21), so every slice
+            # needs an identity that survives a re-export and a rename of the
+            # .blend. Depth is that identity: it is what the reading is OF.
+            "document_id": document_id(folder, s),
             "source": os.path.relpath(s.path, out_dir),
             "raster": os.path.basename(png),
             "depth_top": s.depth_top,
@@ -539,6 +555,7 @@ def build_cache_steps(folder, out_dir=None, colormap="GRAY", normalize="STACK",
         "manifest_version": MANIFEST_VERSION,
         "generator": "3DSC gpr_core",
         "kind": "csv_grid",
+        "georef": detect_georeference(folder, kind="csv_grid"),
         "source_folder": folder,
         "colormap": colormap,
         "normalize": normalize,
@@ -703,6 +720,7 @@ def build_image_manifest(folder, out_dir=None, x_min=0.0, y_min=0.0,
     for i, s in enumerate(specs):
         entries.append({
             "index": i,
+            "document_id": document_id(folder, s),
             "source": _ref(s.path),
             "raster": _ref(s.path),
             "depth_top": s.depth_top,
@@ -711,6 +729,22 @@ def build_image_manifest(folder, out_dir=None, x_min=0.0, y_min=0.0,
             "valid_cells": nx * ny,
             "png_bytes": os.path.getsize(s.path),
         })
+    # The grid is ALWAYS the local frame, starting near zero; where the raster
+    # lives in the world is a separate block. Keeping absolute eastings out of
+    # the grid is what lets the Blender side treat both kinds of stack the
+    # same way, and what keeps the shift logic in one place.
+    georef = {"origin_e": None, "origin_n": None, "x_step": x_step,
+              "y_step": y_step, "epsg": None,
+              "source": os.path.basename(wf) if wf else "none"}
+    if wf:
+        georef["origin_e"], georef["origin_n"] = x_min, y_min
+        x_min = y_min = 0.0
+    prj = prj_file_for(specs[0].path)
+    if prj:
+        georef["epsg"] = epsg_from_prj(prj)
+        georef["source"] = (georef["source"] + " + " +
+                            os.path.basename(prj)).lstrip("none + ")
+
     manifest = {
         "manifest_version": MANIFEST_VERSION,
         "generator": "3DSC gpr_core",
@@ -719,6 +753,7 @@ def build_image_manifest(folder, out_dir=None, x_min=0.0, y_min=0.0,
         "colormap": "AS_IS",
         "normalize": "AS_IS",
         "world_file": os.path.basename(wf) if wf else "",
+        "georef": georef,
         "grid": asdict(GridSpec(nx=nx, ny=ny, x_min=x_min, y_min=y_min,
                                 x_step=x_step, y_step=y_step)),
         "slices": entries,
@@ -726,3 +761,126 @@ def build_image_manifest(folder, out_dir=None, x_min=0.0, y_min=0.0,
     with open(os.path.join(out_dir, MANIFEST_NAME), "w") as fh:
         json.dump(manifest, fh, indent=2)
     return manifest
+
+
+# --------------------------------------------------------------------------
+# CRS detection and shift proposal
+# --------------------------------------------------------------------------
+
+_RE_EPSG_AUTH = re.compile(r'AUTHORITY\s*\[\s*"EPSG"\s*,\s*"?(\d+)"?\s*\]', re.I)
+_RE_EPSG_ID = re.compile(r'ID\s*\[\s*"EPSG"\s*,\s*(\d+)\s*\]', re.I)
+
+
+def prj_file_for(path):
+    """Find the ESRI ``.prj`` sitting beside a raster, if any."""
+    stem = os.path.splitext(path)[0]
+    for cand in (stem + ".prj", stem + ".PRJ"):
+        if os.path.isfile(cand):
+            return cand
+    return None
+
+
+def epsg_from_prj(path):
+    """Read the EPSG code out of a ``.prj``.
+
+    pyproj is already bundled with 3DSC (``scripts/requirements_wheels.txt``)
+    so no new dependency is needed, but it is lazy-imported and missing on one
+    build (macOS-Intel + Python 3.13), so fall back to reading the AUTHORITY
+    clause straight out of the WKT.
+    """
+    try:
+        with open(path) as fh:
+            wkt = fh.read()
+    except OSError:
+        return None
+    try:
+        from pyproj import CRS
+        code = CRS.from_wkt(wkt).to_epsg()
+        if code:
+            return int(code)
+    except Exception:                                # noqa: BLE001
+        pass
+    for rx in (_RE_EPSG_ID, _RE_EPSG_AUTH):
+        hits = rx.findall(wkt)
+        if hits:
+            return int(hits[-1])                     # outermost authority last
+    return None
+
+
+def detect_georeference(folder, kind="auto"):
+    """What the files themselves say about where they are.
+
+    Returns ``origin_e``, ``origin_n``, ``x_step``, ``y_step``, ``epsg`` and
+    ``source``, any of which may be ``None``. A CSV grid starting at 0,0
+    (CS07 Tivoli) yields no origin: those files carry no georeference at all
+    and the operator has to be told. A raster with a world file (UA Ilici)
+    yields one, and a ``.prj`` beside it yields the EPSG too.
+    """
+    out = {"origin_e": None, "origin_n": None, "x_step": None, "y_step": None,
+           "epsg": None, "source": "none"}
+    try:
+        kind, specs = scan_stack(folder, kind=kind)
+    except OSError:
+        return out
+    if not specs:
+        return out
+    first = specs[0].path
+
+    if kind == "image_stack":
+        wf = world_file_for(first)
+        if wf:
+            nx, ny = image_size(first)
+            x_min, y_min, px, py = extent_from_world_file(wf, nx, ny)
+            out.update(origin_e=x_min, origin_n=y_min, x_step=px, y_step=py,
+                       source=os.path.basename(wf))
+    else:
+        hdr = read_csv_header(first)
+        out["x_step"] = hdr.get("x_step")
+        out["y_step"] = hdr.get("y_step")
+        # a CSV grid may still ship a sidecar world file for the whole folder
+        for n in sorted(os.listdir(folder)):
+            if n.lower().endswith((".tfw", ".pgw", ".jgw", ".wld")):
+                px, _ry, _rx, py, e0, n0 = read_world_file(
+                    os.path.join(folder, n))
+                out.update(origin_e=e0, origin_n=n0, source=n)
+                break
+
+    prj = prj_file_for(first)
+    if prj is None:
+        for n in sorted(os.listdir(folder)):
+            if n.lower().endswith(".prj"):
+                prj = os.path.join(folder, n)
+                break
+    if prj:
+        out["epsg"] = epsg_from_prj(prj)
+        if out["source"] == "none":
+            out["source"] = os.path.basename(prj)
+        else:
+            out["source"] += " + " + os.path.basename(prj)
+    return out
+
+
+#: Beyond this distance from the origin, coordinates are projected/absolute
+#: rather than local. A survey grid is tens of metres across; a UTM easting is
+#: six or seven digits. Blender's single-precision object transforms start
+#: visibly jittering a few kilometres out, which is the whole reason 3DSC has
+#: a General Shift Value in the first place.
+ABSOLUTE_COORD_THRESHOLD = 10000.0
+
+
+def is_absolute(e, n):
+    return (abs(e or 0.0) > ABSOLUTE_COORD_THRESHOLD or
+            abs(n or 0.0) > ABSOLUTE_COORD_THRESHOLD)
+
+
+def propose_shift(e, n, round_to=10.0):
+    """A round number just below the dataset origin.
+
+    Rounding down rather than taking the origin itself keeps the shift a
+    memorable figure that can be typed into another project by hand, and
+    leaves the data at small positive coordinates.
+    """
+    if not round_to:
+        return float(e or 0.0), float(n or 0.0)
+    return (math.floor((e or 0.0) / round_to) * round_to,
+            math.floor((n or 0.0) / round_to) * round_to)
