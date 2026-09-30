@@ -167,3 +167,120 @@ def test_archive_inside_source_is_refused(tmp_path):
     src = _fake_tileset(tmp_path / "ts")
     with pytest.raises(ValueError, match="inside"):
         tz.write_3tz(src, src / "self.zip")
+
+
+# ── the one profile: NFC names, 0x800, content_digest (dtcstamp/profiles/3tz.md)
+
+_TILESET_20 = (b'{"asset": {"version": "1.0"}, "geometricError": 10, "root": '
+               b'{"content": {"uri": "Data/c01/e0001.b3dm"}, "geometricError": 1, '
+               b'"refine": "REPLACE", "boundingVolume": {"sphere": [0, 0, 0, 10]}}}')
+
+
+def _write_tree(root: Path, files: dict) -> Path:
+    for rel, data in files.items():
+        p = root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(data)
+    return root
+
+
+def test_dtcstamp_conformance_case_20(tmp_path):
+    """dtcstamp conformance/20-tileset-folder-and-3tz.json, byte for byte."""
+    src = _write_tree(tmp_path / "small", {
+        "tileset.json": _TILESET_20,
+        "Data/c01/e0001.b3dm": b"b3dm" + b"\x01" * 100,
+        "Data/c02/e0002.b3dm": b"b3dm" + b"\x02" * 200,
+    })
+    out = tmp_path / "small.3tz"
+    r = tz.write_3tz(src, out)
+    assert r["sha256"] == "75b111b73bbd230e5083091304a53e19d1ad4495763b16f318c803bdec86f0bf"
+    want = "sha256:fefca8bcbc5a4f20573a8134d9c7c631dddb84c6dd40d664c7a25f9bc33373a8"
+    assert r["content_digest"] == {"digest": want, "files": 3, "computed_by": "producer"}
+    assert tz.content_digest(src) == {"digest": want, "files": 3}
+    assert tz.content_digest(out) == {"digest": want, "files": 3}
+
+
+_TILESET_23 = ('{"asset": {"version": "1.0"}, "geometricError": 10, "root": '
+               '{"content": {"uri": "Data/città.b3dm"}, "geometricError": 1, '
+               '"refine": "REPLACE", "boundingVolume": {"sphere": [0, 0, 0, 10]}}}'
+               ).encode("utf-8")
+
+
+def _tree_23(root: Path, form: str) -> Path:
+    import unicodedata
+    return _write_tree(root, {
+        "tileset.json": _TILESET_23,
+        unicodedata.normalize(form, "Data/città.b3dm"): b"b3dm" + b"\x03" * 100,
+        "Data/c02/e0002.b3dm": b"b3dm" + b"\x02" * 200,
+    })
+
+
+_CASE_23_SHA256 = "29b06145656c39cd3dcbf82b35245cd73614248fde71dc89b57aa55fa0d69d19"
+_CASE_23_CONTENT = "sha256:c03e9083db54a0f680a6ec9f485b9de40e52391b78cf03d23716b69a88d89422"
+
+
+def test_dtcstamp_conformance_case_23_non_ascii_name(tmp_path):
+    """dtcstamp conformance/23-tileset-non-ascii-name.json: written by this
+    module, then checked there and in s3Dgraphy."""
+    src = _tree_23(tmp_path / "small", "NFC")
+    out = tmp_path / "small.3tz"
+    r = tz.write_3tz(src, out)
+    assert r["sha256"] == _CASE_23_SHA256
+    assert r["content_digest"]["digest"] == _CASE_23_CONTENT
+    assert tz.content_digest(out)["digest"] == _CASE_23_CONTENT
+
+
+def test_nfd_on_disk_gives_the_nfc_archive(tmp_path):
+    """macOS hands names over in NFD: the archive must not care."""
+    import unicodedata
+    nfc = tz.write_3tz(_tree_23(tmp_path / "nfc", "NFC"), tmp_path / "nfc.3tz")
+    nfd_src = _tree_23(tmp_path / "nfd", "NFD")
+    nfd = tz.write_3tz(nfd_src, tmp_path / "nfd.3tz")
+    assert nfd["sha256"] == nfc["sha256"]
+    assert nfd["content_digest"] == nfc["content_digest"]
+    assert tz.content_digest(nfd_src)["digest"] == nfc["content_digest"]["digest"]
+    with zipfile.ZipFile(tmp_path / "nfd.3tz") as zf:
+        for zi in zf.infolist():
+            assert zi.filename == unicodedata.normalize("NFC", zi.filename)
+    assert tz.read_entry(tmp_path / "nfd.3tz", "Data/città.b3dm") \
+        == b"b3dm" + b"\x03" * 100
+    assert tz.verify_3tz(tmp_path / "nfd.3tz", nfd_src)["ok"]
+
+
+def test_utf8_flag_exactly_on_non_ascii_names(tmp_path):
+    src = _tree_23(tmp_path / "small", "NFC")
+    _write_tree(src, {"tiles/plain.glb": b"glTF"})
+    out = tmp_path / "x.3tz"
+    tz.write_3tz(src, out)
+    with zipfile.ZipFile(out) as zf:
+        flags = {zi.filename: zi.flag_bits for zi in zf.infolist()}
+    assert flags["Data/città.b3dm"] == tz.UTF8_FLAG
+    for name, bits in flags.items():
+        if name.isascii():
+            assert bits == 0, (name, hex(bits))
+
+
+def test_two_names_equal_in_nfc_stop_the_write(tmp_path, monkeypatch):
+    # APFS will not hold both on one disk: the listing is what Linux gives.
+    src = tmp_path / "ts"
+    src.mkdir()
+    nfc, nfd = "città.b3dm", "città.b3dm"
+    monkeypatch.setattr(tz.os, "walk",
+                        lambda _d: iter([(str(src), [], ["tileset.json", nfc, nfd])]))
+    with pytest.raises(ValueError) as caught:
+        tz.write_3tz(src, tmp_path / "x.3tz")
+    assert nfc in str(caught.value) and nfd in str(caught.value)
+    assert not (tmp_path / "x.3tz").exists()
+
+
+_TEMPLU_MARE = (Path.home() / "Library/CloudStorage/OneDrive-CNR/Extended Matrix/"
+                "EM_CaseStudies/01_EM_Tempio Grande/_base_EMStudio/RM/TempluMare_cesium")
+
+
+@pytest.mark.skipif(not _TEMPLU_MARE.is_dir(), reason="TempluMare base not on this machine")
+def test_templu_mare_keeps_its_sha256(tmp_path):
+    r = tz.write_3tz(_TEMPLU_MARE, tmp_path / "TempluMare_cesium.3tz")
+    assert r["sha256"] == "232dfcbc148f30e52098fef9c83606a3e1638a106fc0678563e909cde1db0c17"
+    assert r["content_digest"]["digest"] == \
+        "sha256:8aa6fbd3e5847e9f8c2e219fb4305d9a3ad52e41135120e79bb8c3d18b67caed"
+    assert r["content_digest"]["files"] == 7302

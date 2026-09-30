@@ -84,7 +84,7 @@ def _pack_3tz(context, src_dir, out_path, verify=True):
 
     Returns (ok, info, message). `info` is the dict of write_3tz, plus
     `verify` when it ran; `message` is the one-line summary (files, bytes,
-    time, sha256) for the log and the status bar."""
+    time, sha256, content_digest) for the log and the status bar."""
     from . import archive_3tz
 
     wm = context.window_manager
@@ -109,7 +109,8 @@ def _pack_3tz(context, src_dir, out_path, verify=True):
         wm.progress_end()
 
     msg = (f"{Path(out_path).name}: {info['entries']} files, {info['bytes']:,} bytes, "
-           f"{info['seconds']:.1f} s, sha256 {info['sha256']}")
+           f"{info['seconds']:.1f} s, sha256 {info['sha256']}, "
+           f"content_digest {info['content_digest']['digest']}")
     v = info.get("verify")
     if v is not None and not v["ok"]:
         return False, info, f"{msg} — verify FAILED: {'; '.join(v['errors'][:3])}"

@@ -74,6 +74,9 @@ try:
         log = scene.cesium_progress_log
         check("log line has files/bytes/sha256",
               "files" in log and "bytes" in log and REPORT["folder_3tz"]["sha256"] in log)
+        cd = tz.content_digest(folder)["digest"]
+        REPORT["folder_3tz"]["content_digest"] = cd
+        check("log line has the content_digest of the folder", cd in log, cd[:23])
         # same folder, packed again by the standalone operator path: same sha
         again = os.path.join(tmp, "again.3tz")
         r2 = tz.write_3tz(folder, again)

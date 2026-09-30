@@ -16,8 +16,21 @@ media type ``application/vnd.maxar.archive.3tz+zip``.
 Determinism is part of the contract — same folder in, same bytes out:
 entries in path order, fixed date 1980-01-01, fixed attributes and
 ``create_system``, no compression by default, ``.DS_Store``/``Thumbs.db``
-skipped. The sha256 of the archive therefore identifies its content and
-can be stamped and cited like the digest of a glb.
+skipped, names in Unicode NFC. The sha256 of the archive therefore
+identifies its content and can be stamped and cited like the digest of a glb.
+
+This is THE canonical profile, written down in ``dtcstamp/profiles/3tz.md``:
+general-purpose flag 0 on an ASCII name, ``0x800`` (the name is UTF-8) on a
+non-ASCII one — which is what ``zipfile`` writes, deterministically — and
+every name NFC. macOS hands names over in NFD: without normalising, the same
+folder would give one sha256 on a Mac and another on Linux or Windows.
+
+Alongside the file digest, :func:`content_digest` names what is INSIDE, in
+dtcstamp's form (one line ``role NUL path NUL sha256:<hex> LF`` per file,
+lines in the order of the UTF-8 bytes of the NFC path, ``tileset.json`` the
+``entry_point``): a folder and its archive give the same one, whatever the
+packing. :func:`write_3tz` computes it from the bytes it copies, with no
+second pass.
 
 Files are copied in blocks, never read whole into memory.
 """
@@ -25,9 +38,9 @@ from __future__ import annotations
 
 import hashlib
 import os
-import shutil
 import struct
 import time
+import unicodedata
 import zipfile
 
 MEDIA_TYPE = "application/vnd.maxar.archive.3tz+zip"
@@ -38,11 +51,14 @@ MAX_ENTRY_BYTES = 4 * 1024 ** 3          # spec: 4 GB per file
 ZIP64_LIMIT = 0xFFFFFFFF
 _BLOCK = 1 << 20
 _RECORD = 24
+ENTRY_POINT = "tileset.json"
+UTF8_FLAG = 0x800                        # zip general-purpose bit 11
 
 
 def normalize(path: str) -> str:
-    """Archive path of an entry: forward slashes, no leading slash."""
-    return path.replace("\\", "/").lstrip("/")
+    """Archive path of an entry: Unicode NFC, forward slashes, no leading
+    slash."""
+    return unicodedata.normalize("NFC", path).replace("\\", "/").lstrip("/")
 
 
 def _md5(name: str) -> bytes:
@@ -62,24 +78,81 @@ def _zinfo(name: str, size: int, compress: bool) -> zipfile.ZipInfo:
     return zi
 
 
-def list_entries(src_dir: str) -> list:
-    """Sorted archive paths of the files under ``src_dir`` (the skip list
-    applied). Raises ``ValueError`` on a ``.3tz`` path or a missing root
-    ``tileset.json``."""
-    names = []
+def _path_key(name: str) -> bytes:
+    return name.encode("utf-8")
+
+
+def _entries(src_dir: str) -> list:
+    """``[(archive path, path on disk relative to src_dir)]`` sorted by the
+    UTF-8 bytes of the archive path. The two differ when the disk holds a
+    name in NFD (macOS) or with backslashes."""
+    by_name = {}
     for root, dirs, files in os.walk(src_dir):
         dirs.sort()
         for f in files:
             if f in SKIP_NAMES:
                 continue
-            rel = normalize(os.path.relpath(os.path.join(root, f), src_dir))
+            disk = os.path.relpath(os.path.join(root, f), src_dir)
+            rel = normalize(disk)
             if ".3tz" in rel.lower():
                 raise ValueError(f"a 3tz must not contain '.3tz' paths: {rel}")
-            names.append(rel)
-    names.sort()
-    if "tileset.json" not in names:
+            if rel in by_name:
+                raise ValueError(
+                    f"two files have the same name in NFC, {rel!r}: "
+                    f"{by_name[rel]!r} and {disk!r}")
+            by_name[rel] = disk
+    if ENTRY_POINT not in by_name:
         raise ValueError(f"tileset.json must be at the root of {src_dir}")
-    return names
+    return sorted(by_name.items(), key=lambda kv: _path_key(kv[0]))
+
+
+def list_entries(src_dir: str) -> list:
+    """Sorted archive paths (NFC) of the files under ``src_dir`` (the skip
+    list applied). Raises ``ValueError`` on a ``.3tz`` path, on two files
+    whose names are the same in NFC, or on a missing root ``tileset.json``."""
+    return [name for name, _disk in _entries(src_dir)]
+
+
+def members_canonical(rows) -> bytes:
+    """dtcstamp's canonical list of members of a tree, byte for byte:
+    ``role NUL path NUL sha256:<hex> LF`` per ``(path, sha256 hex)`` in
+    ``rows``, in the order of the UTF-8 bytes of the NFC path; ``tileset.json``
+    is the ``entry_point``, every other file a ``member``."""
+    lines = []
+    for path, hexdigest in sorted(((normalize(p), h.lower()) for p, h in rows),
+                                  key=lambda r: _path_key(r[0])):
+        role = "entry_point" if path == ENTRY_POINT else "member"
+        lines.append(f"{role}\0{path}\0sha256:{hexdigest}\n")
+    return "".join(lines).encode("utf-8")
+
+
+def _content_digest_of(rows) -> str:
+    return "sha256:" + hashlib.sha256(members_canonical(rows)).hexdigest()
+
+
+def content_digest(path: str) -> dict:
+    """The digest of the CONTENT of a tileset — a folder or a ``.3tz`` — in
+    dtcstamp's form (``profiles/3tz.md``): ``{"digest": "sha256:<hex>",
+    "files": n}``. ``.DS_Store``, ``Thumbs.db`` and the index are not
+    members. A folder and its archive give the same value, whatever the
+    archive's dates, attributes or compression."""
+    rows = []
+    if os.path.isdir(path):
+        for name, disk in _entries(path):
+            rows.append((name, sha256_file(os.path.join(path, disk))))
+    else:
+        with zipfile.ZipFile(path) as zf:
+            for zi in zf.infolist():
+                name = normalize(zi.filename)
+                if name == INDEX_NAME or name.rsplit("/", 1)[-1] in SKIP_NAMES \
+                        or zi.is_dir():
+                    continue
+                h = hashlib.sha256()
+                with zf.open(zi) as fh:
+                    for chunk in iter(lambda: fh.read(_BLOCK), b""):
+                        h.update(chunk)
+                rows.append((name, h.hexdigest()))
+    return {"digest": _content_digest_of(rows), "files": len(rows)}
 
 
 def sha256_file(path: str) -> str:
@@ -95,8 +168,10 @@ def write_3tz(src_dir: str, out_path: str, *, compress: bool = False,
     """Pack ``src_dir`` (with ``tileset.json`` at its root) into ``out_path``.
 
     ``progress(done, total)`` is called after each entry, if given.
-    Returns ``{"entries", "bytes", "sha256", "seconds", "path"}``; the
-    entry count excludes the index. The archive is written to a sibling
+    Returns ``{"entries", "bytes", "sha256", "content_digest", "seconds",
+    "path"}``; the entry count excludes the index. ``content_digest`` is
+    ``{"digest", "files", "computed_by": "producer"}``, hashed from the
+    bytes as they are copied. The archive is written to a sibling
     ``.part`` file and renamed at the end, so a failed write never leaves
     a half archive under the final name.
     """
@@ -105,22 +180,27 @@ def write_3tz(src_dir: str, out_path: str, *, compress: bool = False,
     out_path = os.path.abspath(out_path)
     if out_path.startswith(src_dir.rstrip(os.sep) + os.sep):
         raise ValueError("the archive must not be written inside the folder it packs")
-    names = list_entries(src_dir)
-    total = len(names)
+    entries = _entries(src_dir)
+    total = len(entries)
 
     part = out_path + ".part"
     records = []
+    hashed = []
     try:
         with zipfile.ZipFile(part, "w", zipfile.ZIP_STORED, allowZip64=True) as zf:
-            for i, rel in enumerate(names, start=1):
-                src = os.path.join(src_dir, rel)
+            for i, (rel, disk) in enumerate(entries, start=1):
+                src = os.path.join(src_dir, disk)
                 size = os.path.getsize(src)
                 if size > MAX_ENTRY_BYTES:
                     raise ValueError(f"{rel}: {size} bytes, over the 4 GB per-file limit")
                 zi = _zinfo(rel, size, compress)
+                h = hashlib.sha256()
                 with open(src, "rb") as fh, \
                         zf.open(zi, "w", force_zip64=size >= ZIP64_LIMIT) as dst:
-                    shutil.copyfileobj(fh, dst, _BLOCK)
+                    for chunk in iter(lambda: fh.read(_BLOCK), b""):
+                        h.update(chunk)
+                        dst.write(chunk)
+                hashed.append((rel, h.hexdigest()))
                 records.append((_md5(rel), zi.header_offset))
                 if progress is not None:
                     progress(i, total)
@@ -140,6 +220,8 @@ def write_3tz(src_dir: str, out_path: str, *, compress: bool = False,
         "entries": total,
         "bytes": os.path.getsize(out_path),
         "sha256": sha256_file(out_path),
+        "content_digest": {"digest": _content_digest_of(hashed),
+                           "files": len(hashed), "computed_by": "producer"},
         "seconds": round(time.time() - t0, 3),
     }
 
@@ -256,16 +338,17 @@ def verify_3tz(path: str, src_dir: str | None = None) -> dict:
 
         if src_dir is not None:
             try:
-                expected = list_entries(src_dir)
+                on_disk = dict(_entries(src_dir))
             except ValueError as exc:
                 errors.append(f"source folder: {exc}")
-                expected = []
+                on_disk = {}
+            expected = list(on_disk)
             missing = sorted(set(expected) - set(names))
             extra = sorted(set(names) - set(expected))
             errors += [f"missing from archive: {n}" for n in missing]
             errors += [f"not in source folder: {n}" for n in extra]
             for rel in sorted(set(expected) & set(names)):
-                if not _same_bytes(zf, rel, os.path.join(src_dir, rel)):
+                if not _same_bytes(zf, rel, os.path.join(src_dir, on_disk[rel])):
                     errors.append(f"differs from source: {rel}")
 
     return {"ok": not errors, "entries": len(infos), "errors": errors,
