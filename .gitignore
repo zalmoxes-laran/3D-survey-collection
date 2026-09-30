@@ -129,3 +129,6 @@ cesium_exporter/dev_diag/
 /blender_manifest.toml
 
 **/.DS_Store
+
+# Claude Code local tooling (dev-server launch config, settings)
+.claude/
