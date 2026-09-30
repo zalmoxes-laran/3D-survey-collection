@@ -23,6 +23,7 @@ paths_exclude_pattern = [
     # Dev directories
     "scripts/",
     "dev_utils/",
+    "tests/",
     "README_images/",
     "exporter_cesium/",
     ".git/",

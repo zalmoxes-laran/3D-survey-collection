@@ -28,3 +28,20 @@ once:
   check silently compares against the identity matrix.
 * F-curves are read through `orthogonal_render.action_fcurves()`. Blender 5.x
   has no `Action.fcurves`; the curves live in the channelbag of the slot.
+
+# Cesium .3tz test
+
+`test_cesium_3tz.py` exports a small ico-sphere with Archive = *Folder + .3tz*,
+*Only .3tz* and *Folder*, checks every archive with `verify_3tz`, and drives the
+*Pack a tileset into .3tz* operator. Optional environment variables:
+`TZ_VALIDATOR` (path to a `3d-tiles-validator` binary; otherwise
+`npx --no-install 3d-tiles-validator` if `npx` is on PATH), `TZ_EXTERNAL_TILESET`
+(a foreign tileset folder, copied to a temp dir before packing — the source is
+never written) and `TZ_REPORT_JSON` (where to dump sizes and sha256).
+
+```bash
+"/Applications/Blender 510.app/Contents/MacOS/Blender" -b --factory-startup \
+    --python dev_utils/tests/test_cesium_3tz.py
+```
+
+The archive module itself has plain pytest tests, no Blender: `pytest tests`.

@@ -366,6 +366,30 @@ def register():
         default=False,
         description="After export, write a zipped copy of the output folder next to it (.zip)",
     )
+    S.cesium_archive_mode = bpy.props.EnumProperty(
+        name="Archive",
+        items=[
+            ('FOLDER', "Folder", "Write the tileset as a folder of files (as before)"),
+            ('FOLDER_3TZ', "Folder + .3tz",
+             "Write the folder, then pack it into a .3tz next to it, with the same name"),
+            ('ONLY_3TZ', "Only .3tz",
+             "Write the tileset into a temporary folder, pack it into a .3tz, "
+             "then remove the temporary folder"),
+        ],
+        default='FOLDER',
+        description=(
+            "3D Tiles Archive (.3tz): the whole tileset in one deterministic file, "
+            "with one sha256 — stamped, cited and served like a glb"
+        ),
+    )
+    S.cesium_archive_verify = bpy.props.BoolProperty(
+        name="Verify .3tz",
+        default=True,
+        description=(
+            "After writing a .3tz, check its index and compare every entry "
+            "with the folder it was packed from"
+        ),
+    )
 
     # Progress
     S.cesium_progress_active = bpy.props.BoolProperty(default=False)
@@ -434,6 +458,8 @@ def unregister():
         "cesium_aton_yup_rotation",
         "cesium_aton_error_target",
         "cesium_zip_output",
+        "cesium_archive_mode",
+        "cesium_archive_verify",
         "cesium_progress_active",
         "cesium_progress_task",
         "cesium_progress_current_mesh",

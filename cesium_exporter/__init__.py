@@ -8,6 +8,7 @@ from .operators import (
     OBJECT_OT_clear_cesium_folder,
     OBJECT_OT_export_cesium_tiles,
     OBJECT_OT_generate_aton_scene_name,
+    OBJECT_OT_cesium_pack_3tz,
     OBJECT_OT_launch_aton,
     OBJECT_OT_open_aton_browser,
     OBJECT_OT_patch_cesium_output_unlit,
@@ -31,6 +32,7 @@ classes = (
     OBJECT_OT_publish_to_aton,
     OBJECT_OT_generate_aton_scene_name,
     OBJECT_OT_cesium_zip_output,
+    OBJECT_OT_cesium_pack_3tz,
     VIEW3D_PT_cesium_export,
 )
 

@@ -4,6 +4,7 @@ import math
 import os
 import shutil
 import subprocess
+import tempfile
 import time
 import uuid
 import webbrowser
@@ -70,6 +71,74 @@ def _validate_aton_path(path):
     if not (p / "package.json").exists():
         return False, f"Not an ATON install (no package.json): {p}"
     return True, ""
+
+
+def _archive_path_for(folder):
+    """The .3tz of a tileset folder: next to it, same name."""
+    p = Path(folder)
+    return p.with_name(p.name + ".3tz")
+
+
+def _pack_3tz(context, src_dir, out_path, verify=True):
+    """Pack `src_dir` into `out_path` with the progress bar running.
+
+    Returns (ok, info, message). `info` is the dict of write_3tz, plus
+    `verify` when it ran; `message` is the one-line summary (files, bytes,
+    time, sha256) for the log and the status bar."""
+    from . import archive_3tz
+
+    wm = context.window_manager
+    try:
+        total = len(archive_3tz.list_entries(src_dir))
+    except ValueError as exc:
+        return False, {}, str(exc)
+    wm.progress_begin(0, max(1, total))
+    step = max(1, total // 100)
+
+    def _progress(done, _total):
+        if done % step == 0 or done == _total:
+            wm.progress_update(done)
+
+    try:
+        info = archive_3tz.write_3tz(src_dir, str(out_path), progress=_progress)
+        if verify:
+            info["verify"] = archive_3tz.verify_3tz(str(out_path), src_dir)
+    except (OSError, ValueError) as exc:
+        return False, {}, f"{Path(out_path).name}: {exc}"
+    finally:
+        wm.progress_end()
+
+    msg = (f"{Path(out_path).name}: {info['entries']} files, {info['bytes']:,} bytes, "
+           f"{info['seconds']:.1f} s, sha256 {info['sha256']}")
+    v = info.get("verify")
+    if v is not None and not v["ok"]:
+        return False, info, f"{msg} — verify FAILED: {'; '.join(v['errors'][:3])}"
+    if v is not None:
+        msg += f" (verified in {v['seconds']:.1f} s)"
+    return True, info, msg
+
+
+def _work_dir_for(final_dir, archive_mode):
+    """Where the backend writes. 'Only .3tz' writes into a temporary sibling
+    folder (same filesystem, so packing never crosses volumes)."""
+    if archive_mode != 'ONLY_3TZ':
+        os.makedirs(final_dir, exist_ok=True)
+        return final_dir
+    final = Path(final_dir)
+    final.parent.mkdir(parents=True, exist_ok=True)
+    return tempfile.mkdtemp(prefix=f".{final.name}.", suffix=".tmp", dir=final.parent)
+
+
+def _archive_job_output(context, scene, final_dir, work_dir):
+    """Apply the Archive option to one exported tileset. Returns (ok, message);
+    message is None when there was nothing to do."""
+    mode = getattr(scene, "cesium_archive_mode", 'FOLDER')
+    if mode == 'FOLDER':
+        return True, None
+    out = _archive_path_for(final_dir)
+    ok, _info, msg = _pack_3tz(context, work_dir, out,
+                               verify=bool(getattr(scene, "cesium_archive_verify", True)))
+    return ok, msg
 
 
 class OBJECT_OT_clear_cesium_folder(bpy.types.Operator):
@@ -343,23 +412,34 @@ class OBJECT_OT_export_cesium_tiles(bpy.types.Operator):
             tree_type = str(getattr(scene, "cesium_tree_type", "OCTREE"))
             refine = str(getattr(scene, "cesium_tile_refine_mode", "REPLACE"))
 
-            os.makedirs(output_dir, exist_ok=True)
+            work_dir = _work_dir_for(output_dir, scene.cesium_archive_mode)
             print(
                 f"[multi_lod] Exporting LOD set {sorted_levels} "
-                f"(base='{base_name}') -> {output_dir}"
+                f"(base='{base_name}') -> {work_dir}"
             )
-            ok, info = run_multi_lod_export(
-                context, scene, lod_set, output_dir,
-                tree_type=tree_type, refine=refine,
-                keep_temp=bool(getattr(scene, "cesium_keep_temp_objects", False)),
-            )
-            if not ok:
-                self.report({'ERROR'}, f"Multi-LOD export failed: {info.get('error', 'unknown')}")
+            try:
+                ok, info = run_multi_lod_export(
+                    context, scene, lod_set, work_dir,
+                    tree_type=tree_type, refine=refine,
+                    keep_temp=bool(getattr(scene, "cesium_keep_temp_objects", False)),
+                )
+                if not ok:
+                    self.report({'ERROR'}, f"Multi-LOD export failed: {info.get('error', 'unknown')}")
+                    return {'CANCELLED'}
+                ok_tz, tz_msg = _archive_job_output(context, scene, output_dir, work_dir)
+            finally:
+                if work_dir != output_dir:
+                    shutil.rmtree(work_dir, ignore_errors=True)
+            if tz_msg:
+                _add_to_cesium_log(context, ("[OK] " if ok_tz else "[ERR] ") + tz_msg)
+            if not ok_tz:
+                self.report({'ERROR'}, tz_msg)
                 return {'CANCELLED'}
             self.report(
                 {'INFO'},
                 f"Multi-LOD: {info['exported_tiles']} tiles, "
-                f"{info['n_levels']} levels, root depth {info['max_depth']}",
+                f"{info['n_levels']} levels, root depth {info['max_depth']}"
+                + (f" — {tz_msg}" if tz_msg else ""),
             )
             return {'FINISHED'}
 
@@ -424,12 +504,19 @@ class OBJECT_OT_export_cesium_tiles(bpy.types.Operator):
             self.report({'ERROR'}, message)
             return {'CANCELLED'}
 
+        archive_mode = getattr(scene, "cesium_archive_mode", 'FOLDER')
+        if archive_mode != 'FOLDER':
+            _add_to_cesium_log(context, f"Archive: {archive_mode} (.3tz next to each tileset folder)")
+        work_dirs = []
+
         successful_jobs = 0
         try:
             for mesh_idx, job in enumerate(jobs, start=1):
                 obj_name = job["obj_name"]
-                output_dir = job["output_dir"]
-                os.makedirs(output_dir, exist_ok=True)
+                final_dir = job["output_dir"]
+                output_dir = _work_dir_for(final_dir, archive_mode)
+                if output_dir != final_dir:
+                    work_dirs.append(output_dir)
 
                 mesh_stats = _collect_mesh_stats(context, scene, job)
                 _update_cesium_progress(
@@ -465,6 +552,18 @@ class OBJECT_OT_export_cesium_tiles(bpy.types.Operator):
                 scene.cesium_progress_last_stats = stats_line
                 _add_to_cesium_log(context, f"[OK] {stats_line}")
 
+                if archive_mode != 'FOLDER':
+                    _update_cesium_progress(
+                        context, task=f"Packing .3tz: {obj_name}",
+                        current_mesh=mesh_idx, total_meshes=total_jobs,
+                        elapsed=time.time() - start_time,
+                    )
+                    ok_tz, tz_msg = _archive_job_output(context, scene, final_dir, output_dir)
+                    if not ok_tz:
+                        return _cancel_with_progress(tz_msg)
+                    _add_to_cesium_log(context, f"[OK] {tz_msg}")
+                    self.report({'INFO'}, tz_msg)
+
                 successful_jobs += 1
                 _update_cesium_progress(
                     context, task=f"Completed mesh: {obj_name}",
@@ -475,7 +574,12 @@ class OBJECT_OT_export_cesium_tiles(bpy.types.Operator):
             _add_to_cesium_log(context, "No intermediate files generated.")
 
             if auto_stitch_parent and total_jobs > 1:
-                if not scene.cesium_create_object_subdir:
+                if archive_mode == 'ONLY_3TZ':
+                    # The parent would point at folders that no longer exist,
+                    # and a 3tz must not be referenced as a tileset.
+                    self.report({'WARNING'}, "Auto-stitch skipped: 'Only .3tz' leaves no child folders.")
+                    _add_to_cesium_log(context, "[WARN] Auto-stitch skipped (Archive: Only .3tz).")
+                elif not scene.cesium_create_object_subdir:
                     self.report({'WARNING'}, "Auto-stitch skipped: enable 'Create object subfolder'.")
                     _add_to_cesium_log(context, "[WARN] Auto-stitch skipped (enable Create object subfolder).")
                 else:
@@ -513,6 +617,8 @@ class OBJECT_OT_export_cesium_tiles(bpy.types.Operator):
 
             return {'FINISHED'}
         finally:
+            for wd in work_dirs:
+                shutil.rmtree(wd, ignore_errors=True)
             scene.cesium_progress_active = False
             _redraw_3d_view(context)
 
@@ -824,5 +930,52 @@ class OBJECT_OT_cesium_zip_output(bpy.types.Operator):
         size_mb = zip_path.stat().st_size / (1024 * 1024)
         msg = f"Saved {zip_path.name} ({size_mb:.1f} MB)"
         _add_to_cesium_log(context, msg)
+        self.report({'INFO'}, msg)
+        return {'FINISHED'}
+
+
+class OBJECT_OT_cesium_pack_3tz(bpy.types.Operator):
+    """Pack a tileset folder (tileset.json at its root, any generator) into a
+    deterministic .3tz next to it, with the same name"""
+    bl_idname = "object.cesium_pack_3tz"
+    bl_label = "Pack a tileset into .3tz"
+    bl_options = {'REGISTER'}
+
+    directory: bpy.props.StringProperty(  # type: ignore
+        name="Tileset folder",
+        subtype='DIR_PATH',
+        description="Folder with tileset.json at its root",
+    )
+    filter_folder: bpy.props.BoolProperty(default=True, options={'HIDDEN'})  # type: ignore
+    verify: bpy.props.BoolProperty(  # type: ignore
+        name="Verify after writing",
+        default=True,
+        description="Check the index and compare every entry with the folder",
+    )
+
+    def invoke(self, context, event):
+        if not self.directory:
+            out = bpy.path.abspath(context.scene.cesium_output_dir or "").strip()
+            if out:
+                self.directory = out
+        context.window_manager.fileselect_add(self)
+        return {'RUNNING_MODAL'}
+
+    def execute(self, context):
+        src = Path(bpy.path.abspath(self.directory).strip())
+        if not src.is_dir():
+            self.report({'ERROR'}, f"Not a folder: {src}")
+            return {'CANCELLED'}
+        if not (src / "tileset.json").is_file():
+            self.report({'ERROR'}, f"No tileset.json at the root of {src}")
+            return {'CANCELLED'}
+        out = _archive_path_for(src)
+        _add_to_cesium_log(context, f"Packing {src.name} -> {out.name} ...")
+        ok, _info, msg = _pack_3tz(context, str(src), out, verify=self.verify)
+        _add_to_cesium_log(context, ("[OK] " if ok else "[ERR] ") + msg)
+        print(f"[3tz] {out}: {msg}")
+        if not ok:
+            self.report({'ERROR'}, msg)
+            return {'CANCELLED'}
         self.report({'INFO'}, msg)
         return {'FINISHED'}

@@ -72,6 +72,9 @@ class VIEW3D_PT_cesium_export(bpy.types.Panel):
             op = row.operator("object.clear_cesium_folder", text="", icon='TRASH')
             op.target = 'OUTPUT'
             sec.prop(scene, "cesium_create_object_subdir")
+            sec.prop(scene, "cesium_archive_mode")
+            if scene.cesium_archive_mode != 'FOLDER':
+                sec.prop(scene, "cesium_archive_verify")
 
         # 1.3  Quick Setup -----------------------------------------------------
         sec = _section(layout, scene, "cesium_show_section_quicksetup",
@@ -248,3 +251,4 @@ class VIEW3D_PT_cesium_export(bpy.types.Panel):
         box_zip.label(text="3.2  Deliver tileset", icon='FILE_ARCHIVE')
         box_zip.prop(scene, "cesium_zip_output", text="Auto-zip after export")
         box_zip.operator("object.cesium_zip_output", text="Save zip now", icon='FILE_NEW')
+        box_zip.operator("object.cesium_pack_3tz", text="Pack a tileset into .3tz", icon='PACKAGE')
