@@ -20,11 +20,20 @@ import importlib
 import os
 import sys
 
-#: the step kinds of the dev26 vocabulary (``dtc_kinds.process``): it has no
-#: «export», «LOD» or «tiling», so the nearest are used (proposal for dev28)
-KIND_EXPORT = "format_conversion"
-KIND_LOD = "decimation"
-KIND_TILING = "transformation"
+#: the GESTURE of each export (s3Dgraphy dev28, ``dtc_kinds.process``, E.D.
+#: 1 Oct 2026): ``lod_generation`` for a LOD, ``tiling`` for a tileset,
+#: ``packing`` for a .3tz, ``export`` for the rest. Which word the stamp
+#: carries is EM Tools' to say (``birth_stamp.resolve_kind``): the bundled
+#: s3dgraphy before dev28 lacks these, and there the dev27 equivalents are
+#: written, the gesture staying in ``technique``.
+KIND_EXPORT = "export"
+KIND_LOD = "lod_generation"
+KIND_TILING = "tiling"
+KIND_PACKING = "packing"
+
+#: the dev27 equivalents, for an EM Tools too old to resolve a gesture itself
+_BEFORE_DEV28 = {KIND_EXPORT: "format_conversion", KIND_LOD: "decimation",
+                 KIND_TILING: "transformation", KIND_PACKING: "format_conversion"}
 
 PRODUCER_NAME = "3D Survey Collection"
 NO_EMTOOLS = ("not stamped: EM Tools is not installed — the file is written "
@@ -60,6 +69,16 @@ def producer(birth_stamp=None):
     return {"name": PRODUCER_NAME}
 
 
+def kind_for(module, gesture):
+    """The word the stamp carries for a gesture: EM Tools' answer when it has
+    ``resolve_kind`` (it knows the vocabulary it bundles), else the dev27
+    equivalent — an EM Tools from before dev28 knows only those."""
+    resolve = getattr(module, "resolve_kind", None) if module is not None else None
+    if callable(resolve):
+        return resolve(gesture)
+    return _BEFORE_DEV28.get(gesture, gesture)
+
+
 def stamp(path, *, objects=None, dtc_kind=KIND_EXPORT, technique="",
           parameters=None, parents=None, label=None, context=None):
     """Stamp one exported file, folder or archive. Returns EM Tools' result
@@ -71,7 +90,7 @@ def stamp(path, *, objects=None, dtc_kind=KIND_EXPORT, technique="",
     try:
         return module.stamp_blender_export(
             path, objects=[o for o in (objects or []) if o is not None],
-            dtc_kind=dtc_kind, technique=technique, parameters=parameters,
+            dtc_kind=kind_for(module, dtc_kind), technique=technique, parameters=parameters,
             producer=producer(module), parents=parents, label=label,
             context=context)
     except Exception as exc:                        # noqa: BLE001 — a stamp never stops an export

@@ -161,16 +161,30 @@ def _stamp_tileset(context, final_dir, archive_mode, objects, parameters, techni
     if sb is None:
         return []
     results = []
+    folder = None
     if archive_mode != 'ONLY_3TZ' and os.path.isfile(os.path.join(final_dir, "tileset.json")):
-        results.append(sb.stamp(final_dir, objects=objects, dtc_kind=sb.KIND_TILING,
-                                technique=technique, parameters=parameters,
-                                context=context))
+        folder = sb.stamp(final_dir, objects=objects, dtc_kind=sb.KIND_TILING,
+                          technique=technique, parameters=parameters,
+                          context=context)
+        results.append(folder)
     if archive_mode != 'FOLDER':
         tz = str(_archive_path_for(final_dir))
         if os.path.isfile(tz):
-            results.append(sb.stamp(tz, objects=objects, dtc_kind=sb.KIND_TILING,
-                                    technique=technique + " · packed as .3tz",
-                                    parameters=parameters, context=context))
+            folder_self = ((folder or {}).get("stamp") or {}).get("self") or {}
+            if folder_self.get("resource_id"):
+                # dev28 · the folder is there and stamped: the .3tz is PACKED
+                # from it (`packing`), its parent by identity, the same content
+                results.append(sb.stamp(tz, dtc_kind=getattr(sb, "KIND_PACKING", sb.KIND_EXPORT),
+                                        technique="3tz packing (3DSC canonical profile)",
+                                        parameters=parameters, context=context,
+                                        parents=[{"resource_id": folder_self["resource_id"],
+                                                  "digest": folder_self.get("digest"),
+                                                  "label": os.path.basename(final_dir)}]))
+            else:
+                # 'Only .3tz': no folder to name — the tiling of the meshes, packed
+                results.append(sb.stamp(tz, objects=objects, dtc_kind=sb.KIND_TILING,
+                                        technique=technique + " · packed as .3tz",
+                                        parameters=parameters, context=context))
     return results
 
 
@@ -1086,7 +1100,7 @@ class OBJECT_OT_cesium_pack_3tz(bpy.types.Operator):
         self.report({'INFO'}, msg)
         sb = _stamp_bridge()
         if sb is not None:
-            res = sb.stamp(str(out), dtc_kind=sb.KIND_EXPORT,
+            res = sb.stamp(str(out), dtc_kind=getattr(sb, "KIND_PACKING", sb.KIND_EXPORT),
                            technique="3tz packing (3DSC canonical profile)",
                            parameters={"operator": self.bl_idname, "verify": self.verify},
                            parents=[_folder_parent(src, _info)], context=context)

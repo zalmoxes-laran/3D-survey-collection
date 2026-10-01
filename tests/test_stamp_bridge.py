@@ -60,6 +60,8 @@ def test_with_emtools_the_call_goes_there_with_3dsc_as_producer(tmp_path, monkey
                    technique="LOD", parameters={"operator": "lod.creation"})
     assert res["state"] == "stamped"
     assert seen["producer"] == {"name": "3D Survey Collection", "version": "1.7.0-dev.15"}
+    # the gesture goes to EM Tools; with no resolve_kind (an old EM Tools) the
+    # bridge writes the dev27 equivalent itself
     assert seen["objects"] == ["obj"] and seen["dtc_kind"] == "decimation"
     assert sb.report_line([res]) == "Stamps: 1 stamped"
 
@@ -73,6 +75,27 @@ def test_a_failing_emtools_never_stops_the_export(monkeypatch):
     assert res["state"] == "failed" and "boom" in res["line"]
 
 
-def test_kinds_are_of_the_dev26_vocabulary():
-    assert {sb.KIND_EXPORT, sb.KIND_LOD, sb.KIND_TILING} == {
-        "format_conversion", "decimation", "transformation"}
+def test_the_kinds_are_the_gestures_of_dev28():
+    assert (sb.KIND_EXPORT, sb.KIND_LOD, sb.KIND_TILING, sb.KIND_PACKING) == (
+        "export", "lod_generation", "tiling", "packing")
+
+
+def test_em_tools_says_which_word_the_stamp_carries():
+    new = types.SimpleNamespace(resolve_kind=lambda k: k)
+    assert sb.kind_for(new, sb.KIND_PACKING) == "packing"
+    old = types.SimpleNamespace()                    # an EM Tools before dev28
+    assert [sb.kind_for(old, k) for k in (sb.KIND_EXPORT, sb.KIND_LOD, sb.KIND_TILING,
+                                          sb.KIND_PACKING)] == [
+        "format_conversion", "decimation", "transformation", "format_conversion"]
+    assert sb.kind_for(None, "georeferencing") == "georeferencing"
+
+
+def test_the_bridge_asks_em_tools_to_resolve(tmp_path, monkeypatch):
+    seen = {}
+    fake = types.SimpleNamespace(
+        stamp_blender_export=lambda path, **kw: seen.update(kw) or {"state": "stamped"},
+        software_entry=lambda name, folder: {"name": name},
+        resolve_kind=lambda k: {"lod_generation": "lod_generation"}.get(k, "x"))
+    monkeypatch.setattr(sb, "emtools_birth_stamp", lambda: fake)
+    sb.stamp(str(tmp_path / "a.obj"), dtc_kind=sb.KIND_LOD)
+    assert seen["dtc_kind"] == "lod_generation"
