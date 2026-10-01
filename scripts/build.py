@@ -72,6 +72,20 @@ def download_platform_wheels(platform: str, wheels_dir: Path, python_version: st
             print(f"Warning: failed to download {package} for {platform} (py{python_version})")
 
 
+def write_build_info(root_dir: Path, build_dir: Path) -> None:
+    """``build_info.json`` in the package: the commit it was built from, which
+    the stamp of an export names beside the version (VLONG-DEV27/D2; the
+    installed add-on has no ``.git``). Mirrors EM-tools."""
+    import json
+    def git(*args):
+        out = subprocess.run(['git', *args], cwd=root_dir, capture_output=True, text=True)
+        return out.stdout.strip() if out.returncode == 0 else ""
+    info = {"commit": git('rev-parse', '--short', 'HEAD'),
+            "dirty": bool(git('status', '--porcelain', '--untracked-files=no'))}
+    (build_dir / "build_info.json").write_text(json.dumps(info) + "\n", encoding="utf-8")
+    print(f"build_info.json: {info}")
+
+
 def build_extension(mode: str = 'dev', platform: str = None, python_version: str = '3.11'):
     root_dir = Path(__file__).parent.parent
     build_dir = root_dir / "build"
@@ -92,6 +106,7 @@ def build_extension(mode: str = 'dev', platform: str = None, python_version: str
 
     clean_build_directory(build_dir)
     copy_source_files(root_dir, build_dir)
+    write_build_info(root_dir, build_dir)
 
     wheels_dir = root_dir / "wheels"
     if not wheels_dir.exists() or not any(wheels_dir.rglob("*.whl")):

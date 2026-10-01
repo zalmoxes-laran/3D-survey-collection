@@ -1,6 +1,7 @@
 import bpy
 import os
 from .functions import *
+from . import stamp_bridge
 
 import math
 
@@ -274,6 +275,20 @@ def menu_func_export(self, context):
 
 ############## from here operators to export geometry ########################
 
+#: VLONG-DEV27/D2 · the parameters of each exporter as they go in a stamp's
+#: ``how.parameters``: the ones that change the bytes, said once here
+OBJ_PARAMETERS = {"exporter": "wm.obj_export", "forward_axis": "Y", "up_axis": "Z",
+                  "apply_modifiers": True, "export_materials": True,
+                  "path_mode": "RELATIVE"}
+GLTF_PARAMETERS = {"exporter": "export_scene.gltf", "export_format": "GLTF_SEPARATE",
+                   "draco": True, "draco_level": 6, "export_yup": True,
+                   "export_apply": True, "image_compression": True}
+GLB_PARAMETERS = {"exporter": "export_scene.gltf", "export_format": "GLB",
+                  "draco": False, "export_yup": True, "export_apply": True}
+FBX_PARAMETERS = {"exporter": "export_scene.fbx", "path_mode": "COPY",
+                  "embed_textures": True, "axis_forward": "-Z", "axis_up": "Y"}
+
+
 class OBJECT_OT_ExportObjButton(bpy.types.Operator):
     bl_idname = "export.object"
     bl_label = "Export object"
@@ -308,6 +323,10 @@ class OBJECT_OT_ExportObjButton(bpy.types.Operator):
         #bpy.ops.export_scene.obj(filepath=fn + ".obj", use_selection=True, axis_forward='Y', axis_up='Z', path_mode='RELATIVE', global_shift_x = x_shift, global_shift_y = y_shift, global_shift_z = z_shift)
 
         bpy.ops.wm.obj_export(filepath=fn + ".obj", check_existing=True, export_animation=False, forward_axis='Y', up_axis='Z', global_scale=1.0, apply_modifiers=True, export_eval_mode='DAG_EVAL_VIEWPORT', export_selected_objects=True, export_uv=True, export_normals=True, export_materials=True, export_pbr_extensions=False, path_mode='RELATIVE', export_triangulated_mesh=False, export_curves_as_nurbs=False, export_object_groups=False, export_material_groups=False, export_vertex_groups=False, export_smooth_groups=False, smooth_group_bitflags=False)
+        # VLONG-DEV27/D2 · the stamp born with the file (through EM Tools)
+        stamp_bridge.report(self, [stamp_bridge.stamp(
+            fn + ".obj", objects=[bpy.context.active_object], technique="OBJ export",
+            parameters=dict(OBJ_PARAMETERS, operator=self.bl_idname), context=context)])
         return {'FINISHED'}
 
 class OBJECT_OT_gltfexportbatch(bpy.types.Operator):
@@ -328,6 +347,7 @@ class OBJECT_OT_gltfexportbatch(bpy.types.Operator):
 
         selection = bpy.context.selected_objects
         bpy.ops.object.select_all(action='DESELECT')
+        exported = []
 
         for obj in selection:
             obj.select_set(True)
@@ -336,9 +356,16 @@ class OBJECT_OT_gltfexportbatch(bpy.types.Operator):
             file_path = os.path.join(basedir, namefile)
             bpy.ops.export_scene.gltf(export_format='GLTF_SEPARATE', ui_tab='GENERAL', export_copyright=copyright, export_image_format='AUTO', export_texture_dir='', export_texcoords=True, export_normals=True, export_draco_mesh_compression_enable=True, export_draco_mesh_compression_level=draco_compression, export_draco_position_quantization=14, export_draco_normal_quantization=10, export_draco_texcoord_quantization=12, export_draco_generic_quantization=12, export_tangents=False, export_materials='EXPORT', export_cameras=False, use_selection=True, export_extras=False, export_yup=True, export_apply=True, export_animations=False, export_frame_range=False, export_frame_step=1, export_force_sampling=False, export_nla_strips=False, export_def_bones=False, export_current_frame=False, export_skins=False, export_all_influences=False, export_morph=True, export_morph_normal=False, export_morph_tangent=False, export_lights=False,  will_save_settings=False, filepath=file_path, check_existing=False)#, filter_glob='*.glb;*.gltf') export_gpu_instances=True da usare per l'instancing gltf 
             obj.select_set(False)
+            exported.append((file_path, obj))
         
         image_compression(basedir)
 
+        # VLONG-DEV27/D2 · stamped AFTER image_compression, which rewrites the
+        # textures the .gltf calls: a stamp taken before would name old bytes
+        stamp_bridge.report(self, [stamp_bridge.stamp(
+            path, objects=[ob], technique="glTF export (separate) + image compression",
+            parameters=dict(GLTF_PARAMETERS, operator=self.bl_idname), context=context)
+            for path, ob in exported])
         return {'FINISHED'}
 
 class OBJECT_OT_glbexportbatch(bpy.types.Operator):
@@ -361,6 +388,7 @@ class OBJECT_OT_glbexportbatch(bpy.types.Operator):
         os.makedirs(basedir, exist_ok=True)
         selection = bpy.context.selected_objects
         bpy.ops.object.select_all(action='DESELECT')
+        stamps = []
 
         for obj in selection:
             obj.select_set(True)
@@ -369,6 +397,11 @@ class OBJECT_OT_glbexportbatch(bpy.types.Operator):
             file_path = os.path.join(basedir, namefile)
             bpy.ops.export_scene.gltf(export_format='GLB', ui_tab='GENERAL', export_copyright=copyright, export_image_format='AUTO', export_texture_dir='', export_texcoords=True, export_normals=True, export_draco_mesh_compression_enable=False, export_draco_mesh_compression_level=draco_compression, export_draco_position_quantization=14, export_draco_normal_quantization=10, export_draco_texcoord_quantization=12, export_draco_generic_quantization=12, export_tangents=False, export_materials='EXPORT',  export_cameras=False, use_selection=True, export_extras=False, export_yup=True, export_apply=True, export_animations=True, export_frame_range=False, export_frame_step=1, export_force_sampling=False, export_nla_strips=False, export_def_bones=False, export_current_frame=False, export_skins=False, export_all_influences=False, export_morph=True, export_morph_normal=False, export_morph_tangent=False, export_lights=False,  will_save_settings=False, filepath=file_path, check_existing=False)#, filter_glob='*.glb;*.gltf')
             obj.select_set(False)
+            # VLONG-DEV27/D2 · the stamp born with the file (through EM Tools)
+            stamps.append(stamp_bridge.stamp(
+                file_path, objects=[obj], technique="glTF export (GLB)",
+                parameters=dict(GLB_PARAMETERS, operator=self.bl_idname), context=context))
+        stamp_bridge.report(self, stamps)
         return {'FINISHED'}
 
 class OBJECT_OT_objexportbatch(bpy.types.Operator):
@@ -395,12 +428,18 @@ class OBJECT_OT_objexportbatch(bpy.types.Operator):
         bpy.ops.object.select_all(action='DESELECT')
 
         os.makedirs(basedir, exist_ok=True)
+        stamps = []
         for obj in selection:
             obj.select_set(True)
             name = bpy.path.clean_name(obj.name)
             fn = os.path.join(basedir, name)
             bpy.ops.wm.obj_export(filepath=fn + ".obj", check_existing=True, export_animation=False, forward_axis='Y', up_axis='Z', global_scale=1.0, apply_modifiers=True, export_eval_mode='DAG_EVAL_VIEWPORT', export_selected_objects=True, export_uv=True, export_normals=True, export_materials=True, export_pbr_extensions=False, path_mode='RELATIVE', export_triangulated_mesh=False, export_curves_as_nurbs=False, export_object_groups=False, export_material_groups=False, export_vertex_groups=False, export_smooth_groups=False, smooth_group_bitflags=False)
             obj.select_set(False)
+            # VLONG-DEV27/D2 · obj + mtl + textures: a file_set (dtcstamp)
+            stamps.append(stamp_bridge.stamp(
+                fn + ".obj", objects=[obj], technique="OBJ export",
+                parameters=dict(OBJ_PARAMETERS, operator=self.bl_idname), context=context))
+        stamp_bridge.report(self, stamps)
         return {'FINISHED'}
 
 #_______________________________________________________________________________________________________________
@@ -456,6 +495,7 @@ class OBJECT_OT_fbxexportbatch(bpy.types.Operator):
         createfolder(basedir, subfolder)
         subfolderpath = os.path.join(basedir, subfolder)
         gltf_dirs_to_compress = set()
+        exported = []
 
         if scene.instanced_export:
             #annotate the name of the active object (for instanced mode only)
@@ -503,6 +543,7 @@ class OBJECT_OT_fbxexportbatch(bpy.types.Operator):
             active_object.location = [obj_location_x,obj_location_y,obj_location_z]
             active_object.rotation_euler =[obj_rot_x,obj_rot_y,obj_rot_z]
             active_object.scale =[obj_scale_x,obj_scale_y,obj_scale_z]
+            exported.append((file_instance_fbx_path, active_object))
              
         else:
             selection = bpy.context.selected_objects
@@ -524,6 +565,13 @@ class OBJECT_OT_fbxexportbatch(bpy.types.Operator):
                 bpy.ops.export_scene.fbx(filepath = fn+".fbx", check_existing = True, filter_glob = '*.fbx', use_selection = True, use_active_collection = False, global_scale = 100.0 if scene.fbx_convert_to_cm else 1.0, apply_unit_scale = True, apply_scale_options = 'FBX_SCALE_NONE', use_space_transform = True, bake_space_transform = False, object_types = {'MESH','EMPTY'}, use_mesh_modifiers = True, use_mesh_modifiers_render = True, mesh_smooth_type = 'EDGE', use_subsurf = False, use_mesh_edges = False, use_tspace = False, use_custom_props = False, add_leaf_bones = False, primary_bone_axis = 'Y', secondary_bone_axis = 'X', use_armature_deform_only = False, armature_nodetype = 'NULL', bake_anim = False, bake_anim_use_all_bones = False, bake_anim_use_nla_strips = False, bake_anim_use_all_actions = False, bake_anim_force_startend_keying = False, bake_anim_step = 1.0, bake_anim_simplify_factor = 1.0, path_mode = 'COPY', embed_textures = True, batch_mode = 'OFF', use_batch_own_dir = True, use_metadata = True, axis_forward = '-Z', axis_up ='Y')
 
                 obj.select_set(False)
+                exported.append((fn + ".fbx", obj))
+        # VLONG-DEV27/D2 · the stamp born with the file (through EM Tools)
+        stamp_bridge.report(self, [stamp_bridge.stamp(
+            path, objects=[ob], technique="FBX export (UE)",
+            parameters=dict(FBX_PARAMETERS, operator=self.bl_idname,
+                            instanced=bool(scene.instanced_export)), context=context)
+            for path, ob in exported if os.path.exists(path)])
         return {'FINISHED'}
 
 '''
@@ -567,6 +615,7 @@ class OBJECT_OT_exportbatch(bpy.types.Operator):
         
         createfolder(basedir, subfolder)
         subfolderpath = os.path.join(basedir, subfolder)
+        exported = []
 
         if scene.instanced_export:
             #annotate the name of the active object (for instanced mode only)
@@ -620,6 +669,7 @@ class OBJECT_OT_exportbatch(bpy.types.Operator):
             elif self.export_format == "gltf":
                 bpy.ops.export_scene.gltf(export_format='GLTF_SEPARATE', ui_tab='GENERAL', export_copyright=copyright, export_image_format='AUTO', export_texture_dir='', export_texcoords=True, export_normals=True, export_draco_mesh_compression_enable=True, export_draco_mesh_compression_level=draco_compression, export_draco_position_quantization=14, export_draco_normal_quantization=10, export_draco_texcoord_quantization=12, export_draco_generic_quantization=12, export_tangents=False, export_materials='EXPORT', export_cameras=False, use_selection=True, export_extras=False, export_yup=True, export_apply=True, export_animations=False, export_frame_range=False, export_frame_step=1, export_force_sampling=False, export_nla_strips=False, export_def_bones=False, export_current_frame=False, export_skins=False, export_all_influences=False, export_morph=True, export_morph_normal=False, export_morph_tangent=False, export_lights=False, will_save_settings=False, filepath=file_instance_path, check_existing=False, export_gpu_instances=True)
                 gltf_dirs_to_compress.add(os.path.dirname(file_instance_path))
+            exported.append((file_instance_path, active_object))
 
         else:
             selection = bpy.context.selected_objects
@@ -648,11 +698,21 @@ class OBJECT_OT_exportbatch(bpy.types.Operator):
                     bpy.ops.export_scene.gltf(export_format='GLTF_SEPARATE', ui_tab='GENERAL', export_copyright=copyright, export_image_format='AUTO', export_texture_dir='', export_texcoords=True, export_normals=True, export_draco_mesh_compression_enable=True, export_draco_mesh_compression_level=draco_compression, export_draco_position_quantization=14, export_draco_normal_quantization=10, export_draco_texcoord_quantization=12, export_draco_generic_quantization=12, export_tangents=False, export_materials='EXPORT',  export_cameras=False, use_selection=True, export_extras=False, export_yup=True, export_apply=True, export_animations=False, export_frame_range=False, export_frame_step=1, export_force_sampling=False, export_nla_strips=False, export_def_bones=False, export_current_frame=False, export_skins=False, export_all_influences=False, export_morph=True, export_morph_normal=False, export_morph_tangent=False, export_lights=False,  will_save_settings=False, filepath=file_instance_path, check_existing=False)
                     gltf_dirs_to_compress.add(os.path.dirname(file_instance_path))
                 obj.select_set(False)
+                exported.append((file_instance_path, obj))
 
         if self.export_format == "gltf":
             for dir_path in sorted(gltf_dirs_to_compress):
                 image_compression(dir_path)
 
+        # VLONG-DEV27/D2 · the stamps, after the image compression (it rewrites
+        # the textures a .gltf calls)
+        parameters = dict(GLTF_PARAMETERS if self.export_format == "gltf" else FBX_PARAMETERS,
+                          operator=self.bl_idname, export_format_choice=self.export_format,
+                          instanced=bool(scene.instanced_export))
+        stamp_bridge.report(self, [stamp_bridge.stamp(
+            path, objects=[ob], technique=f"{self.export_format.upper()} export",
+            parameters=parameters, context=context)
+            for path, ob in exported if os.path.exists(path)])
         return {'FINISHED'}
     
 #SETUP MENU

@@ -119,6 +119,61 @@ def _pack_3tz(context, src_dir, out_path, verify=True):
     return True, info, msg
 
 
+# ---------------------------------------------------------------------------
+#  VLONG-DEV27/D2 · the stamp born with the tileset (through EM Tools)
+# ---------------------------------------------------------------------------
+
+def _stamp_bridge():
+    """3DSC's ``stamp_bridge`` — inside the add-on, or top-level when the
+    cesium package is loaded alone (dev_utils/tests)."""
+    try:
+        from .. import stamp_bridge
+        return stamp_bridge
+    except (ImportError, ValueError):
+        try:
+            import stamp_bridge  # type: ignore
+            return stamp_bridge
+        except ImportError:
+            return None
+
+
+def _tiling_parameters(scene, operator_idname):
+    """The settings that shape a tileset, as the stamp's ``how.parameters``."""
+    names = ("cesium_source_mode", "cesium_tree_type", "cesium_tile_refine_mode",
+             "cesium_native_min_depth", "cesium_native_max_depth",
+             "cesium_features_per_tile", "cesium_native_hierarchy_layout",
+             "cesium_native_bake_texture_atlas", "cesium_native_bake_texture_size",
+             "cesium_coordinates_mode", "cesium_lod_mode", "cesium_archive_mode")
+    out = {"operator": operator_idname}
+    for name in names:
+        if hasattr(scene, name):
+            value = getattr(scene, name)
+            out[name.replace("cesium_", "")] = value if isinstance(value, (str, int, float, bool)) else str(value)
+    return out
+
+
+def _stamp_tileset(context, final_dir, archive_mode, objects, parameters, technique):
+    """The stamps of one exported tileset: the folder (``directory``) unless
+    'Only .3tz', the ``.3tz`` (``archive``) unless 'Folder'. Both from the same
+    masters: their equal ``content_digest`` is what makes them two forms of one
+    content. → list of results (empty when there is nothing to stamp with)."""
+    sb = _stamp_bridge()
+    if sb is None:
+        return []
+    results = []
+    if archive_mode != 'ONLY_3TZ' and os.path.isfile(os.path.join(final_dir, "tileset.json")):
+        results.append(sb.stamp(final_dir, objects=objects, dtc_kind=sb.KIND_TILING,
+                                technique=technique, parameters=parameters,
+                                context=context))
+    if archive_mode != 'FOLDER':
+        tz = str(_archive_path_for(final_dir))
+        if os.path.isfile(tz):
+            results.append(sb.stamp(tz, objects=objects, dtc_kind=sb.KIND_TILING,
+                                    technique=technique + " · packed as .3tz",
+                                    parameters=parameters, context=context))
+    return results
+
+
 def _work_dir_for(final_dir, archive_mode):
     """Where the backend writes. 'Only .3tz' writes into a temporary sibling
     folder (same filesystem, so packing never crosses volumes)."""
@@ -436,6 +491,16 @@ class OBJECT_OT_export_cesium_tiles(bpy.types.Operator):
             if not ok_tz:
                 self.report({'ERROR'}, tz_msg)
                 return {'CANCELLED'}
+            stamps = _stamp_tileset(
+                context, output_dir, scene.cesium_archive_mode,
+                [lod_set[k] for k in sorted_levels],
+                _tiling_parameters(scene, self.bl_idname),
+                f"3D Tiles, multi-LOD set ({len(sorted_levels)} levels)")
+            sb = _stamp_bridge()
+            if sb is not None and stamps:
+                _stamp_line = sb.report(self, stamps)
+                if _stamp_line:
+                    _add_to_cesium_log(context, _stamp_line)
             self.report(
                 {'INFO'},
                 f"Multi-LOD: {info['exported_tiles']} tiles, "
@@ -509,6 +574,7 @@ class OBJECT_OT_export_cesium_tiles(bpy.types.Operator):
         if archive_mode != 'FOLDER':
             _add_to_cesium_log(context, f"Archive: {archive_mode} (.3tz next to each tileset folder)")
         work_dirs = []
+        stamps = []
 
         successful_jobs = 0
         try:
@@ -565,6 +631,11 @@ class OBJECT_OT_export_cesium_tiles(bpy.types.Operator):
                     _add_to_cesium_log(context, f"[OK] {tz_msg}")
                     self.report({'INFO'}, tz_msg)
 
+                stamps += _stamp_tileset(
+                    context, final_dir, archive_mode, [job["object"]],
+                    _tiling_parameters(scene, self.bl_idname),
+                    "3D Tiles, native split")
+
                 successful_jobs += 1
                 _update_cesium_progress(
                     context, task=f"Completed mesh: {obj_name}",
@@ -608,6 +679,11 @@ class OBJECT_OT_export_cesium_tiles(bpy.types.Operator):
             )
             _add_to_cesium_log(context, f"=== Completed: {successful_jobs}/{total_jobs} mesh(es) in {mins}m {secs}s ===")
             self.report({'INFO'}, f"Cesium export completed for {successful_jobs} mesh(es).")
+            sb = _stamp_bridge()
+            if sb is not None and stamps:
+                _stamp_line = sb.report(self, stamps)
+                if _stamp_line:
+                    _add_to_cesium_log(context, _stamp_line)
 
             # Optional zip after export
             if getattr(scene, "cesium_zip_output", False):
@@ -932,7 +1008,36 @@ class OBJECT_OT_cesium_zip_output(bpy.types.Operator):
         msg = f"Saved {zip_path.name} ({size_mb:.1f} MB)"
         _add_to_cesium_log(context, msg)
         self.report({'INFO'}, msg)
+        sb = _stamp_bridge()
+        if sb is not None:
+            res = sb.stamp(str(zip_path), dtc_kind=sb.KIND_EXPORT,
+                           technique="zip of the Cesium output folder",
+                           parameters={"operator": self.bl_idname,
+                                       "compression": "deflated"},
+                           context=context)
+            _stamp_line = sb.report(self, [res])
+            if _stamp_line:
+                _add_to_cesium_log(context, _stamp_line)
         return {'FINISHED'}
+
+
+def _folder_parent(src, info):
+    """The ``from`` of a packed .3tz: the folder it was packed from, by identity
+    — its stamp's id if it has one, and its content digest (which the .3tz
+    shares: the same content, another form)."""
+    content = (info.get("content_digest") or {}).get("digest", "")
+    parent = {"label": Path(src).name}
+    stamp_file = Path(src).with_name(Path(src).name + ".stamp.json")
+    rid = ""
+    if stamp_file.is_file():
+        try:
+            rid = json.loads(stamp_file.read_text(encoding="utf-8"))["self"]["resource_id"]
+        except (OSError, ValueError, KeyError):
+            rid = ""
+    parent["resource_id"] = rid or ("res:" + content.split(":", 1)[-1][:16])
+    if content:
+        parent["digest"] = content
+    return parent
 
 
 class OBJECT_OT_cesium_pack_3tz(bpy.types.Operator):
@@ -979,4 +1084,13 @@ class OBJECT_OT_cesium_pack_3tz(bpy.types.Operator):
             self.report({'ERROR'}, msg)
             return {'CANCELLED'}
         self.report({'INFO'}, msg)
+        sb = _stamp_bridge()
+        if sb is not None:
+            res = sb.stamp(str(out), dtc_kind=sb.KIND_EXPORT,
+                           technique="3tz packing (3DSC canonical profile)",
+                           parameters={"operator": self.bl_idname, "verify": self.verify},
+                           parents=[_folder_parent(src, _info)], context=context)
+            _stamp_line = sb.report(self, [res])
+            if _stamp_line:
+                _add_to_cesium_log(context, _stamp_line)
         return {'FINISHED'}

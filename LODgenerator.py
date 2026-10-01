@@ -3,6 +3,7 @@ import os
 import re
 import time
 from .functions import *
+from . import stamp_bridge
 from mathutils import Vector
 from bpy.types import Menu, Operator, Panel
 import subprocess
@@ -487,6 +488,7 @@ class OBJECT_OT_LOD(bpy.types.Operator):
         normal_map_max_level = min(context.scene.lod_normal_map_max_level, LODnum)
         atlas_recalc_enabled = context.scene.atlas_uv_recalc or is_cesium_atlas_workflow
         i_lodbake_counter = 1
+        lod_stamps = []
 
         # Initialize progress tracking
         context.scene.lod_progress_active = True
@@ -763,6 +765,20 @@ class OBJECT_OT_LOD(bpy.types.Operator):
                 fn = os.path.join(basedir, subfolder, activename)
                 print(f'Export path: {fn}.obj')
                 bpy.ops.wm.obj_export(filepath=fn + ".obj", export_animation=False, forward_axis='Y', up_axis='Z', global_scale=1.0, apply_modifiers=True, export_eval_mode='DAG_EVAL_VIEWPORT', export_selected_objects=True, export_uv=True, export_normals=True, export_materials=True, export_pbr_extensions=False, path_mode='RELATIVE', export_triangulated_mesh=False, export_curves_as_nurbs=False, export_object_groups=False, export_material_groups=False, export_vertex_groups=False, export_smooth_groups=False, smooth_group_bitflags=False)
+                # VLONG-DEV27/D2 · the LOD born as a file: obj + mtl + the
+                # baked textures (a file_set), from the new LOD object and the
+                # one it was decimated from
+                lod_stamps.append(stamp_bridge.stamp(
+                    fn + ".obj", objects=[obj_LODnew, obj_LOD0],
+                    dtc_kind=stamp_bridge.KIND_LOD,
+                    technique=f"LOD generation ({currentLOD}: decimate + texture bake)",
+                    parameters={"operator": self.bl_idname, "lod": currentLOD,
+                                "source": obj_LOD0_name,
+                                "workflow_preset": str(workflow_preset),
+                                "lod_count": int(LODnum),
+                                "atlas_uv_recalc": bool(atlas_recalc_enabled),
+                                "normal_maps": bool(normal_maps_enabled)},
+                    context=context))
 
                 obj_time = time.time() - start_time_ob
                 print('>>> "' + obj_LODnew.name + '" (' + str(ob_counter) + '/' + str(ob_tot) + ') object baked in ' + str(obj_time) + ' seconds')
@@ -793,6 +809,10 @@ class OBJECT_OT_LOD(bpy.types.Operator):
 
         # Keep progress visible for review but mark as inactive
         context.scene.lod_progress_active = False
+
+        stamp_line = stamp_bridge.report(self, lod_stamps)
+        if stamp_line:
+            add_to_lod_log(context, stamp_line)
 
         return {'FINISHED'}
 
@@ -920,6 +940,7 @@ class OBJECT_OT_ExportGroupsLOD(bpy.types.Operator):
         ob_counter = 1
         scene = context.scene
         listobjects = context.selected_objects
+        group_stamps = []
         for obj in listobjects:
             if obj.type == 'EMPTY':
                 if obj.get('fbx_type') is not None:
@@ -932,6 +953,13 @@ class OBJECT_OT_ExportGroupsLOD(bpy.types.Operator):
                     name = bpy.path.clean_name(obj.name)
                     fn = os.path.join(basedir, name)
                     bpy.ops.export_scene.fbx(filepath= fn + ".fbx", check_existing=True, axis_forward='-Z', axis_up='Y', filter_glob="*.fbx", use_selection=True, global_scale=100.0 if context.scene.fbx_convert_to_cm else 1.0, apply_unit_scale=True, bake_space_transform=False, object_types={'ARMATURE', 'CAMERA', 'EMPTY', 'LIGHT', 'MESH', 'OTHER'}, use_mesh_modifiers=True, mesh_smooth_type='EDGE', use_mesh_edges=False, use_tspace=False, use_custom_props=False, add_leaf_bones=True, primary_bone_axis='Y', secondary_bone_axis='X', use_armature_deform_only=False, bake_anim=True, bake_anim_use_all_bones=True, bake_anim_use_nla_strips=True, bake_anim_use_all_actions=True, bake_anim_force_startend_keying=True, bake_anim_step=1.0, bake_anim_simplify_factor=1.0, path_mode='RELATIVE', embed_textures=False, batch_mode='OFF', use_batch_own_dir=True, use_metadata=True)
+                    # VLONG-DEV27/D2 · the LOD cluster as one FBX, from its LODs
+                    group_stamps.append(stamp_bridge.stamp(
+                        fn + ".fbx", objects=[o for o in getChildren(obj) if o.type == 'MESH'],
+                        technique="FBX export of a LOD cluster",
+                        parameters={"operator": self.bl_idname, "cluster": obj.name,
+                                    "path_mode": "RELATIVE", "embed_textures": False},
+                        context=context))
                 else:
                     print('The "' + obj.name + '" empty object has not the correct settings to export an FBX - LOD enabled file. I will skip it.')
                     obj.select_set(False)
@@ -940,6 +968,7 @@ class OBJECT_OT_ExportGroupsLOD(bpy.types.Operator):
         end_time = time.time() - start_time
         print('<<<<<<< Process done >>>>>>')
         print('>>>' + str(ob_counter) + ' objects processed in ' + str(end_time) + ' seconds')
+        stamp_bridge.report(self, group_stamps)
         return {'FINISHED'}
 
 #_______________________________________________________________
