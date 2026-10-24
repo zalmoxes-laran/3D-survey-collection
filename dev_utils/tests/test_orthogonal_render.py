@@ -286,6 +286,51 @@ check("ppm restored after the B/W pass too",
       abs(scene.render.ppm_base - 0.0254) < 1e-6 and abs(scene.render.ppm_factor - 150.0) < 1e-3,
       f"{scene.render.ppm_base} / {scene.render.ppm_factor}")
 
+print("\n== Fix scale of existing views (old renders at 72 dpi) ==")
+def idat(path):
+    data = open(path, "rb").read()
+    return b"".join(data[p + 8:p + 8 + n] for p, n, t in orr._png_chunks(data) if t == b"IDAT")
+import shutil
+older = orr.resolve_output_dir(scene).rstrip("/\\") + "_v02"   # made by the versioning test
+os.makedirs(older, exist_ok=True)
+shutil.copy(os.path.join(out, pngs[0]), older)
+views = orr.existing_view_images(scene, block.name)
+check("finds colour, B/W and versioned views", len(views) == 13,
+      sorted(os.path.relpath(v, os.path.dirname(out)) for v in views))
+for v in views:
+    orr.png_write_phys(v, 2834)          # what Blender wrote before 1.7
+    if os.path.exists(v[:-4] + ".pgw"):
+        os.remove(v[:-4] + ".pgw")
+check("set up: views back at 2834 px/m",
+      all(orr.png_read_phys(v) == (2834, 2834, 1) for v in views))
+pixels_before = {v: idat(v) for v in views}
+size_before = {v: os.path.getsize(v) for v in views}
+r = bpy.ops.render.ortho_fix_view_scale()
+check("fix returns FINISHED", r == {'FINISHED'}, str(r))
+check(f"every view now at {want} px/m",
+      all(orr.png_read_phys(v) == (want, want, 1) for v in views),
+      {os.path.basename(v): orr.png_read_phys(v) for v in views})
+check("IDAT byte for byte identical", all(idat(v) == pixels_before[v] for v in views))
+check("file size unchanged (one chunk swapped for one of the same size)",
+      all(os.path.getsize(v) == size_before[v] for v in views))
+check("world files written",
+      all(abs(orr.read_world_file(v[:-4] + ".pgw")[0] - ortho / res) < 1e-9 for v in views))
+# a PNG with no pHYs at all gets one inserted after IHDR, pixels untouched
+raw = open(views[0], "rb").read()
+p0, n0, _t = next(c for c in orr._png_chunks(raw) if c[2] == b"pHYs")
+open(views[0], "wb").write(raw[:p0] + raw[p0 + 12 + n0:])
+check("set up: pHYs removed", orr.png_read_phys(views[0]) is None)
+orr.png_write_phys(views[0], 1234)
+check("missing pHYs inserted", orr.png_read_phys(views[0]) == (1234, 1234, 1)
+      and idat(views[0]) == pixels_before[views[0]])
+# file rendered before the stamp existed: falls back to size x margin
+del block["_3dsc_render_ortho_scale"]
+r = bpy.ops.render.ortho_fix_view_scale()
+fallback = orr.object_max_dim(block) * scene.ortho_render_frame_margin
+check("without the stamp it falls back to size x Frame Margin",
+      r == {'FINISHED'} and orr.png_read_phys(views[0]) == (round(res / fallback),) * 2 + (1,),
+      f"{orr.png_read_phys(views[0])} vs {round(res / fallback)}")
+
 print("\n== small pieces: past the soft max, past the hard max ==")
 # Measured on Blender 5.1: ppm_factor soft max 10 000, hard max 1 000 000,
 # pHYs = truncation of ppm_factor / ppm_base. A 5 cm piece at 8000 px asks for
@@ -317,6 +362,7 @@ for label, size, res in (("5 cm @ 8000 px", 0.05, 8000), ("1 mm @ 2000 px", 0.00
         setattr(scene, f"ortho_render_{p}_resolution", 64)
 
 print("\n== panels draw without error ==")
+check("fix operator registered", hasattr(bpy.types, "RENDER_OT_ortho_fix_view_scale"))
 for cls in (orr.VIEW3D_PT_orthogonal_render, orr.VIEW3D_PT_ortho_framing_sizing,
             orr.VIEW3D_PT_ortho_resolution, orr.VIEW3D_PT_ortho_quality):
     check(f"{cls.__name__} registered", cls.is_registered)

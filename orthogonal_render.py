@@ -1496,6 +1496,67 @@ class RENDER_OT_orthogonal_views(Operator):
         return {'FINISHED'}
 
 
+def existing_view_images(scene, obj_name):
+    """Every rendered view of `obj_name` on disk, colour and B/W, in the plain
+    output folder and in all its `_vNN` versions."""
+    base = output_dir_base(scene)
+    folders = [base] + [f"{base}_v{n:02d}" for n in existing_output_versions(base)]
+    names = [f"{obj_name}_{code}{suffix}.png"
+             for code, *_ in CAMERA_POSITIONS for suffix in ("", "_BW")]
+    found = []
+    for folder in folders:
+        for sub in (folder, os.path.join(folder, "bw")):
+            found.extend(os.path.join(sub, n) for n in names
+                         if os.path.isfile(os.path.join(sub, n)))
+    return found
+
+
+class RENDER_OT_ortho_fix_view_scale(Operator):
+    """Give views rendered before 3DSC 1.7 their real-world scale, without
+    re-rendering: rewrites the pixel density stored in each PNG (pixels are
+    left untouched) and writes the .pgw world file next to it"""
+    bl_idname = "render.ortho_fix_view_scale"
+    bl_label = "Fix scale of existing views"
+    bl_options = {'REGISTER'}
+
+    @classmethod
+    def poll(cls, context):
+        return context.active_object is not None
+
+    def execute(self, context):
+        scene = context.scene
+        obj = context.active_object
+
+        images = existing_view_images(scene, obj.name)
+        if not images:
+            self.report({'WARNING'}, f"No rendered views of {obj.name} found in "
+                                     f"{output_dir_base(scene)} (or its versions).")
+            return {'CANCELLED'}
+
+        ortho_scale = float(obj.get("_3dsc_render_ortho_scale", 0.0) or 0.0)
+        if ortho_scale <= 0:
+            # Renders older than the stamp: rebuild the span the way Setup
+            # does. Said out loud, because Frame Margin may have changed since.
+            margin = getattr(scene, "ortho_render_frame_margin", 1.1)
+            ortho_scale = object_max_dim(obj) * margin
+            self.report({'WARNING'},
+                        f"{obj.name} carries no stamped camera scale (rendered before "
+                        f"3DSC 1.7): used object size × Frame Margin {margin:.2f} = "
+                        f"{ortho_scale:.4f} m. If Frame Margin was changed after "
+                        "Setup, these views are off by the same ratio.")
+
+        densities = set()
+        for path in images:
+            densities.add(stamp_view_scale(path, ortho_scale))
+        folders = sorted({os.path.dirname(p) for p in images})
+        self.report({'INFO'},
+                    f"{len(images)} views of {obj.name} rescaled to "
+                    f"{', '.join(str(d) for d in sorted(densities))} px/m "
+                    f"(span {ortho_scale:.4f} m) with world files, in "
+                    f"{len(folders)} folder(s).")
+        return {'FINISHED'}
+
+
 # ---------------------------------------------------------------------------
 # Black & white pass
 #
@@ -3021,6 +3082,7 @@ class VIEW3D_PT_orthogonal_render(Panel):
                          icon='RENDER_STILL')
             col.operator("render.orthogonal_views_bw", text="Render B/W Pass",
                          icon='IMAGE_ZDEPTH')
+            col.operator("render.ortho_fix_view_scale", icon='FIXED_SIZE')
 
             # Engine / samples / device used to live only in a collapsed
             # sub-panel, which is how a whole afternoon got rendered on the CPU
@@ -3321,6 +3383,7 @@ def register():
     bpy.utils.register_class(OBJECT_OT_setup_orthogonal_render)
     bpy.utils.register_class(RENDER_OT_orthogonal_views)
     bpy.utils.register_class(RENDER_OT_orthogonal_views_bw)
+    bpy.utils.register_class(RENDER_OT_ortho_fix_view_scale)
     bpy.utils.register_class(RENDER_OT_ortho_migrate_light_rig)
     bpy.utils.register_class(RENDER_OT_ortho_key_lights_here)
     bpy.utils.register_class(RENDER_OT_create_orthogonal_svg)
@@ -3581,6 +3644,7 @@ def unregister():
     bpy.utils.unregister_class(RENDER_OT_create_orthogonal_svg)
     bpy.utils.unregister_class(RENDER_OT_ortho_key_lights_here)
     bpy.utils.unregister_class(RENDER_OT_ortho_migrate_light_rig)
+    bpy.utils.unregister_class(RENDER_OT_ortho_fix_view_scale)
     bpy.utils.unregister_class(RENDER_OT_orthogonal_views_bw)
     bpy.utils.unregister_class(RENDER_OT_orthogonal_views)
     bpy.utils.unregister_class(OBJECT_OT_setup_orthogonal_render)
