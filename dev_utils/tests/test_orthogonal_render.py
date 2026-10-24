@@ -205,11 +205,27 @@ scene.ortho_render_large_resolution = 64
 scene.ortho_render_xlarge_resolution = 64
 bpy.context.view_layer.objects.active = block
 block.select_set(True)
+# A user value on the scene, to prove the render gives it back.
+scene.render.ppm_base, scene.render.ppm_factor = 0.0254, 150.0
 r = bpy.ops.render.orthogonal_views()
 check("render returns FINISHED", r == {'FINISHED'}, str(r))
 out = orr.resolve_output_dir(scene)
 pngs = sorted(f for f in os.listdir(out) if f.endswith(".png"))
 check("six PNGs written", len(pngs) == 6, pngs)
+
+print("\n== real scale in the PNG ==")
+ortho = cam.data.ortho_scale
+res = orr.png_size(os.path.join(out, pngs[0]))[0]  # measured, not assumed
+want = round(res / ortho)
+phys = {f: orr.png_read_phys(os.path.join(out, f)) for f in pngs}
+check(f"pHYs of every view = round(res / ortho_scale) = {want} px/m, unit metre",
+      all(v == (want, want, 1) for v in phys.values()), phys)
+check("one pixel of the PNG is ortho_scale / res metres",
+      all(abs(res / v[0] - ortho) < ortho * 0.01 for v in phys.values()),
+      f"{res}/{want} = {res / want:.4f} m vs {ortho:.4f} m")
+check("ppm_base / ppm_factor of the scene restored",
+      abs(scene.render.ppm_base - 0.0254) < 1e-6 and abs(scene.render.ppm_factor - 150.0) < 1e-3,
+      f"{scene.render.ppm_base} / {scene.render.ppm_factor}")
 
 os.remove(os.path.join(out, f"{block.name}_TO.png"))
 mtimes = {f: os.path.getmtime(os.path.join(out, f))
@@ -242,6 +258,42 @@ check("light energies restored", before_energy == after_energy,
 check("no F-curve left muted",
       not any(fc.mute for _s, o in orr.rig_light_objects()
               for fc in orr.action_fcurves(o.data.animation_data)))
+bw_phys = {f: orr.png_read_phys(os.path.join(bwdir, f)) for f in bws if f.endswith(".png")}
+check(f"B/W pHYs = {want} px/m, unit metre",
+      bool(bw_phys) and all(v == (want, want, 1) for v in bw_phys.values()), bw_phys)
+check("ppm restored after the B/W pass too",
+      abs(scene.render.ppm_base - 0.0254) < 1e-6 and abs(scene.render.ppm_factor - 150.0) < 1e-3,
+      f"{scene.render.ppm_base} / {scene.render.ppm_factor}")
+
+print("\n== small pieces: past the soft max, past the hard max ==")
+# Measured on Blender 5.1: ppm_factor soft max 10 000, hard max 1 000 000,
+# pHYs = truncation of ppm_factor / ppm_base. A 5 cm piece at 8000 px asks for
+# ~145 000 px/m (past the soft max); a 1 mm piece at 2000 px asks for
+# ~1 800 000 (past the hard max: the chunk is rewritten after the render).
+hard_max = scene.render.bl_rna.properties["ppm_factor"].hard_max
+for label, size, res in (("5 cm @ 8000 px", 0.05, 8000), ("1 mm @ 2000 px", 0.001, 2000)):
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.ops.mesh.primitive_cube_add(size=size, location=(5, 5, size / 2))
+    tiny = bpy.context.active_object
+    tiny.name = "ME_TINY_" + label.split()[0].replace(".", "")
+    bpy.ops.object.setup_orthogonal_render()
+    for p in ("small", "medium", "large", "xlarge"):
+        setattr(scene, f"ortho_render_{p}_resolution", res)
+    bpy.context.view_layer.objects.active = tiny
+    r = bpy.ops.render.orthogonal_views()
+    t_ortho = bpy.data.objects["OrthoRenderCamera"].data.ortho_scale
+    t_png = orr.view_image_path(scene, tiny.name, "FR")
+    t_res = orr.png_size(t_png)[0]
+    check(f"{label}: rendered at {res} px", t_res == res, t_res)
+    t_want = round(t_res / t_ortho)
+    got = orr.png_read_phys(t_png)
+    check(f"{label}: pHYs = {t_want} px/m ({'over' if t_want > hard_max else 'under'} the hard max)",
+          r == {'FINISHED'} and got == (t_want, t_want, 1), got)
+    check(f"{label}: pixel / pHYs = ortho_scale",
+          got is not None and abs(t_res / got[0] - t_ortho) < t_ortho * 1e-4,
+          f"{t_res / got[0] if got else 0:.6f} vs {t_ortho:.6f}")
+    for p in ("small", "medium", "large", "xlarge"):
+        setattr(scene, f"ortho_render_{p}_resolution", 64)
 
 print("\n== panels draw without error ==")
 for cls in (orr.VIEW3D_PT_orthogonal_render, orr.VIEW3D_PT_ortho_framing_sizing,

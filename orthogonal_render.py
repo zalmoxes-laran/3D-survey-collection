@@ -2,6 +2,9 @@ import bpy
 import os
 import re
 import math
+import struct
+import zlib
+import contextlib
 from mathutils import Vector, Matrix
 from bpy.props import EnumProperty, IntProperty, StringProperty, BoolProperty, FloatProperty
 from bpy.types import Panel, Operator
@@ -407,6 +410,135 @@ def view_image_path(scene, obj_name, code, output_path=None):
     if output_path is None:
         output_path = resolve_output_dir(scene)
     return os.path.join(output_path, f"{obj_name}_{code}{scene.render.file_extension}")
+
+
+# ---------------------------------------------------------------------------
+# Real-world scale of a rendered view
+#
+# A view spans `ortho_scale` metres across `res` pixels, so its true density is
+# res / ortho_scale pixels per metre. CAD programs (AutoCAD > Raster Tools >
+# Insert) size an image from the PNG pHYs chunk, and Blender writes that chunk
+# from scene.render.ppm_factor / ppm_base — 72 dpi (2834 px/m) by default,
+# whatever the piece. That default made every view land in CAD at
+# res / 2834 metres instead of ortho_scale (Rachele: x1.18 on B1, x6.3 on an
+# XS fragment). Each view therefore carries its scale twice: the pHYs density
+# and a world file next to it.
+#
+# Measured on Blender 5.1: pHYs is the TRUNCATION of ppm_factor / ppm_base,
+# ppm_factor is a float32 with soft max 10 000 and hard max 1 000 000. We set a
+# whole number with ppm_base = 1, so what lands on disk is exactly the rounded
+# density; beyond the hard max the chunk is rewritten after the render.
+# ---------------------------------------------------------------------------
+
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+
+
+def view_pixels_per_metre(res_px, ortho_scale_m):
+    """Pixels per real metre of a view `res_px` wide spanning `ortho_scale_m`."""
+    return int(round(res_px / ortho_scale_m))
+
+
+def _png_chunks(data):
+    """(offset, length, type) of every chunk of a PNG byte string."""
+    if not data.startswith(PNG_SIGNATURE):
+        raise ValueError("not a PNG file")
+    chunks, pos = [], len(PNG_SIGNATURE)
+    while pos + 8 <= len(data):
+        length = struct.unpack(">I", data[pos:pos + 4])[0]
+        ctype = data[pos + 4:pos + 8]
+        chunks.append((pos, length, ctype))
+        pos += 12 + length
+        if ctype == b"IEND":
+            break
+    return chunks
+
+
+def png_size(path):
+    """(width, height) in pixels, from the IHDR chunk."""
+    with open(path, "rb") as f:
+        head = f.read(24)
+    if not head.startswith(PNG_SIGNATURE) or head[12:16] != b"IHDR":
+        raise ValueError(f"not a PNG file: {path}")
+    return struct.unpack(">II", head[16:24])
+
+
+def png_read_phys(path):
+    """(ppu_x, ppu_y, unit) of the pHYs chunk, or None. unit 1 = metre."""
+    with open(path, "rb") as f:
+        data = f.read()
+    for pos, length, ctype in _png_chunks(data):
+        if ctype == b"pHYs" and length == 9:
+            return struct.unpack(">IIB", data[pos + 8:pos + 17])
+    return None
+
+
+def png_write_phys(path, ppm_x, ppm_y=None):
+    """Set the PNG pixel density, in pixels per metre, in place.
+
+    Only the pHYs chunk is touched: an existing one is replaced, otherwise one
+    is inserted right after IHDR. Every other chunk — the IDAT pixel data
+    included — is copied byte for byte, so nothing is recompressed.
+    """
+    ppm_y = ppm_x if ppm_y is None else ppm_y
+    with open(path, "rb") as f:
+        data = f.read()
+    body = b"pHYs" + struct.pack(">IIB", int(ppm_x), int(ppm_y), 1)
+    chunk = (struct.pack(">I", 9) + body
+             + struct.pack(">I", zlib.crc32(body) & 0xFFFFFFFF))
+    chunks = _png_chunks(data)
+    old = next(((p, n) for p, n, t in chunks if t == b"pHYs"), None)
+    if old is not None:
+        start, end = old[0], old[0] + 12 + old[1]
+    else:
+        ihdr = next((p, n) for p, n, t in chunks if t == b"IHDR")
+        start = end = ihdr[0] + 12 + ihdr[1]
+    new = data[:start] + chunk + data[end:]
+    if new != data:
+        tmp = path + ".3dsc-tmp"
+        with open(tmp, "wb") as f:
+            f.write(new)
+        os.replace(tmp, path)
+
+
+def stamp_view_scale(image_path, ortho_scale_m):
+    """Give one rendered view its real scale: the pHYs density.
+
+    Size comes from the file itself, so this works on old renders too. Returns
+    the pixels per metre written, or None for a file that is not a PNG.
+    """
+    if not image_path.lower().endswith(".png"):
+        return None
+    width, height = png_size(image_path)
+    ppm = view_pixels_per_metre(max(width, height), ortho_scale_m)
+    if png_read_phys(image_path) != (ppm, ppm, 1):
+        png_write_phys(image_path, ppm)
+    return ppm
+
+
+@contextlib.contextmanager
+def metric_png_density(scene, ortho_scale_m):
+    """Make Blender write the view's real density into the PNG, then put back
+    the scene's own ppm_base / ppm_factor — even if a render fails.
+
+    Yields (pixels per metre, warning or None).
+    """
+    render = scene.render
+    saved = (render.ppm_base, render.ppm_factor)
+    res = max(render.resolution_x, render.resolution_y) * render.resolution_percentage / 100.0
+    ppm = view_pixels_per_metre(res, ortho_scale_m)
+    hard_max = render.bl_rna.properties["ppm_factor"].hard_max
+    warning = None
+    if abs(render.pixel_aspect_x - render.pixel_aspect_y) > 1e-6:
+        warning = (f"Pixel aspect is {render.pixel_aspect_x:g}:{render.pixel_aspect_y:g}, "
+                   "not square: these views are NOT metric.")
+    try:
+        render.ppm_base = 1.0
+        # Past the hard max Blender would clamp; stamp_view_scale() rewrites
+        # the chunk after the render in that case.
+        render.ppm_factor = float(min(ppm, hard_max))
+        yield ppm, warning
+    finally:
+        render.ppm_base, render.ppm_factor = saved
 
 
 def ortho_pose_frames(scene):
@@ -1286,30 +1418,38 @@ class RENDER_OT_orthogonal_views(Operator):
         scene.render.use_overwrite = not skip_existing
 
         rendered, skipped = 0, []
+        ortho_scale = float(camera.data.ortho_scale)
 
-        # Render each view
-        for code, name, desc, _, _ in CAMERA_POSITIONS:
-            # Find the marker
-            marker = scene.timeline_markers.get(code)
-            if not marker:
-                continue
+        # Each PNG carries its real density (res / ortho_scale px per metre),
+        # so CAD inserts it at 1:1 instead of at Blender's default 72 dpi.
+        with metric_png_density(scene, ortho_scale) as (_ppm, aspect_warning):
+            if aspect_warning:
+                self.report({'WARNING'}, aspect_warning)
 
-            target = view_image_path(scene, obj.name, code, output_path)
-            if skip_existing and os.path.exists(target):
-                skipped.append(name)
-                continue
+            # Render each view
+            for code, name, desc, _, _ in CAMERA_POSITIONS:
+                # Find the marker
+                marker = scene.timeline_markers.get(code)
+                if not marker:
+                    continue
 
-            # Set the frame to the marker position
-            scene.frame_set(marker.frame)
+                target = view_image_path(scene, obj.name, code, output_path)
+                if skip_existing and os.path.exists(target):
+                    skipped.append(name)
+                    continue
 
-            # Set the output file path (Blender appends the extension)
-            scene.render.filepath = os.path.splitext(target)[0]
+                # Set the frame to the marker position
+                scene.frame_set(marker.frame)
 
-            # Render the view
-            bpy.ops.render.render(write_still=True)
-            rendered += 1
+                # Set the output file path (Blender appends the extension)
+                scene.render.filepath = os.path.splitext(target)[0]
 
-            self.report({'INFO'}, f"Rendered {name} view to {scene.render.filepath}")
+                # Render the view
+                bpy.ops.render.render(write_still=True)
+                stamp_view_scale(target, ortho_scale)
+                rendered += 1
+
+                self.report({'INFO'}, f"Rendered {name} view to {scene.render.filepath}")
 
         # Restore original frame
         scene.frame_set(original_frame)
@@ -1433,6 +1573,7 @@ class RENDER_OT_orthogonal_views_bw(Operator):
         scene.render.use_overwrite = not skip_existing
         rendered, skipped = 0, []
         look = None
+        ortho_scale = float(bpy.data.objects["OrthoRenderCamera"].data.ortho_scale)
 
         try:
             try:
@@ -1462,28 +1603,33 @@ class RENDER_OT_orthogonal_views_bw(Operator):
                     curve.mute = True
                     muted_curves.append(curve)
 
-            for code, name, _desc, _dir, _rot in CAMERA_POSITIONS:
-                marker = scene.timeline_markers.get(code)
-                if not marker:
-                    continue
+            # Real density in each PNG, as for the colour views.
+            with metric_png_density(scene, ortho_scale) as (_ppm, aspect_warning):
+                if aspect_warning:
+                    self.report({'WARNING'}, aspect_warning)
+                for code, name, _desc, _dir, _rot in CAMERA_POSITIONS:
+                    marker = scene.timeline_markers.get(code)
+                    if not marker:
+                        continue
 
-                target = os.path.join(
-                    output_path,
-                    f"{obj.name}_{code}_BW{scene.render.file_extension}")
-                if skip_existing and os.path.exists(target):
-                    skipped.append(name)
-                    continue
+                    target = os.path.join(
+                        output_path,
+                        f"{obj.name}_{code}_BW{scene.render.file_extension}")
+                    if skip_existing and os.path.exists(target):
+                        skipped.append(name)
+                        continue
 
-                scene.frame_set(marker.frame)
-                for spec, light_obj in pairs:
-                    gain = BW_LIGHT_GAIN.get(spec.get("role", ""), 1.0)
-                    base = per_frame_energy.get((light_obj.name, marker.frame),
-                                                light_obj.data.energy)
-                    light_obj.data.energy = base * gain
+                    scene.frame_set(marker.frame)
+                    for spec, light_obj in pairs:
+                        gain = BW_LIGHT_GAIN.get(spec.get("role", ""), 1.0)
+                        base = per_frame_energy.get((light_obj.name, marker.frame),
+                                                    light_obj.data.energy)
+                        light_obj.data.energy = base * gain
 
-                scene.render.filepath = os.path.splitext(target)[0]
-                bpy.ops.render.render(write_still=True)
-                rendered += 1
+                    scene.render.filepath = os.path.splitext(target)[0]
+                    bpy.ops.render.render(write_still=True)
+                    stamp_view_scale(target, ortho_scale)
+                    rendered += 1
 
         finally:
             for curve in muted_curves:
