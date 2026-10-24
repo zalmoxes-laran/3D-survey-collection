@@ -422,7 +422,7 @@ def view_image_path(scene, obj_name, code, output_path=None):
 # whatever the piece. That default made every view land in CAD at
 # res / 2834 metres instead of ortho_scale (Rachele: x1.18 on B1, x6.3 on an
 # XS fragment). Each view therefore carries its scale twice: the pHYs density
-# and a world file next to it.
+# and a world file (.pgw) next to it.
 #
 # Measured on Blender 5.1: pHYs is the TRUNCATION of ppm_factor / ppm_base,
 # ppm_factor is a float32 with soft max 10 000 and hard max 1 000 000. We set a
@@ -500,8 +500,38 @@ def png_write_phys(path, ppm_x, ppm_y=None):
         os.replace(tmp, path)
 
 
+def world_file_path(image_path):
+    """`view.png` -> `view.pgw`, the world file CAD looks for next to a PNG."""
+    return os.path.splitext(image_path)[0] + ".pgw"
+
+
+def write_world_file(image_path, ortho_scale_m, width_px, height_px):
+    """Write the world file that places a view at its real size, in metres.
+
+    Convention: the BOTTOM-LEFT corner of the image sits at (0, 0), X to the
+    right, Y up, one unit = one metre — the spot where the views are inserted
+    in CAD by hand today. The six lines are the usual ESRI ones: pixel size in
+    X, two zero rotations, pixel size in Y (negative: rows run downwards), and
+    the coordinates of the CENTRE of the top-left pixel. The pixel is
+    ortho_scale / res, res being the longer side (the one the camera's ortho
+    scale spans).
+    """
+    pixel = ortho_scale_m / max(width_px, height_px)
+    lines = (pixel, 0.0, 0.0, -pixel, pixel / 2.0, height_px * pixel - pixel / 2.0)
+    path = world_file_path(image_path)
+    with open(path, "w", encoding="ascii", newline="\n") as f:
+        f.write("".join(f"{v:.12f}\n" for v in lines))
+    return path
+
+
+def read_world_file(path):
+    """The six numbers of a world file."""
+    with open(path, encoding="ascii") as f:
+        return [float(line) for line in f if line.strip()]
+
+
 def stamp_view_scale(image_path, ortho_scale_m):
-    """Give one rendered view its real scale: the pHYs density.
+    """Give one rendered view its real scale: pHYs density + world file.
 
     Size comes from the file itself, so this works on old renders too. Returns
     the pixels per metre written, or None for a file that is not a PNG.
@@ -512,6 +542,7 @@ def stamp_view_scale(image_path, ortho_scale_m):
     ppm = view_pixels_per_metre(max(width, height), ortho_scale_m)
     if png_read_phys(image_path) != (ppm, ppm, 1):
         png_write_phys(image_path, ppm)
+    write_world_file(image_path, ortho_scale_m, width, height)
     return ppm
 
 

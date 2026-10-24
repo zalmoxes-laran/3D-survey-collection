@@ -223,11 +223,23 @@ check(f"pHYs of every view = round(res / ortho_scale) = {want} px/m, unit metre"
 check("one pixel of the PNG is ortho_scale / res metres",
       all(abs(res / v[0] - ortho) < ortho * 0.01 for v in phys.values()),
       f"{res}/{want} = {res / want:.4f} m vs {ortho:.4f} m")
+print("\n== world file next to every view ==")
+for f in pngs:
+    wf = os.path.join(out, f[:-4] + ".pgw")
+    vals = orr.read_world_file(wf) if os.path.exists(wf) else []
+    ok = (len(vals) == 6 and abs(vals[0] - ortho / res) < 1e-9 and vals[1] == 0 and vals[2] == 0
+          and abs(vals[3] + ortho / res) < 1e-9
+          and abs(vals[4] - ortho / res / 2) < 1e-9          # bottom-left corner at x = 0
+          and abs(vals[5] - (ortho - ortho / res / 2)) < 1e-9)  # ... and at y = 0
+    check(f"{f[:-4]}.pgw: pixel {ortho / res:.6f} m, bottom-left at (0,0)", ok, vals)
 check("ppm_base / ppm_factor of the scene restored",
       abs(scene.render.ppm_base - 0.0254) < 1e-6 and abs(scene.render.ppm_factor - 150.0) < 1e-3,
       f"{scene.render.ppm_base} / {scene.render.ppm_factor}")
 
 os.remove(os.path.join(out, f"{block.name}_TO.png"))
+os.remove(os.path.join(out, f"{block.name}_TO.pgw"))
+pgw_mtimes = {f: os.path.getmtime(os.path.join(out, f))
+              for f in os.listdir(out) if f.endswith(".pgw")}
 mtimes = {f: os.path.getmtime(os.path.join(out, f))
           for f in os.listdir(out) if f.endswith(".png")}
 scene.ortho_render_skip_existing = True
@@ -238,6 +250,11 @@ check("the deleted view came back", len(pngs2) == 6, pngs2)
 touched = [f for f, t in mtimes.items()
            if os.path.getmtime(os.path.join(out, f)) != t]
 check("the five surviving views were NOT re-rendered", not touched, touched)
+pgw_touched = [f for f, t in pgw_mtimes.items()
+               if os.path.getmtime(os.path.join(out, f)) != t]
+check("their world files were NOT rewritten", not pgw_touched, pgw_touched)
+check("the re-rendered view got its world file",
+      os.path.exists(os.path.join(out, f"{block.name}_TO.pgw")))
 
 print("\n== B/W pass ==")
 before_energy = {o.name: o.data.energy for _s, o in orr.rig_light_objects()}
@@ -261,6 +278,10 @@ check("no F-curve left muted",
 bw_phys = {f: orr.png_read_phys(os.path.join(bwdir, f)) for f in bws if f.endswith(".png")}
 check(f"B/W pHYs = {want} px/m, unit metre",
       bool(bw_phys) and all(v == (want, want, 1) for v in bw_phys.values()), bw_phys)
+check("a .pgw next to every B/W view",
+      all(os.path.exists(os.path.join(bwdir, f[:-4] + ".pgw")) for f in bw_phys)
+      and all(abs(orr.read_world_file(os.path.join(bwdir, f[:-4] + ".pgw"))[0] - ortho / res) < 1e-9
+              for f in bw_phys))
 check("ppm restored after the B/W pass too",
       abs(scene.render.ppm_base - 0.0254) < 1e-6 and abs(scene.render.ppm_factor - 150.0) < 1e-3,
       f"{scene.render.ppm_base} / {scene.render.ppm_factor}")
