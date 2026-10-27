@@ -10,9 +10,11 @@ without a stamp and the operator's report says so.
 Measured before this module (1 Oct 2026): 3DSC called nothing of EM Tools —
 zero imports, zero lookups. EM Tools reads 3DSC only through scene properties
 (``georef_manager/dsc_adapter.py``, ``hasattr(scene, 'BL_x_shift')``). The
-lookup here is the same kind of loose coupling: find the enabled add-on whose
-module ends in ``em_tools`` and ask it for ``birth_stamp``; nothing is imported
-at 3DSC's load time.
+lookup here is the same kind of loose coupling: find the enabled add-on that
+is EM Tools — module ending in ``em_tools``, or a package whose
+``blender_manifest.toml`` says ``id = "em_tools"`` (a development link like
+``bl_ext.vscode_development.EM-blender-tools``) — and ask it for
+``birth_stamp``; nothing is imported at 3DSC's load time.
 """
 from __future__ import annotations
 
@@ -40,6 +42,74 @@ NO_EMTOOLS = ("not stamped: EM Tools is not installed — the file is written "
               "without a .stamp.json")
 
 
+#: the ``id`` of EM Tools in its ``blender_manifest.toml``: the add-on is
+#: recognised by it, whatever folder (hence add-on key) it is installed under
+EMTOOLS_ID = "em_tools"
+
+
+def manifest_id(folder):
+    """The top-level ``id`` of ``<folder>/blender_manifest.toml``, or None
+    (no manifest, unreadable, no id). Read line by line up to the first
+    ``[table]``: no TOML parser needed, the id is a plain string."""
+    if not folder:
+        return None
+    path = os.path.join(folder, "blender_manifest.toml")
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            for raw in fh:
+                line = raw.strip()
+                if line.startswith("["):
+                    return None
+                if line.startswith("id") and "=" in line:
+                    key, value = line.split("=", 1)
+                    if key.strip() != "id":
+                        continue
+                    value = value.split("#", 1)[0].strip()
+                    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+                        return value[1:-1]
+                    return None
+    except OSError:
+        return None
+    return None
+
+
+def _addon_folder(key):
+    """The folder of the add-on package ``key`` without importing it: the
+    loaded module's, else the one its spec points at."""
+    module = sys.modules.get(key)
+    path = getattr(module, "__file__", None) if module is not None else None
+    if path:
+        return os.path.dirname(os.path.abspath(path))
+    try:
+        import importlib.util
+        spec = importlib.util.find_spec(key)
+    except (ImportError, ValueError, AttributeError):
+        return None
+    if spec is None:
+        return None
+    locations = list(spec.submodule_search_locations or [])
+    if locations:
+        return locations[0]
+    return os.path.dirname(spec.origin) if spec.origin else None
+
+
+def addon_key_for(addon_id, keys):
+    """The add-on key (module name) among ``keys`` whose package is the add-on
+    ``addon_id``: the key itself or its last part when they match (legacy
+    ``em_tools``, an extension ``bl_ext.<repo>.em_tools``), else the key whose
+    folder carries a ``blender_manifest.toml`` with that ``id`` — a
+    development link such as ``bl_ext.vscode_development.EM-blender-tools``.
+    None when no enabled add-on is it."""
+    keys = list(keys)
+    for key in keys:
+        if key == addon_id or key.endswith("." + addon_id):
+            return key
+    for key in keys:
+        if manifest_id(_addon_folder(key)) == addon_id:
+            return key
+    return None
+
+
 def emtools_birth_stamp():
     """EM Tools' ``birth_stamp`` module, or None (not installed, disabled, or
     too old to have it)."""
@@ -51,14 +121,14 @@ def emtools_birth_stamp():
         keys = list(bpy.context.preferences.addons.keys())
     except Exception:                               # noqa: BLE001 — no preferences
         return None
-    for key in keys:
-        if key == "em_tools" or key.endswith(".em_tools"):
-            try:
-                module = importlib.import_module(key + ".birth_stamp")
-            except ImportError:
-                return None
-            return module if hasattr(module, "stamp_blender_export") else None
-    return None
+    key = addon_key_for(EMTOOLS_ID, keys)
+    if key is None:
+        return None
+    try:
+        module = importlib.import_module(key + ".birth_stamp")
+    except ImportError:
+        return None
+    return module if hasattr(module, "stamp_blender_export") else None
 
 
 def producer(birth_stamp=None):
