@@ -45,3 +45,20 @@ never written) and `TZ_REPORT_JSON` (where to dump sizes and sha256).
 ```
 
 The archive module itself has plain pytest tests, no Blender: `pytest tests`.
+
+# Cesium native split test
+
+`test_cesium_native.py` exports a textured UV sphere (2048 px binary block
+noise) through the native split and checks: a schema-valid `tileset.json`
+(schema id pattern, no `metadata` on an implicit root, 0 errors from the Cesium
+validator when found — `TZ_VALIDATOR`, or
+`/tmp/ottim/val/node_modules/.bin/3d-tiles-validator`); *Use existing OBJ
+file* exports and leaves no object or material behind; every coarse tile (root
+included, and the Single JSON root content) within *Coarse tile max
+triangles*; leaves baked from the original textures resolve the noise cells a
+512 px global atlas averages away.
+
+```bash
+"/Applications/Blender 520.app/Contents/MacOS/Blender" -b --factory-startup \
+    --python dev_utils/tests/test_cesium_native.py
+```

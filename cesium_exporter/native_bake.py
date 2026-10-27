@@ -55,6 +55,104 @@ def _cleanup_native_bake_assets(bake_info):
                 pass
 
 
+def _drop_unused_material_slots(mesh):
+    """Keep only the materials the polygons of ``mesh`` use, remapping the
+    material indices. A tile cut from a mesh with 44 textured materials uses
+    two or three of them; Cycles loads every image of every slot of the object
+    it bakes, so the unused slots are dropped before a tile bake."""
+    import numpy as np
+    n = len(mesh.polygons)
+    n_mats = len(mesh.materials)
+    if n == 0 or n_mats <= 1:
+        return 0
+    idx = np.empty(n, dtype=np.int32)
+    mesh.polygons.foreach_get("material_index", idx)
+    idx = np.clip(idx, 0, n_mats - 1)
+    used = [int(i) for i in np.unique(idx)]
+    if len(used) == n_mats:
+        return 0
+    mats = [mesh.materials[i] for i in used]
+    remap = np.zeros(n_mats, dtype=np.int32)
+    for new_i, old_i in enumerate(used):
+        remap[old_i] = new_i
+    mesh.materials.clear()
+    for mat in mats:
+        mesh.materials.append(mat)
+    mesh.polygons.foreach_set("material_index", remap[idx])
+    mesh.update()
+    return n_mats - len(used)
+
+
+def _slot_image_pixels(mesh):
+    """Pixel count of the largest image of each material slot (0 if none)."""
+    out = []
+    for mat in mesh.materials:
+        best = 0
+        if mat is not None and mat.use_nodes and mat.node_tree is not None:
+            for node in mat.node_tree.nodes:
+                if node.type == 'TEX_IMAGE' and node.image is not None:
+                    try:
+                        w, h = node.image.size[:]
+                    except Exception:
+                        w, h = 0, 0
+                    best = max(best, int(w) * int(h))
+        out.append(best)
+    return out
+
+
+def _original_texel_atlas_size(mesh, overhead=1.3, min_size=256, max_size=4096):
+    """The atlas side (power of two) that keeps the texel density the tile has
+    in its ORIGINAL textures: sum over the tile's faces of (UV area of the face
+    in its source UV map) x (pixels of the image of its material), times a
+    packing overhead for the fresh UV layout, rounded to the nearest power of
+    two and clamped to [min_size, max_size]. None when the mesh has no UV map
+    or no image (the caller falls back to the face-count heuristic)."""
+    import numpy as np
+    n = len(mesh.polygons)
+    uv = mesh.uv_layers.active
+    if n == 0 or uv is None:
+        return None
+    px = _slot_image_pixels(mesh)
+    if not px or not any(px):
+        return None
+    nl = len(mesh.loops)
+    co = np.empty(nl * 2, dtype=np.float32)
+    uv.data.foreach_get("uv", co)
+    u = co[0::2].astype(np.float64)
+    v = co[1::2].astype(np.float64)
+    ls = np.empty(n, dtype=np.int32)
+    lt = np.empty(n, dtype=np.int32)
+    mesh.polygons.foreach_get("loop_start", ls)
+    mesh.polygons.foreach_get("loop_total", lt)
+    nxt = np.arange(nl) + 1
+    last = ls + lt - 1
+    nxt[last] = ls
+    poly_of_loop = np.zeros(nl, dtype=np.int64)
+    poly_of_loop[_loop_indices(ls, lt)] = np.repeat(np.arange(n), lt)
+    cross = u * v[nxt] - u[nxt] * v
+    area = 0.5 * np.abs(np.bincount(poly_of_loop, weights=cross, minlength=n))
+    mi = np.empty(n, dtype=np.int32)
+    mesh.polygons.foreach_get("material_index", mi)
+    px_arr = np.asarray(px, dtype=np.float64)[np.clip(mi, 0, len(px) - 1)]
+    pixels = float((area * px_arr).sum()) * float(overhead)
+    if pixels <= 0:
+        return None
+    side = math.sqrt(pixels)
+    size = 2 ** int(round(math.log2(max(side, 1.0))))
+    return int(max(min_size, min(max_size, size)))
+
+
+def _loop_indices(loop_start, loop_total):
+    """Concatenated loop indices of each polygon, in polygon order."""
+    import numpy as np
+    total = int(loop_total.sum())
+    if total == 0:
+        return np.empty(0, dtype=np.int64)
+    starts = np.repeat(loop_start.astype(np.int64), loop_total)
+    offs = np.arange(total) - np.repeat(np.cumsum(loop_total) - loop_total, loop_total)
+    return starts + offs
+
+
 # ===========================================================================
 #  BLOCK B: Bake + Spatial + Tree Building + LOD
 # ===========================================================================
@@ -142,7 +240,11 @@ def _native_bake_basecolor_texture(context, scene, base_obj, atlas_size, margin_
     _GAP_FILL = (0.5, 0.5, 0.5, 1.0)
     bake_image.generated_color = _GAP_FILL
     n_pixels = int(atlas_size) * int(atlas_size)
-    bake_image.pixels = list(_GAP_FILL) * n_pixels
+    try:
+        import numpy as np
+        bake_image.pixels.foreach_set(np.tile(np.asarray(_GAP_FILL, dtype=np.float32), n_pixels))
+    except Exception:
+        bake_image.pixels = list(_GAP_FILL) * n_pixels
     try:
         bake_image.update()
     except Exception:

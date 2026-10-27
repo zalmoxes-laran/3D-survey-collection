@@ -143,7 +143,9 @@ def _tiling_parameters(scene, operator_idname):
              "cesium_native_min_depth", "cesium_native_max_depth",
              "cesium_features_per_tile", "cesium_native_hierarchy_layout",
              "cesium_native_bake_texture_atlas", "cesium_native_bake_texture_size",
-             "cesium_coordinates_mode", "cesium_lod_mode", "cesium_archive_mode")
+             "cesium_coordinates_mode", "cesium_lod_mode", "cesium_archive_mode",
+             "cesium_leaf_texture_source", "cesium_coarse_max_triangles",
+             "cesium_coarse_max_texture_size")
     out = {"operator": operator_idname}
     for name in names:
         if hasattr(scene, name):
@@ -209,6 +211,92 @@ def _archive_job_output(context, scene, final_dir, work_dir):
     ok, _info, msg = _pack_3tz(context, work_dir, out,
                                verify=bool(getattr(scene, "cesium_archive_verify", True)))
     return ok, msg
+
+
+def _import_obj_as_mesh(context, filepath, obj_name):
+    """'Use existing OBJ file': import the OBJ (with its MTL and textures) as
+    ONE mesh object, made active and selected, for the same pipeline as
+    'Export active mesh'. Returns (ok, record, message); the record lists
+    everything the import added, for `_remove_imported`."""
+    if getattr(context, "mode", "OBJECT") != 'OBJECT':
+        try:
+            bpy.ops.object.mode_set(mode='OBJECT')
+        except Exception:
+            pass
+    before = {
+        "objects": set(bpy.data.objects),
+        "meshes": set(bpy.data.meshes),
+        "materials": set(bpy.data.materials),
+        "images": set(bpy.data.images),
+    }
+    prev_active = context.view_layer.objects.active
+    prev_selected = [o for o in context.selected_objects]
+    t0 = time.time()
+    try:
+        res = bpy.ops.wm.obj_import(filepath=filepath, use_split_objects=False, use_split_groups=False)
+    except Exception as exc:
+        res = {'CANCELLED'}
+        err = str(exc)
+    else:
+        err = ""
+    record = {
+        "objects": [o for o in bpy.data.objects if o not in before["objects"]],
+        "meshes": [m for m in bpy.data.meshes if m not in before["meshes"]],
+        "materials": [m for m in bpy.data.materials if m not in before["materials"]],
+        "images": [i for i in bpy.data.images if i not in before["images"]],
+        "prev_active": prev_active,
+        "prev_selected": prev_selected,
+        "object": None,
+    }
+    meshes = [o for o in record["objects"] if o.type == 'MESH']
+    if 'FINISHED' not in res or not meshes:
+        _remove_imported(record)
+        return False, None, f"OBJ import failed: {filepath} {err}".strip()
+    for o in bpy.data.objects:
+        try:
+            o.select_set(False)
+        except Exception:
+            pass
+    for o in meshes:
+        o.select_set(True)
+    context.view_layer.objects.active = meshes[0]
+    if len(meshes) > 1:
+        bpy.ops.object.join()
+        record["meshes"] = [m for m in bpy.data.meshes if m not in before["meshes"]]
+    obj = context.view_layer.objects.active
+    obj.name = obj_name
+    record["object"] = obj
+    record["objects"] = [o for o in bpy.data.objects if o not in before["objects"]]
+    return True, record, (f"Imported {os.path.basename(filepath)}: {len(obj.data.polygons):,} faces, "
+                          f"{len(obj.data.materials)} material(s), {len(record['images'])} image(s) "
+                          f"in {time.time() - t0:.1f} s")
+
+
+def _remove_imported(record):
+    """Remove what `_import_obj_as_mesh` added (object, mesh, materials,
+    images left without users) and give the selection back."""
+    if not record:
+        return
+    for o in record.get("objects", []):
+        try:
+            bpy.data.objects.remove(o, do_unlink=True)
+        except Exception:
+            pass
+    for coll, key in ((bpy.data.meshes, "meshes"), (bpy.data.materials, "materials"),
+                      (bpy.data.images, "images")):
+        for idb in record.get(key, []):
+            try:
+                if idb.users == 0:
+                    coll.remove(idb, do_unlink=True)
+            except Exception:
+                pass
+    try:
+        for o in record.get("prev_selected", []):
+            o.select_set(True)
+        if record.get("prev_active") is not None:
+            bpy.context.view_layer.objects.active = record["prev_active"]
+    except Exception:
+        pass
 
 
 class OBJECT_OT_clear_cesium_folder(bpy.types.Operator):
@@ -599,56 +687,30 @@ class OBJECT_OT_export_cesium_tiles(bpy.types.Operator):
                 if output_dir != final_dir:
                     work_dirs.append(output_dir)
 
-                mesh_stats = _collect_mesh_stats(context, scene, job)
-                _update_cesium_progress(
-                    context, task=f"Processing mesh: {obj_name}",
-                    current_mesh=mesh_idx, total_meshes=total_jobs,
-                    elapsed=time.time() - start_time,
-                )
-                _add_to_cesium_log(
-                    context,
-                    f"-> {obj_name}: faces {mesh_stats['faces']}, area {mesh_stats['area_m2']:.2f} m2, "
-                    f"textures {mesh_stats['textures']}, uv {mesh_stats['uv_maps']}"
-                )
-
-                before_files = _snapshot_output_files(output_dir)
-                mesh_start = time.time()
-
-                if job["kind"] != "ACTIVE" or job["object"] is None:
-                    return _cancel_with_progress("Native split currently supports only 'Export active mesh' source mode.")
-                ok, msg = _run_native_split_backend(
-                    context=context, scene=scene,
-                    active_obj=job["object"], output_dir=output_dir,
-                    input_format=job["input_format"], coords_cfg=coords_cfg,
-                )
-                if not ok:
-                    return _cancel_with_progress(f"{obj_name}: {msg}")
-
-                after_files = _snapshot_output_files(output_dir)
-                generated_stats = _summarize_generated_files(after_files - before_files)
-                if generated_stats["tiles"] == 0 and generated_stats["tilesets"] == 0:
-                    generated_stats = _summarize_generated_files(after_files)
-                mesh_duration = time.time() - mesh_start
-                stats_line = _format_cesium_mesh_stats(obj_name, mesh_stats, generated_stats, mesh_duration)
-                scene.cesium_progress_last_stats = stats_line
-                _add_to_cesium_log(context, f"[OK] {stats_line}")
-
-                if archive_mode != 'FOLDER':
+                imported = None
+                if job["kind"] == "EXISTING_OBJ":
                     _update_cesium_progress(
-                        context, task=f"Packing .3tz: {obj_name}",
+                        context, task=f"Importing OBJ: {obj_name}",
                         current_mesh=mesh_idx, total_meshes=total_jobs,
                         elapsed=time.time() - start_time,
                     )
-                    ok_tz, tz_msg = _archive_job_output(context, scene, final_dir, output_dir)
-                    if not ok_tz:
-                        return _cancel_with_progress(tz_msg)
-                    _add_to_cesium_log(context, f"[OK] {tz_msg}")
-                    self.report({'INFO'}, tz_msg)
-
-                stamps += _stamp_tileset(
-                    context, final_dir, archive_mode, [job["object"]],
-                    _tiling_parameters(scene, self.bl_idname),
-                    "3D Tiles, native split")
+                    ok_imp, imported, imp_msg = _import_obj_as_mesh(context, job["input_file"], obj_name)
+                    if not ok_imp:
+                        return _cancel_with_progress(f"{obj_name}: {imp_msg}")
+                    _add_to_cesium_log(context, f"[OBJ] {imp_msg}")
+                    job["object"] = imported["object"]
+                    job["kind"] = "ACTIVE"
+                try:
+                    ok_job = self._export_one_job(
+                        context, scene, job, obj_name, final_dir, output_dir,
+                        mesh_idx, total_jobs, start_time, coords_cfg, archive_mode, stamps,
+                    )
+                finally:
+                    if imported is not None:
+                        _remove_imported(imported)
+                        job["object"] = None
+                if ok_job is not True:
+                    return _cancel_with_progress(ok_job)
 
                 successful_jobs += 1
                 _update_cesium_progress(
@@ -712,6 +774,62 @@ class OBJECT_OT_export_cesium_tiles(bpy.types.Operator):
                 shutil.rmtree(wd, ignore_errors=True)
             scene.cesium_progress_active = False
             _redraw_3d_view(context)
+
+    def _export_one_job(self, context, scene, job, obj_name, final_dir, output_dir,
+                        mesh_idx, total_jobs, start_time, coords_cfg, archive_mode, stamps):
+        """One mesh through the native split, archive and stamp. True, or the
+        error message."""
+        mesh_stats = _collect_mesh_stats(context, scene, job)
+        _update_cesium_progress(
+            context, task=f"Processing mesh: {obj_name}",
+            current_mesh=mesh_idx, total_meshes=total_jobs,
+            elapsed=time.time() - start_time,
+        )
+        _add_to_cesium_log(
+            context,
+            f"-> {obj_name}: faces {mesh_stats['faces']}, area {mesh_stats['area_m2']:.2f} m2, "
+            f"textures {mesh_stats['textures']}, uv {mesh_stats['uv_maps']}"
+        )
+
+        before_files = _snapshot_output_files(output_dir)
+        mesh_start = time.time()
+
+        if job["object"] is None:
+            return f"{obj_name}: no mesh to export."
+        ok, msg = _run_native_split_backend(
+            context=context, scene=scene,
+            active_obj=job["object"], output_dir=output_dir,
+            input_format=job["input_format"], coords_cfg=coords_cfg,
+        )
+        if not ok:
+            return f"{obj_name}: {msg}"
+
+        after_files = _snapshot_output_files(output_dir)
+        generated_stats = _summarize_generated_files(after_files - before_files)
+        if generated_stats["tiles"] == 0 and generated_stats["tilesets"] == 0:
+            generated_stats = _summarize_generated_files(after_files)
+        mesh_duration = time.time() - mesh_start
+        stats_line = _format_cesium_mesh_stats(obj_name, mesh_stats, generated_stats, mesh_duration)
+        scene.cesium_progress_last_stats = stats_line
+        _add_to_cesium_log(context, f"[OK] {stats_line}")
+
+        if archive_mode != 'FOLDER':
+            _update_cesium_progress(
+                context, task=f"Packing .3tz: {obj_name}",
+                current_mesh=mesh_idx, total_meshes=total_jobs,
+                elapsed=time.time() - start_time,
+            )
+            ok_tz, tz_msg = _archive_job_output(context, scene, final_dir, output_dir)
+            if not ok_tz:
+                return tz_msg
+            _add_to_cesium_log(context, f"[OK] {tz_msg}")
+            self.report({'INFO'}, tz_msg)
+
+        stamps.extend(_stamp_tileset(
+            context, final_dir, archive_mode, [job["object"]],
+            _tiling_parameters(scene, self.bl_idname),
+            "3D Tiles, native split"))
+        return True
 
 
 # ===========================================================================

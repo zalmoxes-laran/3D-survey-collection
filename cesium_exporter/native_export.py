@@ -30,6 +30,36 @@ def _auto_atlas_size_for_tile(face_count, target_px_per_face=16, min_size=256, m
         size *= 2
     return max(min_size, min(max_size, size))
 
+# Schema id of the tileset-level metadata (3D Tiles 1.1 pattern
+# [a-zA-Z_][a-zA-Z0-9_]*). Readers of older tilesets may meet the legacy id.
+TILESET_SCHEMA_ID = "cesium_tiling_pipeline"
+LEGACY_TILESET_SCHEMA_IDS = ("cesium-tiling-pipeline",)
+
+
+def _coarse_budget(scene):
+    """Budget of the coarse (non-leaf) tiles and leaf texture cap, from the
+    scene: kwargs for `_export_node_glb`."""
+    return {
+        "max_triangles": int(getattr(scene, "cesium_coarse_max_triangles", 50000) or 0),
+        "max_texture_size": int(getattr(scene, "cesium_coarse_max_texture_size", 2048) or 0),
+        "leaf_max_texture_size": int(getattr(scene, "cesium_leaf_max_texture_size", 4096) or 4096),
+    }
+
+
+def _triangle_count(mesh):
+    """Triangles of a mesh once triangulated (what the GLB will carry)."""
+    try:
+        import numpy as np
+        n = len(mesh.polygons)
+        if n == 0:
+            return 0
+        lt = np.empty(n, dtype=np.int32)
+        mesh.polygons.foreach_get("loop_total", lt)
+        return int((lt - 2).sum())
+    except Exception:
+        return sum(len(p.vertices) - 2 for p in mesh.polygons)
+
+
 from .glb_unlit import _patch_glb_to_unlit
 from .implicit import (
     _bitarray_set_once,
@@ -39,7 +69,14 @@ from .implicit import (
     _write_subtree_file,
 )
 from .lod import _cleanup_lod_image_cache, _compute_lod_parameters, _prepare_lod_image_cache
-from .native_bake import _cleanup_native_bake_assets, _native_bake_basecolor_texture, _prepare_base_mesh_object, _rebake_node_texture
+from .native_bake import (
+    _cleanup_native_bake_assets,
+    _drop_unused_material_slots,
+    _native_bake_basecolor_texture,
+    _original_texel_atlas_size,
+    _prepare_base_mesh_object,
+    _rebake_node_texture,
+)
 from .native_tree import (
     _build_face_spatial_data,
     _build_native_tree,
@@ -49,6 +86,7 @@ from .native_tree import (
 )
 from .octree_clip import _clip_bm_to_bbox, _clip_quadtree_bm_to_bbox
 from .shared import _add_to_cesium_log, _preserve_selection
+from .stats import _collect_object_texture_diagnostics
 from .stats import _build_gltf_export_kwargs
 from .tileset_stitcher import _bbox_diag_len, _bbox_to_box, _bbox_union_from_face_ids
 
@@ -88,15 +126,36 @@ def _export_node_glb(
     scene=None,
     cell_bbox=None,
     tree_type='OCTREE',
+    is_leaf=False,
+    texture_source_obj=None,
+    max_triangles=0,
+    max_texture_size=0,
+    leaf_max_texture_size=4096,
 ):
     """Export a GLB for a tree node.
 
     For leaf nodes: decimation_ratio=1.0, lod_image=None (uses full mesh+texture).
     For internal LOD nodes with REBAKE strategy: decimate, re-UV, re-bake from base_obj.
     For internal LOD nodes with legacy behavior: decimation_ratio<1.0, lod_image=downsampled atlas.
+
+    Leaf texture source: when ``is_leaf`` and ``texture_source_obj`` is given
+    (a copy of the source mesh with its ORIGINAL materials and UVs, the same
+    faces in the same order as ``base_obj``), the tile is cut from it and baked
+    directly from the original images into a fresh per-tile atlas sized to the
+    original texel density (capped at ``leaf_max_texture_size``). The global
+    atlas of ``base_obj`` is then only used for coarse tiles.
+
+    Returns True (written), False (failed) or None (nothing of the node
+    left inside its cell after clipping: no content to write).
+
+    Coarse tiles (not ``is_leaf``): ``max_triangles`` > 0 caps the triangle
+    count (decimating further when the level ratio is not enough), and
+    ``max_texture_size`` > 0 caps the side of their baked atlas.
     """
-    tile_obj = base_obj.copy()
-    tile_obj.data = base_obj.data.copy()
+    use_original = bool(is_leaf and texture_source_obj is not None)
+    cut_src = texture_source_obj if use_original else base_obj
+    tile_obj = cut_src.copy()
+    tile_obj.data = cut_src.data.copy()
     tile_obj_name = tile_obj.name
     tile_mesh_name = tile_obj.data.name
     temp_collection.objects.link(tile_obj)
@@ -106,6 +165,7 @@ def _export_node_glb(
     # Track rebake artifacts for cleanup
     _rebake_img_name = None
     _rebake_mat_name = None
+    _direct_bake_info = None
 
     try:
         # 1) Keep only faces belonging to this node, then geometrically clip
@@ -136,9 +196,20 @@ def _export_node_glb(
         tile_obj.data.update()
 
         if len(tile_obj.data.polygons) == 0:
-            return False
+            # Nothing of the node is left inside its cell (a few faces that
+            # only touched it): no content, not an error.
+            return None
 
-        # 2) Apply decimation if ratio < 1.0 (LOD internal node)
+        # 2) Apply decimation if ratio < 1.0 (LOD internal node). A coarse
+        # tile also respects the triangle budget `max_triangles`: the ratio
+        # is lowered so that the decimated tile fits in it.
+        n_tris = _triangle_count(tile_obj.data)
+        if not is_leaf and max_triangles and n_tris > int(max_triangles):
+            budget_ratio = float(max_triangles) / float(n_tris)
+            if budget_ratio < decimation_ratio:
+                print(f"[BUDGET] {tile_obj.name}: {n_tris} tris > {int(max_triangles)}, "
+                      f"ratio {decimation_ratio:.4f} -> {budget_ratio:.4f}")
+                decimation_ratio = budget_ratio
         if decimation_ratio < 0.999 and len(tile_obj.data.polygons) > 10:
             with _preserve_selection(context):
                 # Bulletproof deselection
@@ -171,8 +242,20 @@ def _export_node_glb(
 
                 bpy.ops.object.modifier_apply(modifier="Decimate")
 
+                # The protected borders can keep the tile above its budget
+                # (a cell clipped on six sides has many border vertices):
+                # a second pass, without the protection, brings it in.
+                if not is_leaf and max_triangles:
+                    n_after = _triangle_count(tile_obj.data)
+                    if n_after > int(max_triangles):
+                        mod = tile_obj.modifiers.new("Decimate", type='DECIMATE')
+                        mod.ratio = max(float(max_triangles) / float(n_after) * 0.98, 0.0001)
+                        bpy.ops.object.modifier_apply(modifier="Decimate")
+                        print(f"[BUDGET] {tile_obj.name}: border-preserving pass left {n_after} tris, "
+                              f"second pass -> {_triangle_count(tile_obj.data)}")
+
             if len(tile_obj.data.polygons) == 0:
-                return False
+                return None
 
         # 2b) Per-tile re-bake: each tile gets its own small atlas baked from
         # base_obj. This is the whole point of an octree + tile system —
@@ -186,10 +269,41 @@ def _export_node_glb(
             scene is not None
             and bool(getattr(scene, "cesium_per_tile_bake_enabled", True))
         )
+        if use_original and len(tile_obj.data.polygons) > 0:
+            # Leaf from the ORIGINAL textures: no ray casting, no global
+            # atlas in between — the tile's own materials are baked onto a
+            # fresh UV layout, sampling the source images through their own
+            # UV map. Only the materials this tile uses stay on it, so
+            # Cycles loads only their images.
+            _drop_unused_material_slots(tile_obj.data)
+            leaf_size = _original_texel_atlas_size(
+                tile_obj.data, max_size=int(leaf_max_texture_size or 4096))
+            if leaf_size is None:
+                leaf_size = _auto_atlas_size_for_tile(
+                    len(tile_obj.data.polygons), max_size=int(leaf_max_texture_size or 4096))
+            # Full-atlas bleed, as in the rebake: the empty UV space takes
+            # the colour of the nearest island instead of the grey fill, so
+            # no grey creeps into the island borders at coarser mip levels.
+            ok_d, msg_d, _direct_bake_info = _native_bake_basecolor_texture(
+                context=context, scene=scene, base_obj=tile_obj,
+                atlas_size=leaf_size, margin_px=max(int(rebake_margin_px), int(leaf_size)),
+            )
+            if ok_d and _direct_bake_info.get("applied"):
+                _rebake_img_name = _direct_bake_info.get("baked_image") or None
+                _rebake_mat_name = _direct_bake_info.get("baked_material") or None
+                lod_image = None
+                per_tile_bake = False
+                print(f"[LEAF-ORIGINAL] {tile_obj.name}: faces={len(tile_obj.data.polygons)}, "
+                      f"atlas={leaf_size}px from original textures")
+            else:
+                print(f"[LEAF-ORIGINAL] {tile_obj.name}: not applied ({msg_d}); "
+                      f"falling back to the global-atlas rebake")
         if per_tile_bake and len(tile_obj.data.polygons) > 0:
             actual_atlas_size = rebake_atlas_size
             if actual_atlas_size is None or actual_atlas_size <= 0:
                 actual_atlas_size = _auto_atlas_size_for_tile(len(tile_obj.data.polygons))
+            if not is_leaf and max_texture_size and actual_atlas_size > int(max_texture_size):
+                actual_atlas_size = int(max_texture_size)
             print(f"[REBAKE] {tile_obj.name}: faces={len(tile_obj.data.polygons)}, "
                   f"atlas={actual_atlas_size}px (auto={rebake_atlas_size is None}) "
                   f"decimated={'yes' if decimation_ratio < 0.999 else 'no'}")
@@ -205,6 +319,14 @@ def _export_node_glb(
                 tile_obj.data.materials.append(rb_mat)
                 for poly in tile_obj.data.polygons:
                     poly.material_index = 0
+                # Keep only the rebake UV map: the glTF exporter writes UV
+                # maps in storage order, so the source map would ride along
+                # as an unused TEXCOORD_0 (the validator flags it).
+                rb_uv = tile_obj.data.uv_layers.active
+                if rb_uv is not None:
+                    rb_uv_name = rb_uv.name
+                    for uv_name in [u.name for u in tile_obj.data.uv_layers if u.name != rb_uv_name]:
+                        tile_obj.data.uv_layers.remove(tile_obj.data.uv_layers[uv_name])
                 tile_obj.data.update()
                 # Skip step 3 (texture swap) — we have a fresh bake
                 lod_image = None
@@ -279,6 +401,8 @@ def _export_node_glb(
                         bpy.data.images.remove(img, do_unlink=True)
                     except Exception:
                         pass
+            if _direct_bake_info:
+                _cleanup_native_bake_assets(_direct_bake_info)
 
         # The original fragments below are kept commented as a quick
         # reference for what used to be debug-disabled. Do not remove.
@@ -344,6 +468,7 @@ def _native_tree_to_tileset_node(node, root_error, base_depth=0, external_subtre
 def _run_native_implicit_layout(
     context, scene, base_obj, temp_collection, tree, output_dir,
     tree_type, bake_info=None, lod_mode=False, lod_config=None, lod_image_cache=None,
+    texture_source_obj=None,
 ):
     def _uri_join(*parts):
         return "/".join([p.strip("/\\") for p in parts if p])
@@ -372,6 +497,7 @@ def _run_native_implicit_layout(
     preserve_borders = bool(getattr(scene, "cesium_lod_preserve_borders", True))
     lod_strategy = str(getattr(scene, "cesium_lod_strategy", "REBAKE")) if lod_mode else "LEAF_ONLY"
     rebake_margin = int(getattr(scene, "cesium_native_bake_margin", 8))
+    budget = _coarse_budget(scene)
 
     for node in nodes:
         level = int(node.get("depth", 0))
@@ -431,7 +557,13 @@ def _run_native_implicit_layout(
             scene=scene,
             cell_bbox=node.get("cell_bbox"),
             tree_type=tree_type,
+            is_leaf=is_leaf,
+            texture_source_obj=texture_source_obj,
+            **budget,
         )
+        if ok is None:
+            print(f"[TILE] {tile_label}: empty after clipping, no content")
+            continue
         if not ok:
             return False, f"Implicit layout: failed exporting tile {tile_label}."
 
@@ -497,30 +629,35 @@ def _run_native_implicit_layout(
                 "ion": {"georeferenced": False, "movable": True},
             },
         },
+        # 3D Tiles 1.1: a schema id matches [a-zA-Z_][a-zA-Z0-9_]*, and a
+        # tile with `implicitTiling` may not carry `metadata`. The tight box
+        # of the whole content is therefore tileset-level metadata (class
+        # `tileset`); until dev16 it was `cesium-tiling-pipeline` / class
+        # `tile` on the implicit root, which the validator rejected.
         "schema": {
-            "id": "cesium-tiling-pipeline",
+            "id": TILESET_SCHEMA_ID,
             "classes": {
-                "tile": {
+                "tileset": {
                     "properties": {
                         "tightBoundingBox": {
                             "name": "Tight Bounding Box",
+                            "description": "Oriented box (3D Tiles `box`) of the whole content.",
                             "type": "SCALAR",
                             "componentType": "FLOAT64",
                             "array": True,
                             "count": 12,
-                            "semantic": "TILE_BOUNDING_BOX",
                         }
                     }
                 }
             },
         },
+        "metadata": {
+            "class": "tileset",
+            "properties": {"tightBoundingBox": root_box},
+        },
         "geometricError": root_error,
         "root": {
             "boundingVolume": {"box": root_box},
-            "metadata": {
-                "class": "tile",
-                "properties": {"tightBoundingBox": root_box},
-            },
             "geometricError": root_tile_error,
             "refine": refine_mode,
             "content": {"uri": content_uri_template},
@@ -554,7 +691,10 @@ def _run_native_implicit_layout(
         f.write("Root content exported: True\n")
         f.write(f"Subtree availability bits: {total_nodes}\n")
         f.write(f"Subtree file: {subtree_note}\n")
+        f.write(f"Coarse tile max triangles: {int(getattr(scene, 'cesium_coarse_max_triangles', 50000))}\n")
+        f.write(f"Coarse tile max texture: {int(getattr(scene, 'cesium_coarse_max_texture_size', 2048))}\n")
         if isinstance(bake_info, dict):
+            f.write(f"Leaf texture source: {bake_info.get('leaf_texture_source', 'ATLAS')}\n")
             f.write(f"Texture bake enabled: {bool(bake_info.get('enabled', False))}\n")
             f.write(f"Texture bake applied: {bool(bake_info.get('applied', False))}\n")
             if bake_info.get("enabled"):
@@ -595,6 +735,8 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
 
     base_obj, temp_collection = _prepare_base_mesh_object(context, active_obj, coords_cfg["offset"])
     lod_image_cache = None
+    pristine_obj = None
+    texture_source_obj = None
     try:
         _add_to_cesium_log(context, f"[NATIVE] {active_obj.name}: bbox=Z_UP, GLB export_yup=ON")
 
@@ -612,6 +754,34 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
         if not face_ids:
             return False, "Active mesh has no faces."
 
+        # Leaf texture source. ORIGINAL (default): the leaves are baked from
+        # the source materials and images, at the texel density they have
+        # there; the global atlas only feeds the coarse tiles. ATLAS: every
+        # tile is rebaked from the global atlas (until dev16 the only way —
+        # a leaf could not be sharper than that one atlas).
+        leaf_source = str(getattr(scene, "cesium_leaf_texture_source", "ORIGINAL"))
+        per_tile_bake = bool(getattr(scene, "cesium_per_tile_bake_enabled", True))
+        has_images = int(_collect_object_texture_diagnostics(base_obj).get("texture_images", 0)) > 0
+        use_original = per_tile_bake and leaf_source == 'ORIGINAL' and has_images
+        layout = scene.cesium_native_hierarchy_layout
+        coarse_content = (
+            (lod_mode and str(getattr(scene, "cesium_lod_strategy", "REBAKE")) != 'LEAF_ONLY')
+            or (not lod_mode and layout == 'SINGLE_JSON'
+                and bool(getattr(scene, "cesium_singlejson_add_root_content", True)))
+        )
+        if use_original and bake_info["enabled"] and not coarse_content:
+            # No coarse tile to feed: the atlas would be baked for nothing.
+            bake_info["enabled"] = False
+            _add_to_cesium_log(context, f"[NATIVE] {active_obj.name}: global atlas skipped "
+                                        "(leaves bake from the original textures, no coarse tiles).")
+        if use_original and bake_info["enabled"]:
+            # The atlas bake replaces base_obj's materials and UVs: keep a
+            # pristine copy (same faces, same order) as the leaves' source.
+            pristine_obj = base_obj.copy()
+            pristine_obj.data = base_obj.data.copy()
+            pristine_obj.name = f"{base_obj.name}__original"
+            temp_collection.objects.link(pristine_obj)
+
         if bake_info["enabled"]:
             ok_bake, bake_msg, bake_result = _native_bake_basecolor_texture(
                 context=context, scene=scene, base_obj=base_obj,
@@ -623,6 +793,14 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
             _add_to_cesium_log(context, f"[NATIVE] {active_obj.name}: {bake_msg}")
         else:
             _add_to_cesium_log(context, f"[NATIVE] {active_obj.name}: texture bake disabled.")
+        if use_original:
+            if pristine_obj is not None and bake_info.get("applied"):
+                texture_source_obj = pristine_obj
+            else:
+                # No atlas on base_obj: it still has the original materials.
+                texture_source_obj = base_obj
+            _add_to_cesium_log(context, f"[NATIVE] {active_obj.name}: leaves bake from the original textures.")
+        bake_info["leaf_texture_source"] = "ORIGINAL" if use_original else "ATLAS"
 
         max_faces = int(scene.cesium_features_per_tile)
         min_depth = int(scene.cesium_native_min_depth)
@@ -687,6 +865,7 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
                 bake_info=bake_info,
                 lod_mode=lod_mode, lod_config=lod_config,
                 lod_image_cache=lod_image_cache,
+                texture_source_obj=texture_source_obj,
             )
 
         # ----- EXTERNAL_SUBTILESETS or SINGLE_JSON -----
@@ -720,6 +899,7 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
         # Collect all nodes to export (LOD mode: all nodes; else: only leaves)
         lod_strategy = str(getattr(scene, "cesium_lod_strategy", "REBAKE")) if lod_mode else "LEAF_ONLY"
         rebake_margin = int(getattr(scene, "cesium_native_bake_margin", 8))
+        budget = _coarse_budget(scene)
 
         if lod_mode:
             if lod_strategy == 'LEAF_ONLY':
@@ -782,7 +962,13 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
                 scene=scene,
                 cell_bbox=node.get("cell_bbox"),
                 tree_type=tree_type,
+                is_leaf=is_leaf,
+                texture_source_obj=texture_source_obj,
+                **budget,
             )
+            if ok is None:
+                node.pop("uri", None)
+                continue
             if not ok:
                 return False, f"Failed exporting tile {prefix}{tile_id}."
 
@@ -797,10 +983,13 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
             ok = _export_node_glb(
                 context, base_obj, temp_collection, face_ids, root_abs_path,
                 force_unlit=force_unlit, export_yup=True,
+                rebake_margin_px=rebake_margin,
+                scene=scene, is_leaf=False, **budget,
             )
-            if not ok:
+            if ok is False:
                 return False, "Failed exporting single-JSON root content tile."
-            tree["uri"] = root_uri
+            if ok:
+                tree["uri"] = root_uri
 
         # Geometric error policy — same rationale as the implicit-tiling
         # branch. `tree_root_error` is the error budget at the topmost
@@ -873,6 +1062,9 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
             f.write(f"Max faces per leaf: {max_faces}\n")
             f.write(f"Total exported nodes: {len(all_nodes)}\n")
             f.write(f"Leaf nodes: {len(leaves)}\n")
+            f.write(f"Leaf texture source: {bake_info.get('leaf_texture_source', 'ATLAS')}\n")
+            f.write(f"Coarse tile max triangles: {int(getattr(scene, 'cesium_coarse_max_triangles', 50000))}\n")
+            f.write(f"Coarse tile max texture: {int(getattr(scene, 'cesium_coarse_max_texture_size', 2048))}\n")
             f.write(f"Texture bake enabled: {bool(bake_info.get('enabled', False))}\n")
             f.write(f"Texture bake applied: {bool(bake_info.get('applied', False))}\n")
             if bake_info.get("enabled"):
@@ -906,6 +1098,14 @@ def _run_native_split_backend(context, scene, active_obj, output_dir, input_form
                     bpy.data.meshes.remove(mesh_data, do_unlink=True)
             except Exception:
                 pass
+            if pristine_obj is not None:
+                try:
+                    pristine_mesh = pristine_obj.data
+                    bpy.data.objects.remove(pristine_obj, do_unlink=True)
+                    if pristine_mesh is not None and pristine_mesh.users == 0:
+                        bpy.data.meshes.remove(pristine_mesh, do_unlink=True)
+                except Exception:
+                    pass
             if lod_image_cache:
                 _cleanup_lod_image_cache(lod_image_cache)
             _cleanup_native_bake_assets(bake_info)

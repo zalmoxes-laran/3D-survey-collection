@@ -59,9 +59,12 @@ class VIEW3D_PT_cesium_export(bpy.types.Panel):
                     sec.label(text=f"Active mesh: {active_obj.name}", icon='MESH_DATA')
                 else:
                     sec.label(text="No active mesh selected", icon='ERROR')
+            elif source_mode == 'MULTI_LOD_SET':
+                sec.label(text="Already have LODs? No rebake: valid and fastest.", icon='INFO')
+                sec.label(text="Select the *_LOD0, *_LOD1, ... objects.")
             else:
                 sec.prop(scene, "cesium_existing_obj_file")
-                sec.label(text="Use an existing OBJ + MTL/texture set on disk.", icon='INFO')
+                sec.label(text="Imported, tiled, then removed from the scene.", icon='INFO')
 
         # 1.2  Output ----------------------------------------------------------
         sec = _section(layout, scene, "cesium_show_section_output",
@@ -116,6 +119,12 @@ class VIEW3D_PT_cesium_export(bpy.types.Panel):
             row.enabled = bool(scene.cesium_native_bake_texture_atlas)
             row.prop(scene, "cesium_native_bake_texture_size")
             row.prop(scene, "cesium_native_bake_margin")
+            sec.prop(scene, "cesium_leaf_texture_source")
+            if scene.cesium_leaf_texture_source == 'ORIGINAL':
+                sec.prop(scene, "cesium_leaf_max_texture_size")
+            row = sec.row(align=True)
+            row.prop(scene, "cesium_coarse_max_triangles", text="Coarse max tris")
+            row.prop(scene, "cesium_coarse_max_texture_size", text="Coarse max tex")
 
         # 1.6  Hierarchy Layout ------------------------------------------------
         sec = _section(layout, scene, "cesium_show_section_hierarchy",

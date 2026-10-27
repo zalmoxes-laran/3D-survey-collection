@@ -9,12 +9,15 @@ def register():
         name="Source mode",
         items=[
             ('ACTIVE_MESH', 'Export active mesh', 'Export active mesh first, then convert'),
-            ('EXISTING_OBJ', 'Use existing OBJ file', 'Convert an OBJ already present on disk'),
-            ('MULTI_LOD_SET', 'Multi-LOD set (LODgenerator output)',
-             'Use a pre-baked LOD set (objects named *_LOD0, *_LOD1, ...). '
-             'Skips the per-tile rebake entirely — each LOD level is clipped '
-             'into octree cells preserving its existing material/atlas. '
-             'Recommended workflow when LODgenerator was already used.'),
+            ('EXISTING_OBJ', 'Use existing OBJ file',
+             'Import an OBJ from disk, tile it with the same pipeline as '
+             '"Export active mesh", then remove the imported object'),
+            ('MULTI_LOD_SET', 'Multi-LOD set (already have LODs)',
+             'For whoever already has LODs (objects named *_LOD0, *_LOD1, ..., '
+             'e.g. from LODgenerator or a survey RB/LOD0..LOD2): each LOD level '
+             'is clipped into octree cells keeping its own material/atlas, with '
+             'no rebake at all. Valid tileset, and the fastest way '
+             '(22.7 s vs 92.5 s on a 450k-triangle model)'),
         ],
         default='ACTIVE_MESH',
     )
@@ -153,6 +156,48 @@ def register():
             "high-resolution per-tile textures rather than a single huge global one. "
             "Disable for legacy global-atlas behavior."
         ),
+    )
+    S.cesium_leaf_texture_source = bpy.props.EnumProperty(
+        name="Leaf texture source",
+        items=[
+            ('ORIGINAL', 'Original textures',
+             'Leaf tiles are baked from the source materials and images, at the '
+             'texel density they have there (capped by "Leaf max texture"). The '
+             'global atlas only feeds the coarse tiles'),
+            ('ATLAS', 'Global atlas (legacy)',
+             'Every tile is rebaked from the single global atlas: a leaf cannot '
+             'be sharper than "Bake atlas size" spread over the whole mesh'),
+        ],
+        default='ORIGINAL',
+        description="Where the per-tile bake of the leaves (finest tiles) reads its colours",
+    )
+    S.cesium_leaf_max_texture_size = bpy.props.IntProperty(
+        name="Leaf max texture",
+        default=4096,
+        min=256,
+        max=8192,
+        description=(
+            "Upper bound of a leaf tile's texture side when it is baked from the "
+            "original textures (the size otherwise follows the original texel density)"
+        ),
+    )
+    S.cesium_coarse_max_triangles = bpy.props.IntProperty(
+        name="Coarse tile max triangles",
+        default=50000,
+        min=0,
+        max=10_000_000,
+        description=(
+            "Triangle budget of every non-leaf tile (root included, and the root "
+            "content of a Single JSON tileset): decimated further when the level "
+            "ratio leaves more. 0 = no budget"
+        ),
+    )
+    S.cesium_coarse_max_texture_size = bpy.props.IntProperty(
+        name="Coarse tile max texture",
+        default=2048,
+        min=0,
+        max=8192,
+        description="Upper bound of a non-leaf tile's texture side. 0 = no cap",
     )
     S.cesium_uv_algorithm = bpy.props.EnumProperty(
         name="UV algorithm",
@@ -422,6 +467,10 @@ def unregister():
         "cesium_lod_preserve_borders",
         "cesium_tile_refine_mode",
         "cesium_lod_strategy",
+        "cesium_leaf_texture_source",
+        "cesium_leaf_max_texture_size",
+        "cesium_coarse_max_triangles",
+        "cesium_coarse_max_texture_size",
         "cesium_native_bake_texture_atlas",
         "cesium_native_bake_texture_size",
         "cesium_native_bake_margin",
