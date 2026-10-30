@@ -62,3 +62,23 @@ triangles*; leaves baked from the original textures resolve the noise cells a
 "/Applications/Blender 520.app/Contents/MacOS/Blender" -b --factory-startup \
     --python dev_utils/tests/test_cesium_native.py
 ```
+
+# Headless LOD set test
+
+`test_headless_lod.py` drives `headless.make_lod_set` / `headless.rebake_atlas`
+(the API for `blender -b` runners, e.g. EMStudio's sidecar) the way a runner
+does: it finds the module in `sys.modules`, so 3DSC must be ENABLED in the
+profile — no `--factory-startup`. On a textured UV sphere it checks the
+`3DSC-PROGRESS` / `3DSC-RESULT` lines, 3 levels (triangles 1 : 1/4 : 1/16,
+texture side halved per level), a level split into several atlases, plain
+glb files (JPEG, no Draco / meshopt / KTX2), the baked colour, a file source
+imported and removed, and a failure reported as an `ok: false` line.
+
+```bash
+BLENDER_USER_RESOURCES=/tmp/<profile> "/Applications/Blender 520.app/Contents/MacOS/Blender" \
+    -b --python dev_utils/tests/test_headless_lod.py --python-exit-code 1
+```
+
+`HEADLESS_SOURCE=<mesh file>` (and `HEADLESS_OUT`, `HEADLESS_LEVELS`) runs
+only `make_lod_set` on that file and prints the result. The texture plan
+itself has plain pytest tests: `pytest tests` (`tests/test_lod_plan.py`).

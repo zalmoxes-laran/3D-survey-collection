@@ -119,7 +119,8 @@ else:
             orthogonal_render,
             #mets_exporter,
             camera_unreal_exporter,
-            lod_shortcuts
+            lod_shortcuts,
+            headless,   # API for blender -b scripts: no classes, nothing to register
             )
     
 from .external_modules_install import check_external_modules

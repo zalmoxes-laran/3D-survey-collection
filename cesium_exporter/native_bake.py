@@ -107,6 +107,19 @@ def _original_texel_atlas_size(mesh, overhead=1.3, min_size=256, max_size=4096):
     packing overhead for the fresh UV layout, rounded to the nearest power of
     two and clamped to [min_size, max_size]. None when the mesh has no UV map
     or no image (the caller falls back to the face-count heuristic)."""
+    pixels = _original_texel_pixels(mesh, overhead=overhead)
+    if pixels is None:
+        return None
+    side = math.sqrt(pixels)
+    size = 2 ** int(round(math.log2(max(side, 1.0))))
+    return int(max(min_size, min(max_size, size)))
+
+
+def _original_texel_pixels(mesh, overhead=1.3):
+    """The pixels (times the packing ``overhead``) the faces of ``mesh`` cover
+    in their ORIGINAL textures — the budget of `_original_texel_atlas_size`,
+    unclamped (``headless.make_lod_set`` splits it into several atlases when
+    one is not enough). None when there is no UV map or no image."""
     import numpy as np
     n = len(mesh.polygons)
     uv = mesh.uv_layers.active
@@ -137,9 +150,7 @@ def _original_texel_atlas_size(mesh, overhead=1.3, min_size=256, max_size=4096):
     pixels = float((area * px_arr).sum()) * float(overhead)
     if pixels <= 0:
         return None
-    side = math.sqrt(pixels)
-    size = 2 ** int(round(math.log2(max(side, 1.0))))
-    return int(max(min_size, min(max_size, size)))
+    return pixels
 
 
 def _loop_indices(loop_start, loop_total):
