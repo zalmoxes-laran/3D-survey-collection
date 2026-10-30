@@ -146,6 +146,14 @@ class VersionManager:
             print(f"Error repairing manifest: {e}")
             return False
 
+    def _manifest_python_version(self):
+        """The Python of the wheels the local manifest lists ("3.13" for
+        ./wheels/cp313/...), None when there is no manifest or no wheel."""
+        if not self.manifest_file.exists():
+            return None
+        match = re.search(r'\./wheels/cp(\d)(\d+)/', self.manifest_file.read_text())
+        return f"{match.group(1)}.{match.group(2)}" if match else None
+
     def update_manifest(self, python_version: str = None):
         config = self.load_version_config()
         version = self.get_version_string(config)
@@ -158,6 +166,13 @@ class VersionManager:
 
         if '{VERSION}' not in template:
             raise ValueError("Template manifest missing {VERSION} placeholder")
+
+        if python_version is None:
+            # inc / build / dev keep the wheels target of the local manifest:
+            # only `./em.sh manifest X.Y` switches it (they used to fall back
+            # to the first wheels/cp* folder, cp311, and Blender 5.2 refused
+            # the add-on).
+            python_version = self._manifest_python_version()
 
         manifest_content = template.format(
             VERSION=version,
