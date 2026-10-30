@@ -8,7 +8,7 @@ engines (Unreal, Blender) and one-atlas rebakes, written as .glb files.
                  min_texture_size=256, max_textures=16, texture_px=None,
                  name=None, image_format="JPEG", jpeg_quality=90,
                  island_margin=0.0, decimate_borders=True, stamp=True,
-                 emit=True) -> dict
+                 emit=True, normal_map=False) -> dict
     rebake_atlas(source, out_path, size=None, *, max_texture_size=4096,
                  min_texture_size=256, image_format="JPEG", jpeg_quality=90,
                  island_margin=0.0, stamp=True, emit=True) -> dict
@@ -342,11 +342,13 @@ def _unwrap(obj, groups, parts, island_margin):
     return uv
 
 
-def _bake_materials(obj, name, groups, parts, side):
-    """One material + one atlas image per group; polygons get their group."""
+def _bake_materials(obj, name, groups, parts, side, normal_map=False):
+    """One material + one atlas image per group; polygons get their group.
+    ``normal_map``: a second image per group (non-colour data) for the
+    tangent-space normals, wired through a Normal Map node once baked."""
     mesh = obj.data
     mesh.materials.clear()
-    images, nodes = [], []
+    images, nodes, normals = [], [], []
     for g in range(parts):
         suffix = f"_{g}" if parts > 1 else ""
         img = bpy.data.images.new(f"T_{name}{suffix}", width=int(side), height=int(side),
@@ -369,12 +371,56 @@ def _bake_materials(obj, name, groups, parts, side):
             node.select = False
         tex.select = True
         nt.nodes.active = tex
+        if normal_map:
+            nimg = bpy.data.images.new(f"N_{name}{suffix}", width=int(side), height=int(side),
+                                       alpha=False, float_buffer=False)
+            nimg.colorspace_settings.name = "Non-Color"
+            ntex = nt.nodes.new("ShaderNodeTexImage")
+            ntex.image = nimg
+            ntex.location = (-500, -300)
+            nmap = nt.nodes.new("ShaderNodeNormalMap")
+            nmap.location = (-250, -300)
+            images.append(nimg)
+            normals.append((nt, ntex, nmap, bsdf))
         mesh.materials.append(mat)
         images.append(img)
         nodes.append((nt, tex, bsdf))
     mesh.polygons.foreach_set("material_index", groups.astype("int32"))
     mesh.update()
+    if normal_map:
+        return images, nodes, normals
     return images, nodes
+
+
+def _bake_normals(src, obj, side, normals):
+    """MICRO-PREPARA-DIAGNOSI (E.D., 30 Oct 2026) · the tangent-space normals of
+    the full mesh ``src`` baked onto the decimated ``obj`` (selected-to-active,
+    the cage of the colour bake), so the lighter level keeps the relief it lost.
+    The normal images become the active nodes, then the Normal Map nodes are
+    wired into the BSDF (the glTF exporter writes them as ``normalTexture``)."""
+    for nt, ntex, _nmap, _bsdf in normals:
+        for node in nt.nodes:
+            node.select = False
+        ntex.select = True
+        nt.nodes.active = ntex
+    scene = bpy.context.scene
+    saved = {"engine": scene.render.engine, "samples": scene.cycles.samples}
+    try:
+        scene.render.engine = 'CYCLES'
+        scene.cycles.samples = 1
+        _select_only([src, obj], obj)
+        res = bpy.ops.object.bake(type='NORMAL', normal_space='TANGENT', use_clear=True,
+                                  use_selected_to_active=True, cage_extrusion=0.1,
+                                  max_ray_distance=0.0, use_cage=False,
+                                  margin_type='ADJACENT_FACES', margin=int(side))
+        if 'FINISHED' not in res:
+            raise RuntimeError("Cycles normal bake failed")
+    finally:
+        scene.render.engine = saved["engine"]
+        scene.cycles.samples = saved["samples"]
+    for nt, ntex, nmap, bsdf in normals:
+        nt.links.new(ntex.outputs["Color"], nmap.inputs["Color"])
+        nt.links.new(nmap.outputs["Normal"], bsdf.inputs["Normal"])
 
 
 def _bake(src, obj, side):
@@ -432,7 +478,8 @@ def _export(obj, path, image_format, jpeg_quality):
 
 
 def _make_level(src, entry, name, path, col, progress, *, island_margin, keep_borders,
-                image_format, jpeg_quality, stamp, stamp_parameters, gesture):
+                image_format, jpeg_quality, stamp, stamp_parameters, gesture,
+                normal_map=False):
     level = entry["level"]
     obj = _copy_for_level(src, name, col)
     _decimate(obj, entry["ratio"], entry["triangles"], keep_borders)
@@ -441,13 +488,25 @@ def _make_level(src, entry, name, path, col, progress, *, island_margin, keep_bo
     groups = _face_groups(obj.data, parts)
     _unwrap(obj, groups, parts, island_margin)
     progress.step("unwrap", level=level, textures=parts)
-    images, nodes = _bake_materials(obj, name, groups, parts, side)
+    normals = []
+    if normal_map:
+        images, nodes, normals = _bake_materials(obj, name, groups, parts, side, True)
+    else:
+        images, nodes = _bake_materials(obj, name, groups, parts, side)
+    for nt, tex, _bsdf in nodes:
+        for node in nt.nodes:
+            node.select = False
+        tex.select = True
+        nt.nodes.active = tex
     _bake(src, obj, side)
+    if normals:
+        _bake_normals(src, obj, side, normals)
     for img in images:
         img.pack()
     for nt, tex, bsdf in nodes:
         nt.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
-    progress.step("bake", level=level, textures=parts, texture_px=side)
+    progress.step("bake", level=level, textures=parts, texture_px=side,
+                  normal_map=bool(normals))
     _export(obj, path, image_format, jpeg_quality)
     progress.step("export", level=level, path=path)
     state, res = "off", None
@@ -458,7 +517,8 @@ def _make_level(src, entry, name, path, col, progress, *, island_margin, keep_bo
                        f"{parts} x {side}px atlas bake)" if gesture == stamp_bridge.KIND_LOD
                        else f"texture rebake ({parts} x {side}px atlas)"),
             parameters=dict(stamp_parameters, level=level, ratio=entry["ratio"],
-                            textures=parts, texture_px=side, rule=entry["rule"]),
+                            textures=parts, texture_px=side, rule=entry["rule"],
+                            normal_map=bool(normals)),
             context=bpy.context)
         state = res.get("state", "failed")
         progress.step("stamp", level=level, state=state)
@@ -467,7 +527,7 @@ def _make_level(src, entry, name, path, col, progress, *, island_margin, keep_bo
     return {"path": path, "level": level, "ratio": entry["ratio"],
             "triangles": _triangles(obj.data), "textures": parts, "texture_px": side,
             "texture_rule": entry["rule"], "bytes": os.path.getsize(path),
-            "stamp": state}, res
+            "normal_map": bool(normals), "stamp": state}, res
 
 
 # ------------------------------------------------------------------ public API
@@ -542,7 +602,8 @@ def _run(op, source, jobs_for, progress_total, emit, stamp, extra_result):
 def make_lod_set(source, out_dir, levels=3, *, max_texture_size=lod_plan.MAX_TEXTURE_SIZE,
                  min_texture_size=lod_plan.MIN_TEXTURE_SIZE, max_textures=lod_plan.MAX_TEXTURES,
                  texture_px=None, name=None, image_format="JPEG", jpeg_quality=90,
-                 island_margin=0.0, decimate_borders=True, stamp=True, emit=True):
+                 island_margin=0.0, decimate_borders=True, stamp=True, emit=True,
+                 normal_map=False):
     """Decimate, rebake and export ``source`` as a set of .glb levels.
 
     ``levels``: number of levels (3 -> ratios 1, 1/4, 1/16) or the triangle
@@ -551,8 +612,11 @@ def make_lod_set(source, out_dir, levels=3, *, max_texture_size=lod_plan.MAX_TEX
     ``max_textures``); ``texture_px`` (int or one per level) forces one atlas
     of that side per level. ``name``: file base, default the source name
     without its ``_LOD<n>`` suffix -> ``<out_dir>/<name>_LOD<n>.glb`` (existing
-    files are overwritten). ``image_format``: "JPEG" or "PNG". Returns the
-    dict printed on the ``3DSC-RESULT`` line."""
+    files are overwritten). ``image_format``: "JPEG" or "PNG". ``normal_map``:
+    each decimated level (ratio < 1) also gets a tangent-space normal map baked
+    from the full source, one per atlas, same side (EM Tools' «Prepare for a
+    use» asks it for an object over its profile's budget). Returns the dict
+    printed on the ``3DSC-RESULT`` line."""
     if image_format not in ("JPEG", "PNG"):
         raise ValueError("image_format must be 'JPEG' or 'PNG' (Unreal reads both)")
     ratios = lod_plan.level_ratios(levels)
@@ -570,7 +634,8 @@ def make_lod_set(source, out_dir, levels=3, *, max_texture_size=lod_plan.MAX_TEX
                  os.path.join(out_dir, f"{base}_LOD{e['level']}.glb"),
                  {"island_margin": island_margin, "keep_borders": decimate_borders,
                   "image_format": image_format, "jpeg_quality": jpeg_quality,
-                  "stamp_parameters": params, "gesture": stamp_bridge.KIND_LOD})
+                  "stamp_parameters": params, "gesture": stamp_bridge.KIND_LOD,
+                  "normal_map": bool(normal_map) and e["ratio"] < 0.999})
                 for e in entries]
         return entries, jobs
 

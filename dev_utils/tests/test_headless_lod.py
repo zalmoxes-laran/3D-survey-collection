@@ -212,6 +212,58 @@ def main():
     check("split: every atlas used over its whole square", spans and all(
         a > 0.9 or b > 0.9 for a, b in spans), spans)
 
+    # --- 2b. MICRO-PREPARA-DIAGNOSI: a decimated level with a normal map baked
+    # from the full mesh (one per atlas, wired as the glTF's normalTexture)
+    bumpy = bpy.data.objects.new("Bumpy", src.data.copy())
+    bpy.context.scene.collection.objects.link(bumpy)
+    disp = bumpy.modifiers.new("d", "DISPLACE")
+    disp.strength = 0.05
+    tx = bpy.data.textures.new("n", "CLOUDS")
+    tx.noise_scale = 0.1
+    disp.texture = tx
+    sub = bumpy.modifiers.new("s", "SUBSURF")
+    sub.levels = 1
+    deps = bpy.context.evaluated_depsgraph_get()
+    full = bpy.data.meshes.new_from_object(bumpy.evaluated_get(deps))
+    bumpy.modifiers.clear()
+    bumpy.data = full
+    before_nm = {k: len(getattr(bpy.data, k)) for k in before}
+    res_nm, err_nm, _, _ = run_captured(hl.make_lod_set, bumpy.name, os.path.join(tmp, "nm"),
+                                        levels=[0.1], texture_px=512, normal_map=True)
+    check("normal map: runs", err_nm is None, repr(err_nm))
+    o = res_nm["outputs"][0] if res_nm else {}
+    j = glb_json(o["path"]) if o else {}
+    mats = j.get("materials", [])
+    check("normal map: the level says it, each material has a normalTexture, 2 images",
+          o.get("normal_map") is True and mats and all("normalTexture" in m for m in mats)
+          and len(j.get("images", [])) == 2, f"{o.get('normal_map')} {[list(m) for m in mats]}")
+    if mats and "normalTexture" in mats[0]:
+        ti = mats[0]["normalTexture"]["index"]
+        b = open(o["path"], "rb").read()
+        n = struct.unpack("<I", b[12:16])[0]
+        bv = j["bufferViews"][j["images"][j["textures"][ti]["source"]]["bufferView"]]
+        off = 20 + n + 8 + bv.get("byteOffset", 0)
+        pth = os.path.join(tmp, "_n.img")
+        open(pth, "wb").write(b[off:off + bv["byteLength"]])
+        img = bpy.data.images.load(pth, check_existing=False)
+        img.colorspace_settings.name = 'Non-Color'
+        px = np.empty(img.size[0] * img.size[1] * 4, dtype=np.float32)
+        img.pixels.foreach_get(px)
+        bpy.data.images.remove(img)
+        rgb = px.reshape(-1, 4)[:, :3]
+        lit = rgb[rgb.sum(axis=1) > 0.05]
+        bmed = float(np.median(lit[:, 2])) if len(lit) else 0.0
+        spread = float(np.std(lit[:, 0])) if len(lit) else 0.0
+        check("normal map: tangent-space blue (B ~ 1) with relief (R varies)",
+              bmed > 0.8 and spread > 0.01, f"B median {bmed:.3f}, R std {spread:.4f}")
+    lvl_tris = o.get("triangles", 0)
+    check("normal map: the level is decimated", 0 < lvl_tris < len(full.polygons), lvl_tris)
+    after_nm = {k: len(getattr(bpy.data, k)) for k in before}
+    check("normal map: nothing left", after_nm == before_nm, f"{before_nm} -> {after_nm}")
+    bpy.data.objects.remove(bumpy)
+    bpy.data.meshes.remove(full)
+    bpy.data.textures.remove(tx)
+
     # --- 3. rebake_atlas from a FILE source (OBJ written here)
     bpy.ops.object.select_all(action='DESELECT')
     src.select_set(True)
