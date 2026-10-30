@@ -249,3 +249,28 @@ jobs:
           TAG: ${{ github.ref_name }}
           SRC_ZIP: "3D-survey-collection-${{ github.ref_name }}.zip"
         run: python3 scripts/zenodo_publish.py
+
+  # ── tell the next link in the chain that a release is out ──────────────
+  # The chain: tool release → extension repository (blender.extendedmatrix.org)
+  # → extendedmatrix.org, which reads the version where it is published.
+  # Without the secret SITE_DISPATCH_TOKEN the step says so and does nothing:
+  # the scheduled builds downstream still pick the release up. It never fails
+  # the release. See ExtendedMatrix-site/docs/RELEASE-PROPAGATION.md.
+  notify-release:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch «tool-released» to zalmoxes-laran/ExtendedMatrix-blender-repo
+        env:
+          TOKEN: ${{ secrets.SITE_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::notice::SITE_DISPATCH_TOKEN is not set: zalmoxes-laran/ExtendedMatrix-blender-repo will see this release at its next scheduled build."
+            exit 0
+          fi
+          curl -fsS -X POST \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/zalmoxes-laran/ExtendedMatrix-blender-repo/dispatches \
+            -d '{"event_type":"tool-released","client_payload":{"repo":"${{ github.repository }}","ref":"${{ github.ref_name }}"}}' \
+            || echo "::warning::dispatch to zalmoxes-laran/ExtendedMatrix-blender-repo failed; it will rebuild on its schedule"
