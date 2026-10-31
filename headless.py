@@ -9,6 +9,8 @@ engines (Unreal, Blender) and one-atlas rebakes, written as .glb files.
                  name=None, image_format="JPEG", jpeg_quality=90,
                  island_margin=0.0, decimate_borders=True, stamp=True,
                  emit=True, normal_map=False) -> dict
+    crop_to_area(source, area, resolution=0.05, out_dir, *, name="crop",
+                 target_triangles=None, emit=True) -> dict
     rebake_atlas(source, out_path, size=None, *, max_texture_size=4096,
                  min_texture_size=256, image_format="JPEG", jpeg_quality=90,
                  island_margin=0.0, stamp=True, emit=True) -> dict
@@ -670,3 +672,119 @@ def rebake_atlas(source, out_path, size=None, *, max_texture_size=lod_plan.MAX_T
                            "gesture": stamp_bridge.KIND_EXPORT})]
 
     return _run("rebake_atlas", source, jobs_for, 3 + 5, emit, stamp, {"out_path": out_path})
+
+
+# ------------------------------------------------------------ the crop (cache)
+
+#: the share of the area's largest face a scanned surface covers in it — the
+#: same estimate as s3Dgraphy's ``resources.detail.CROP_RELIEF``
+CROP_RELIEF = 1.5
+
+
+def crop_triangles(area, resolution):
+    """Triangles of a crop of ``area`` (min xyz, max xyz) at ``resolution``
+    metres (s3Dgraphy's ``detail.crop_plan`` before its cap)."""
+    dx, dy, dz = (abs(area[3] - area[0]), abs(area[4] - area[1]), abs(area[5] - area[2]))
+    face = max(dx * dy, dx * dz, dy * dz)
+    return int(round(2 * face * CROP_RELIEF / (float(resolution) ** 2)))
+
+
+def crop_to_area(source, area, resolution=0.05, out_dir=".", *, name="crop",
+                 target_triangles=None, emit=True):
+    """The faces of ``source`` inside ``area`` (six numbers, min xyz then max
+    xyz, in WORLD space — the scene's metres), reduced to ``resolution``
+    (MICRO-BLEND-OFFICINA-2, E.D.'s D3: 5 cm by default, 1 cm on small areas
+    — the caller decides, s3Dgraphy's ``detail.crop_plan`` says when), written
+    as ``<out_dir>/<name>.gltf`` + ``.bin`` + its textures as files beside it
+    (D4). A face is kept when its centre is in the box. The materials and
+    their images are kept (the crop is a piece of the master, not a rebake).
+    NOT stamped: a crop is cache (E.D., 30 Oct), the paradata cite the
+    document. ``target_triangles``: the plan's (default: the estimate at
+    ``resolution``, never above what the box holds). Returns the
+    ``3DSC-RESULT`` dict: ``path``, ``files``, ``triangles``,
+    ``source_triangles``, ``faces_in_box``."""
+    import bmesh
+    import numpy as np
+    t0 = time.time()
+    progress = _Progress(4, emit)
+    scratch = _Scratch()
+    a = [float(v) for v in area]
+    lo = np.array([min(a[0], a[3]), min(a[1], a[4]), min(a[2], a[5])])
+    hi = np.array([max(a[0], a[3]), max(a[1], a[4]), max(a[2], a[5])])
+    out_dir = os.path.abspath(os.fspath(out_dir))
+    path = os.path.join(out_dir, f"{name}.gltf")
+    try:
+        _object_mode()
+        src, _imported = _resolve_source(source)
+        src_tris = _triangles(src.data)
+        progress.step("load", source=src.name, triangles=src_tris)
+        col = _tmp_collection()
+        obj = src.copy()
+        obj.data = src.data.copy()
+        obj.name = name
+        obj.animation_data_clear()
+        for c in list(obj.users_collection):
+            c.objects.unlink(obj)
+        col.objects.link(obj)
+        obj.modifiers.clear()
+        mesh = obj.data
+        n = len(mesh.polygons)
+        centers = np.empty(n * 3, dtype=np.float64)
+        mesh.polygons.foreach_get("center", centers)
+        centers = centers.reshape(n, 3)
+        m = np.array(obj.matrix_world)
+        world = centers @ m[:3, :3].T + m[:3, 3]
+        inside = np.all((world >= lo) & (world <= hi), axis=1)
+        kept = int(inside.sum())
+        if kept == 0:
+            raise ValueError("no face of the source is inside the area")
+        bm = bmesh.new()
+        bm.from_mesh(mesh)
+        bm.faces.ensure_lookup_table()
+        out = [f for f, keep in zip(bm.faces, inside.tolist()) if not keep]
+        bmesh.ops.delete(bm, geom=out, context='FACES')
+        bm.to_mesh(mesh)
+        bm.free()
+        mesh.update()
+        progress.step("crop", faces=kept)
+        have = _triangles(mesh)
+        want = int(target_triangles) if target_triangles else crop_triangles(a, resolution)
+        if want < have:
+            _decimate(obj, want / float(have), want, True)
+        tris = _triangles(obj.data)
+        progress.step("decimate", triangles=tris, target=want)
+        os.makedirs(out_dir, exist_ok=True)
+        _select_only([obj], obj)
+        kw = _gltf_kwargs(path, "AUTO", 90)
+        kw["export_format"] = 'GLTF_SEPARATE'
+        kw["export_image_format"] = 'AUTO'
+        try:
+            names = {p.identifier for p in bpy.ops.export_scene.gltf.get_rna_type().properties}
+        except Exception:                           # noqa: BLE001
+            names = set(kw)
+        res = bpy.ops.export_scene.gltf(**{k: v for k, v in kw.items() if k in names})
+        if 'FINISHED' not in res or not os.path.isfile(path):
+            raise RuntimeError(f"glTF export failed: {path}")
+        with open(path, "r", encoding="utf-8") as fh:
+            js = json.load(fh)
+        files = [os.path.basename(path)] + [b.get("uri") for b in js.get("buffers") or [] if b.get("uri")] \
+            + [im.get("uri") for im in js.get("images") or [] if im.get("uri")]
+        progress.step("export", path=path)
+        result = {"ok": True, "api": API_VERSION, "op": "crop_to_area",
+                  "source": os.fspath(source) if not isinstance(source, bpy.types.Object) else source.name,
+                  "area": [float(v) for v in lo] + [float(v) for v in hi], "resolution": float(resolution),
+                  "path": path, "files": files, "triangles": tris, "target_triangles": want,
+                  "source_triangles": src_tris, "faces_in_box": kept, "stamp": "cache",
+                  "seconds": round(time.time() - t0, 2)}
+        _line(RESULT_PREFIX, result, emit)
+        return result
+    except Exception as exc:
+        _line(RESULT_PREFIX, {"ok": False, "api": API_VERSION, "op": "crop_to_area",
+                              "error": f"{type(exc).__name__}: {exc}", "stage": progress.stage}, emit)
+        raise
+    finally:
+        try:
+            _object_mode()
+        except Exception:                           # noqa: BLE001
+            pass
+        scratch.cleanup()
