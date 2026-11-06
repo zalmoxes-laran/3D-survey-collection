@@ -19,6 +19,8 @@ from .import_Agisoft_xml import *
 
 from .functions import *
 
+from . import master_mark
+
 # import points section ----------------------------------------------------------
 
 class OBJECT_OT_IMPORTPOINTS(Operator):
@@ -311,6 +313,7 @@ class ImportMultipleObjs(Operator, ImportHelper):
         # get the folder
         folder = (os.path.dirname(self.filepath))
 
+        unstamped = []
         # iterate through the selected files
         for i in self.files:
         
@@ -334,7 +337,17 @@ class ImportMultipleObjs(Operator, ImportHelper):
                 imported_objects = [obj for obj in context.selected_objects if obj.type == 'MESH']
                 for obj in imported_objects:
                         obj.display_type = 'BOUNDS'
+                        # MICRO-TIMBRA-MASTER · the file each object came from:
+                        # the panel says when it is a master not stamped
+                        obj[master_mark.SOURCE_PROP] = path_to_file
+                m = master_mark.mark(path_to_file)
+                if m and m["state"] == "unstamped":
+                        unstamped.append(i.name)
 
+        if unstamped:
+                self.report({'WARNING'}, f"{len(unstamped)} master(s) not stamped: "
+                            + ", ".join(unstamped[:4]) + (" …" if len(unstamped) > 4 else "")
+                            + " — stamp them in 3DSC ▸ Importers")
         return {'FINISHED'}
 
 # import agisoft xml section ----------------------------------------------------------
@@ -466,6 +479,25 @@ class VIEW3D_PT_Import_ToolBar(Panel):
         )
         op.url = "3DSCstructure.html#importers"
 
+        # MICRO-TIMBRA-MASTER · the masters the selection came from, not stamped:
+        # seen, with the gesture that stamps them
+        marks = {}
+        for obj in context.selected_objects:
+            src = obj.get(master_mark.SOURCE_PROP) if hasattr(obj, "get") else None
+            if src and src not in marks:
+                marks[src] = master_mark.mark(src)
+        todo = [(p, m) for p, m in marks.items() if m and m["state"] == "unstamped"]
+        if todo:
+            box = layout.box()
+            for p, m in todo[:6]:
+                row = box.row(align=True)
+                row.alert = True
+                row.label(text=f"{os.path.basename(p)}: {m['label']}", icon='ERROR')
+                op = row.operator("e3dsc.stamp_master", text="Stamp", icon='FILE_TICK')
+                op.filepath = p
+            if len(todo) > 6:
+                box.label(text=f"… and {len(todo) - 6} more")
+
         if scene.e3dsc_enable_experimental:
             row = layout.row(align=True)
             row.alert = True
@@ -479,7 +511,28 @@ class VIEW3D_PT_Import_ToolBar(Panel):
             )
             op.url = "3DSCstructure.html#importers"
     
+class E3DSC_OT_stamp_master(Operator):
+    """Stamp this master file where it is (through EM Tools): it arrived without a stamp.
+    Tier master, its kind (very high resolution or complete), from nothing known"""
+    bl_idname = "e3dsc.stamp_master"
+    bl_label = "Stamp the master"
+    bl_options = {'REGISTER'}
+    filepath: StringProperty(name="File", default="")  # type: ignore
+
+    def execute(self, context):
+        from . import stamp_bridge
+        if not self.filepath or not os.path.isfile(self.filepath):
+            self.report({'WARNING'}, f"no file: {self.filepath}")
+            return {'CANCELLED'}
+        res = stamp_bridge.stamp_master(self.filepath, kind=master_mark.kind(self.filepath),
+                                        label=os.path.basename(self.filepath))
+        ok = res.get("state") in ("stamped", "revised", "unchanged")
+        self.report({'INFO' if ok else 'WARNING'}, res.get("line") or res.get("state"))
+        return {'FINISHED'} if ok else {'CANCELLED'}
+
+
 classes = [
+    E3DSC_OT_stamp_master,
     VIEW3D_PT_3DSC_Instructions,
     VIEW3D_PT_Import_ToolBar,
     OBJECT_OT_IMPORTPOINTS,

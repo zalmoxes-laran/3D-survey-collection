@@ -168,6 +168,32 @@ def stamp(path, *, objects=None, dtc_kind=KIND_EXPORT, technique="",
                 "stamp": None}
 
 
+def stamp_master(path, *, kind=None, label=None):
+    """MICRO-TIMBRA-MASTER · «Stamp the master»: a master file that arrived
+    without a stamp is stamped where it is, through EM Tools — ``tier:
+    master`` and its kind (``very_high_resolution`` | ``complete``), ``from:
+    []`` and ``how.dtc_kind: local_import`` (it came in already made: how it
+    was made is not known here and is not invented). Returns EM Tools'
+    result, ``no_emtools``, or ``old_emtools`` when its ``stamp_export``
+    cannot yet write a master. Never raises."""
+    module = emtools_birth_stamp()
+    if module is None:
+        return {"state": "no_emtools", "line": NO_EMTOOLS, "stamp_path": "", "stamp": None}
+    try:
+        how = {"dtc_kind": "local_import", "technique": "master stamped as it arrived"}
+        if hasattr(module, "blender_software"):
+            how["software"] = module.blender_software(producer(module))
+        operator = module.current_operator() if hasattr(module, "current_operator") else None
+        return module.stamp_export(path, how=how, operator=operator, label=label,
+                                   tier="master", master_kind=kind)
+    except TypeError:
+        return {"state": "old_emtools", "stamp_path": "", "stamp": None,
+                "line": "not stamped: this EM Tools cannot stamp a master yet (it comes with "
+                        "EM Tools 1.6.0-dev.55)"}
+    except Exception as exc:                        # noqa: BLE001
+        return {"state": "failed", "line": f"not stamped: {exc}", "stamp_path": "", "stamp": None}
+
+
 def report_line(results):
     """One line for the operator: EM Tools' count, or why nothing was stamped."""
     results = [r for r in results if r]
