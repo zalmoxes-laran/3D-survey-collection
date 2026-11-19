@@ -241,6 +241,12 @@ def build_stack_cache(folder, kind=None, out_dir=None, colormap=None, normalize=
     if reuse:
         old = _reusable(out_dir, key)
         if old is not None:
+            # the key holds the bytes, not the names: a file renamed or a stack
+            # moved reuses the cache, and the manifest returned says where the
+            # sources are NOW (the file on disk is not rewritten)
+            old["source_folder"] = os.path.realpath(folder)
+            for e, s in zip(old.get("slices") or [], specs):
+                e["source"] = os.path.realpath(s.path)
             old["reused"] = True
             old["timing"] = {"total": round(time.time() - t_start, 3)}
             return old

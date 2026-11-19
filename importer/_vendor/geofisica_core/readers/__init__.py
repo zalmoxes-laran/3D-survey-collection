@@ -22,9 +22,9 @@ from .points import (XYZ_EXT, XYZV_COLUMNS, axis_of, grid_points, is_points_file
 from .screenshot import (compare_extent, crop_rgba, declare_frame, frame_extent, frame_grid,
                          measure_frame, read_screenshot_slice, same_frame)
 
-#: the kinds a folder can be read as; ``scan_stack(kind="auto")`` still only
-#: chooses between the first two (as 3DSC's import_gpr.py expects until G6):
-#: :func:`guess_kind` knows them all
+#: the kinds a folder can be read as; ``scan_stack(kind="auto")`` asks
+#: :func:`guess_kind` (row G16 h: before, it chose only between the first two
+#: and read a GeoTIFF or ASCII folder as pictures)
 KINDS = ("csv_grid", "image_stack", "geotiff", "ascii_matrix", "xyzv", "xyz_lines",
          "screenshot")
 
@@ -118,7 +118,8 @@ def _scan_points(folder, kind, plane="y", columns=XYZV_COLUMNS):
 def scan_stack(folder, kind="auto"):
     """Return ``(kind, [SliceSpec, ...])`` sorted by depth.
 
-    Depth comes from the file name; for CSVs it falls back to the header's
+    ``kind="auto"`` — the reader :func:`guess_kind` names (a stack of screen
+    captures is asked for by name: it looks like pictures). Depth comes from the file name; for CSVs it falls back to the header's
     ``Depth`` field, and finally to the file's index in the sorted listing
     (thickness 0), so a badly named stack still imports in the right order.
     """
@@ -126,6 +127,10 @@ def scan_stack(folder, kind="auto"):
         return _scan_named(folder, kind)
     if kind in ("xyzv", "xyz_lines"):
         return _scan_points(folder, kind)
+    if kind == "auto":
+        guessed = guess_kind(folder)
+        if guessed in ("geotiff", "ascii_matrix", "xyzv", "xyz_lines"):
+            return scan_stack(folder, guessed)
     names = sorted(os.listdir(folder))
     csvs = [n for n in names if n.lower().endswith(CSV_EXT)]
     imgs = [n for n in names if n.lower().endswith(IMG_EXT)]
@@ -236,6 +241,42 @@ def same_values(slices):
     return out
 
 
+#: how many ``same_values`` warnings are said one by one before the rest is
+#: one sentence (row G16 d: Alcudia's 601 captures, 217 of them repeating)
+SAME_VALUES_SAID = 3
+
+
+def summarize_warnings(warnings, keep=SAME_VALUES_SAID):
+    """The warnings as a person reads them: up to ``keep`` ``same_values`` one
+    by one, the others in ONE warning (``same_values_many``: how many, EN +
+    IT, the paths in ``paths``); every other warning as it is, in its order.
+    The manifest keeps them all: this is for the sentence, not the record."""
+    warnings = list(warnings or [])
+    same = [w for w in warnings if isinstance(w, dict) and w.get("code") == "same_values"]
+    if len(same) <= keep:
+        return warnings
+    out, said = [], 0
+    for w in warnings:
+        if isinstance(w, dict) and w.get("code") == "same_values":
+            if said < keep:
+                out.append(w)
+            said += 1
+            if said == keep + 1:
+                out.append(None)                     # the summary's place
+            continue
+        out.append(w)
+    rest = same[keep:]
+    n = len(same)
+    summary = {"code": "same_values_many", "count": n, "paths": [w.get("path") for w in rest],
+               "en": "%d slices hold the same values as an earlier one (the first %d above, "
+                     "%d more): pictures repeated by the instrument, or wrong files."
+                     % (n, keep, len(rest)),
+               "it": "%d fette ripetono i valori di una fetta precedente (le prime %d qui sopra, "
+                     "altre %d): immagini ripetute dallo strumento, o file sbagliati."
+                     % (n, keep, len(rest))}
+    return [summary if w is None else w for w in out]
+
+
 def same_values_warning(path, first):
     """The ``same_values`` warning for ``path`` holding ``first``'s values (EN + IT)."""
     a = os.path.join(os.path.basename(os.path.dirname(first)), os.path.basename(first))
@@ -254,4 +295,4 @@ __all__ = ["XYZ_EXT", "XYZV_COLUMNS", "axis_of", "compare_extent", "crop_rgba", 
            "SATURATION", "geotiff_info", "guess_kind", "image_size", "is_value_raster",
            "line_from_name", "read_ascii_matrix", "read_ascii_section", "read_csv_slice",
            "read_geotiff_slice", "read_slice", "repair_chunk", "same_values", "same_values_warning",
-           "scan_stack", "values_digest"]
+           "scan_stack", "summarize_warnings", "values_digest", "SAME_VALUES_SAID"]

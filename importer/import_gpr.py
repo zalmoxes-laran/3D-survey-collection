@@ -587,7 +587,8 @@ class GPR_OT_build_stack_cache(Operator):
             wm.progress_end()
             s.progress_text = ""
         s.built_cache = opts["out_dir"] or os.path.join(core.cache_root(), m["cache_key"])
-        warn = m.get("warnings") or []
+        # many captures repeating one another are said as one sentence (row G16 d)
+        warn = core.summarize_warnings(m.get("warnings") or [])
         first = warn[0] if warn else ""
         first = first.get("en", "") if isinstance(first, dict) else str(first)
         self.report({'WARNING'} if warn else {'INFO'},
@@ -920,11 +921,17 @@ class GPR_OT_import_stack(Operator):
                         % cache)
             return {'CANCELLED'}
         if not self.situation:
+            # run without the dialog (a script): what the caller passed wins over
+            # what _assess proposes (row G16 c: a shift of 701800 became 701750)
+            passed = {k: getattr(self, k) for k in ("shift_e", "shift_n", "shift_z", "write_shift")
+                      if self.properties.is_property_set(k)}
             try:
                 self._assess(context)
             except Exception as exc:                 # noqa: BLE001
                 self.report({'ERROR'}, str(exc))
                 return {'CANCELLED'}
+            for k, v in passed.items():
+                setattr(self, k, v)
 
         if self.write_shift:
             scene.BL_x_shift = self.shift_e

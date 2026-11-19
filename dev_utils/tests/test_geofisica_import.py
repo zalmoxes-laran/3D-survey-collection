@@ -224,7 +224,9 @@ try:
     check("set_source guesses GEOTIFF", s.stack_kind == 'GEOTIFF', s.stack_kind)
     res = bpy.ops.gpr.build_stack_cache()
     check("build_stack_cache GeoTIFF", res == {'FINISHED'}, str(res))
-    op_res = bpy.ops.gpr.import_stack('EXEC_DEFAULT', shift_e=701750.0, shift_n=4234850.0,
+    # a shift passed by a script is the one written, not the one proposed (701750:
+    # row G16 c, MICRO-GEO15 asked 701800 / 4234800 and the scene got 701750)
+    op_res = bpy.ops.gpr.import_stack('EXEC_DEFAULT', shift_e=701700.0, shift_n=4234800.0,
                                       write_shift=True)
     check("import GeoTIFF stack", op_res == {'FINISHED'}, str(op_res))
     root = bpy.data.objects.get("GPR_Sector 1")
@@ -233,11 +235,12 @@ try:
     check("products, no invented depth", ids == ["gpr:Sector 1#mean_v2", "gpr:Sector 1#sqmean_v2"]
           and all("gpr_depth_top" not in o for o in obs) and all(o.location.z == 0 for o in obs),
           str(ids))
-    check("shift written, EPSG taken", abs(scene.BL_x_shift - 701750.0) < 1e-6
-          and scene.BL_epsg == "25830", "%s %s" % (scene.BL_x_shift, scene.BL_epsg))
+    check("the shift passed written, EPSG taken", abs(scene.BL_x_shift - 701700.0) < 1e-6
+          and abs(scene.BL_y_shift - 4234800.0) < 1e-6 and scene.BL_epsg == "25830",
+          "%s %s %s" % (scene.BL_x_shift, scene.BL_y_shift, scene.BL_epsg))
     check("origin kept to the millimetre on the root", root["gpr_origin_e"] == "701756.963000",
           root["gpr_origin_e"])
-    check("root at origin - shift", abs(root.location.x - 6.963) < 1e-2, "%.4f" % root.location.x)
+    check("root at origin - shift", abs(root.location.x - 56.963) < 1e-2, "%.4f" % root.location.x)
 
     # ------------------------------------------------------------ captures (new)
     print("\n== screen captures, decoded by Blender ==")
