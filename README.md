@@ -21,6 +21,29 @@ I need constant improvements and beta testing in real projects, so, developers o
 
 Ah, you can also join the **Telegram 3DSC User group**: https://t.me/UserGroup3DSC
 
+<!-- documentation-map:start -->
+## Where the documentation lives
+
+Every tool of the two families keeps its manual beside its code, and publishes it at one of the two addresses below. A manual is changed in the repository of its own tool, never here.
+
+| Tool | Code | Manual | Published at |
+| --- | --- | --- | --- |
+| **Extended Matrix** | | | |
+| Extended Matrix (the language) | [`zalmoxes-laran/ExtendedMatrix`](https://github.com/zalmoxes-laran/ExtendedMatrix) | [`zalmoxes-laran/ExtendedMatrix-doc`](https://github.com/zalmoxes-laran/ExtendedMatrix-doc) | <https://docs.extendedmatrix.org/en/1.5/> |
+| EMStudio (editor) | [`ExtendedMatrix/EMStudio`](https://github.com/ExtendedMatrix/EMStudio) | [`ExtendedMatrix/EMStudio-doc`](https://github.com/ExtendedMatrix/EMStudio-doc) | <https://docs.extendedmatrix.org/projects/emstudio-doc/en/1.6/> |
+| EM Tools (Blender add-on) | [`zalmoxes-laran/EM-blender-tools`](https://github.com/zalmoxes-laran/EM-blender-tools) | [`zalmoxes-laran/EM-blender-tools-doc`](https://github.com/zalmoxes-laran/EM-blender-tools-doc) | <https://docs.extendedmatrix.org/projects/EM-tools/en/1.5/> |
+| s3Dgraphy (library) | [`ExtendedMatrix/s3Dgraphy`](https://github.com/ExtendedMatrix/s3Dgraphy) | same repository, `docs/` | <https://docs.extendedmatrix.org/projects/s3dgraphy/en/v1.5/> |
+| 3D Survey Collection | [`zalmoxes-laran/3D-survey-collection`](https://github.com/zalmoxes-laran/3D-survey-collection) | [`zalmoxes-laran/3D-survey-collection-doc`](https://github.com/zalmoxes-laran/3D-survey-collection-doc) | <https://docs.extendedmatrix.org/projects/3DSC/en/1.7.0/> |
+| Heriverse (web runtime) | [`StratiGraph-ECCCH/Heriverse`](https://github.com/StratiGraph-ECCCH/Heriverse) | [`StratiGraph-ECCCH/Heriverse-doc`](https://github.com/StratiGraph-ECCCH/Heriverse-doc) | <https://docs.extendedmatrix.org/projects/heriverse/en/1.5/> |
+| **StratiGraph** | | | |
+| The node, and its catalogue | [`StratiGraph-ECCCH/stratigraph-server`](https://github.com/StratiGraph-ECCCH/stratigraph-server) | same repository, `docs/` | <https://docs.stratigraph-eccch.eu/projects/node/en/latest/> |
+| StratiField (field assistant) | [`StratiGraph-ECCCH/stratigraph-stratifield`](https://github.com/StratiGraph-ECCCH/stratigraph-stratifield) | same repository, `docs/` | <https://docs.stratigraph-eccch.eu/projects/field/en/latest/> |
+| Recording templates | [`StratiGraph-ECCCH/stratigraph-templates`](https://github.com/StratiGraph-ECCCH/stratigraph-templates) | same repository, `docs/` | <https://docs.stratigraph-eccch.eu/projects/templates/en/v0.1.0/> |
+| The welcome page of the manuals | — | [`StratiGraph-ECCCH/stratigraph-docs`](https://github.com/StratiGraph-ECCCH/stratigraph-docs) | <https://docs.stratigraph-eccch.eu> |
+| The StratiGraph Academy | — | [`StratiGraph-ECCCH/stratigraph-academy`](https://github.com/StratiGraph-ECCCH/stratigraph-academy) | <https://academy.stratigraph-eccch.eu> |
+
+<!-- documentation-map:end -->
+
 ## Documentation
 
 Thanks to Simone Berto now a comprehensive user manual is available at https://docs.extendedmatrix.org/projects/3DSC/en/latest/index.html
