@@ -1,0 +1,7 @@
+{
+  "repo": "em-profiles",
+  "path": "profiles/geofisica/code/geofisica_core",
+  "commit": "68b849669ca5f457bb6a2ae54ce4beae19a5c66d",
+  "tree_digest": "sha256:8eff05147e3a45a777e54f756a2dbdcd0bf8e77684a0aa0176916ad3748e4ca9",
+  "note": "A copy made by scripts/vendor_geofisica_core.py: do not edit; the one source is em-profiles."
+}

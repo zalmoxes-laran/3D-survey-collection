@@ -82,3 +82,25 @@ BLENDER_USER_RESOURCES=/tmp/<profile> "/Applications/Blender 520.app/Contents/Ma
 `HEADLESS_SOURCE=<mesh file>` (and `HEADLESS_OUT`, `HEADLESS_LEVELS`) runs
 only `make_lod_set` on that file and prints the result. The texture plan
 itself has plain pytest tests: `pytest tests` (`tests/test_lod_plan.py`).
+
+# Geophysics import test
+
+`test_geofisica_import.py` loads `importer/import_gpr.py` and the geophysics
+core embedded in `importer/_vendor` (em-profiles' `geofisica_core` at the
+commit of `scripts/geofisica_core.lock.json`; row G6 of the geophysics plan)
+without the rest of the add-on, and imports synthetic stacks: CSV (3DSC's own
+cache, draped on a declared ground), ASCII matrices with an upright section
+and a declared value scale, GeoTIFF rasters (EPSG:25830, the shift), screen
+captures decoded by Blender. Every PNG's stamp names 3DSC and the core with
+its em-profiles commit. `GEO_BASILICA=<sezioni-2D folder>` adds the real
+Basilica Iulia files (read only; the cache in a temporary folder).
+
+```bash
+"/Applications/Blender 520.app/Contents/MacOS/Blender" -b --factory-startup \
+    --python-exit-code 1 --python dev_utils/tests/test_geofisica_import.py
+```
+
+The embedded copy itself: `pytest tests` (`tests/test_geofisica_vendor.py`)
+and `python scripts/vendor_geofisica_core.py check`; to take a newer core,
+change it in em-profiles, commit, then
+`python scripts/vendor_geofisica_core.py update`.

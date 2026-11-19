@@ -84,6 +84,11 @@ jobs:
           echo "Downloaded wheels:"
           ls -la wheels/$CP_TAG/
 
+      - name: Check the embedded geophysics core
+        # importer/_vendor/geofisica_core is em-profiles' core at the locked
+        # commit (row G6 of the geophysics plan); a hand-edited copy fails here
+        run: python scripts/vendor_geofisica_core.py check --em-profiles none
+
       - name: Generate platform-specific manifest
         run: |
           VERSION="${{ steps.version.outputs.version }}"

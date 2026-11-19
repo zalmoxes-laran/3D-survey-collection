@@ -86,6 +86,17 @@ def write_build_info(root_dir: Path, build_dir: Path) -> None:
     print(f"build_info.json: {info}")
 
 
+def check_embedded_core(root_dir: Path) -> None:
+    """The geophysics core embedded in ``importer/_vendor`` is the lock's copy
+    of its one source (em-profiles; row G6 of the geophysics plan): a build
+    never ships a copy edited by hand."""
+    import vendor_geofisica_core as vendor
+    problems = vendor.check(root_dir.parent / vendor.REPO_NAME)
+    if problems:
+        raise ValueError("embedded geofisica_core: " + "; ".join(problems))
+    print("geofisica_core: embedded copy = lock")
+
+
 def build_extension(mode: str = 'dev', platform: str = None, python_version: str = '3.11'):
     root_dir = Path(__file__).parent.parent
     build_dir = root_dir / "build"
@@ -104,6 +115,7 @@ def build_extension(mode: str = 'dev', platform: str = None, python_version: str
     if '{VERSION}' in content or 'id =' not in content:
         raise ValueError("blender_manifest.toml not generated correctly")
 
+    check_embedded_core(root_dir)
     clean_build_directory(build_dir)
     copy_source_files(root_dir, build_dir)
     write_build_info(root_dir, build_dir)

@@ -16,6 +16,18 @@ The intermediate form is a PNG stack plus a JSON manifest, which is also the
 form the UA Ilici GEORRADAR sectors already ship in — so the CSV reader and
 the image reader converge on one representation.
 
+One source
+----------
+The reading is not 3DSC's: it is the geophysics package's core
+(``_vendor/geofisica_core``, embedded at the em-profiles commit fixed in
+``scripts/geofisica_core.lock.json``; row G6 of the geophysics plan). Besides
+the CSV grids and the pictures of before, the core reads GeoTIFF rasters
+(UA Ilici sectors), headerless ASCII matrices and vertical sections (the
+Basilica Iulia ERT), point volumes and ``line N`` files, and stacks of screen
+captures (UA Ilici Alcudia); those are cached by the core in
+``plugins-data/geofisica/cache/`` — never beside the slices — every PNG and
+manifest stamped. The panel's glue is ``gpr_scene.py`` (no bpy).
+
 Semantic boundary
 -----------------
 This importer stops at the **documentary** level. It creates georeferenced
@@ -41,7 +53,8 @@ from bpy.props import (BoolProperty, EnumProperty, FloatProperty, IntProperty,
 from bpy.types import PropertyGroup
 from bpy_extras.io_utils import ImportHelper
 
-from . import gpr_core as core
+from ._vendor import geofisica_core as core
+from . import gpr_scene
 
 import logging
 log = logging.getLogger(__name__)
@@ -66,6 +79,13 @@ def _as_float(text, default=0.0):
         return float(str(text).strip().replace(",", "."))
     except (TypeError, ValueError):
         return default
+
+
+def _software():
+    """3DSC's line in the stamps the core writes (the core adds its own,
+    with the em-profiles commit of the embedded copy)."""
+    return [gpr_scene.software_line(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))))]
 
 
 def _ground_poll(self, ob):
@@ -126,8 +146,72 @@ class GPRSettings(PropertyGroup):
         items=[('CSV', "CSV grids", "One CSV per depth slice, a complete "
                                     "regular grid (CS07 CSIC-Tivoli)"),
                ('IMAGES', "Images", "Already rasterised slices, depth in the "
-                                    "file name (UA Ilici GEORRADAR)")],
+                                    "file name, drawn as they are"),
+               ('GEOTIFF', "GeoTIFF", "Rasters of values, one band, "
+                                      "georeferenced (UA Ilici sectors)"),
+               ('ASCII', "ASCII matrices", "Headerless matrices: slices with "
+                                           "the depth in the name, sections "
+                                           "VERT* (Basilica Iulia ERT)"),
+               ('POINTS', "Points", "X Y Z V volumes (one plane per level) "
+                                    "or 'line N' section files"),
+               ('SCREENSHOT', "Screen captures", "Captures of the GPR "
+                                                 "program, placed by their "
+                                                 "plot frame (UA Ilici "
+                                                 "Alcudia)")],
         default='CSV')  # type: ignore
+    method: EnumProperty(
+        name="Method",
+        items=[('gpr', "GPR", "Ground-penetrating radar"),
+               ('ert', "ERT", "Electrical resistivity tomography"),
+               ('mag', "Magnetometry", "Magnetic survey")],
+        default='gpr')  # type: ignore
+    quantity: StringProperty(
+        name="Quantity", default="",
+        description="What the values measure. Empty = the method's own "
+                    "(amplitude, resistivity, magnetic field)")  # type: ignore
+    unit: StringProperty(name="Unit", default="")  # type: ignore
+    use_value_scale: BoolProperty(
+        name="Declare a value scale", default=False,
+        description="The files hold colour indices, not the quantity (the "
+                    "Basilica ERT: 1-255 for 0-3500 ohm.m read off the "
+                    "report's colour bar). Written as declared, low "
+                    "confidence, never as a measure")  # type: ignore
+    vs_from: StringProperty(name="From", default="1, 255")  # type: ignore
+    vs_to: StringProperty(name="To", default="0, 3500")  # type: ignore
+    vs_unit: StringProperty(name="Unit", default="ohm.m")  # type: ignore
+    vs_source: StringProperty(
+        name="Source", default="",
+        description="Where the scale was read (a figure, a page)")  # type: ignore
+    extent: StringProperty(
+        name="Extent", default="",
+        description="Width x height in metres of a matrix slice, when the "
+                    "files do not say it (Basilica: 92 x 50)")  # type: ignore
+    sections: StringProperty(
+        name="Sections", default="",
+        description="Length x depth of each vertical section, "
+                    "'VERT1=50x8; VERT2=92x9'")  # type: ignore
+    section_size: StringProperty(
+        name="Other sections", default="",
+        description="Length x depth of a section not in the list")  # type: ignore
+    frame_x: StringProperty(
+        name="Frame X", default="",
+        description="The values of the first and last tick on the x axis "
+                    "of a capture (Alcudia: -50, 25)")  # type: ignore
+    frame_y: StringProperty(
+        name="Frame Y", default="",
+        description="The values of the first and last tick on the y axis "
+                    "(Alcudia: -22, 37)")  # type: ignore
+    frame_px: StringProperty(
+        name="Frame px", default="",
+        description="The plot box of the captures in pixels (left, top, "
+                    "right, bottom). Empty = measured on the first capture "
+                    "by its axes and ticks")  # type: ignore
+    epsg: StringProperty(
+        name="EPSG", default="",
+        description="The CRS of the typed origin, for files that say none")  # type: ignore
+    built_cache: StringProperty(
+        name="Built cache", default="",
+        description="Where the core cached the last stack built")  # type: ignore
     img_cell_size: FloatProperty(
         name="Cell size", default=0.05, min=1e-4, precision=4,
         description="Pixel size in metres, used when no world file sits "
@@ -143,7 +227,14 @@ class GPRSettings(PropertyGroup):
         name="Colormap",
         items=[('GRAY', "Grayscale", "High amplitude = white"),
                ('GRAY_INV', "Grayscale inverted", "High amplitude = black"),
-               ('VIRIDIS', "Viridis", "Perceptually uniform colour ramp")],
+               ('VIRIDIS', "Viridis", "Perceptually uniform colour ramp"),
+               ('AUTO', "Method's ramp", "The geophysics package's ramp "
+                                         "for the method: hot for GPR, jet "
+                                         "for ERT, grey for magnetometry"),
+               ('hot', "Hot", "The package's ramp for amplitude"),
+               ('jet', "Jet", "The package's ramp for resistivity"),
+               ('viridis', "Viridis (package)", "The package's 5-stop ramp"),
+               ('grigio', "Grey (package)", "The package's grey ramp")],
         default='GRAY')  # type: ignore
     normalize: EnumProperty(
         name="Normalise",
@@ -151,8 +242,12 @@ class GPRSettings(PropertyGroup):
                                         "stay comparable with each other"),
                ('SLICE', "Per slice", "Each slice stretched to its own range: "
                                       "shows faint deep anomalies but "
-                                      "misrepresents relative amplitude")],
+                                      "misrepresents relative amplitude"),
+               ('FIXED', "Fixed range", "The range typed below (in the "
+                                        "declared unit): the report's whole "
+                                        "colour bar")],
         default='STACK')  # type: ignore
+    value_range: StringProperty(name="Range", default="")  # type: ignore
     clip_lo: FloatProperty(name="Clip lo %", default=2.0, min=0.0, max=49.0)  # type: ignore
     clip_hi: FloatProperty(name="Clip hi %", default=98.0, min=51.0, max=100.0)  # type: ignore
     limit: IntProperty(name="Max slices", default=0, min=0,
@@ -239,10 +334,16 @@ def _active_stack(context):
 
 
 def _cache_dir(settings):
-    src = bpy.path.abspath(settings.source_dir)
-    if settings.cache_dir:
-        return bpy.path.abspath(settings.cache_dir)
-    return os.path.join(src, "_3dsc_gpr_cache")
+    return gpr_scene.cache_dir(
+        settings.stack_kind, bpy.path.abspath(settings.source_dir),
+        bpy.path.abspath(settings.cache_dir) if settings.cache_dir else "",
+        settings.built_cache)
+
+
+def _colormap(settings):
+    if settings.colormap == 'AUTO':
+        return core.DEFAULT_RAMP.get(settings.method, "grigio")
+    return settings.colormap
 
 
 # --------------------------------------------------------------------------
@@ -272,9 +373,14 @@ class GPR_OT_build_cache(Operator):
             self.report({'ERROR'}, "Slice folder does not exist: %s" % src)
             return {'CANCELLED'}
         try:
+            if s.normalize == 'FIXED':
+                raise ValueError("A fixed range is for the other kinds: "
+                                 "choose Whole stack or Per slice")
             self._iter = core.build_cache_steps(
-                src, _cache_dir(s), colormap=s.colormap, normalize=s.normalize,
-                clip_lo=s.clip_lo, clip_hi=s.clip_hi, limit=s.limit)
+                src, _cache_dir(s), colormap=_colormap(s), normalize=s.normalize,
+                clip_lo=s.clip_lo, clip_hi=s.clip_hi, limit=s.limit,
+                method=s.method, quantity=s.quantity or None,
+                unit=s.unit or None, software=_software())
         except Exception as exc:                     # noqa: BLE001
             self.report({'ERROR'}, str(exc))
             return {'CANCELLED'}
@@ -370,7 +476,9 @@ class GPR_OT_build_image_manifest(Operator):
         try:
             m = core.build_image_manifest(
                 src, _cache_dir(s), x_step=s.img_cell_size,
-                y_step=s.img_cell_size, limit=s.limit)
+                y_step=s.img_cell_size, limit=s.limit, method=s.method,
+                quantity=s.quantity or None, unit=s.unit or None,
+                software=_software())
         except Exception as exc:                     # noqa: BLE001
             self.report({'ERROR'}, str(exc))
             return {'CANCELLED'}
@@ -378,6 +486,115 @@ class GPR_OT_build_image_manifest(Operator):
         self.report({'INFO'}, "%d image slices, %dx%d px @ %.3f m%s"
                     % (len(m["slices"]), g["nx"], g["ny"], g["x_step"],
                        ", world file" if m.get("world_file") else ""))
+        return {'FINISHED'}
+
+
+def _decode_capture(path):
+    """The host's decoder the core asks for: a capture as (h, w, 3) uint8,
+    row 0 at the top, through Blender's own image loader (no Pillow)."""
+    import numpy as np
+    img = bpy.data.images.load(path, check_existing=False)
+    try:
+        w, h = img.size
+        px = np.empty(w * h * img.channels, dtype=np.float32)
+        img.pixels.foreach_get(px)
+        return gpr_scene.rgb_from_pixels(px, w, h)
+    finally:
+        bpy.data.images.remove(img)
+
+
+def _stack_options(s, src, kind):
+    """The core's ``build_stack_cache`` arguments from the panel."""
+    declared, georef = None, None
+    if kind == "ascii_matrix":
+        declared = gpr_scene.declared(
+            kind, extent=gpr_scene.parse_pair(s.extent),
+            sections=gpr_scene.parse_sections(s.sections),
+            section_default=gpr_scene.parse_pair(s.section_size))
+    elif kind == "screenshot":
+        x_range = gpr_scene.parse_pair(s.frame_x)
+        y_range = gpr_scene.parse_pair(s.frame_y)
+        if not (x_range and y_range):
+            raise ValueError("Type the values of the first and last tick on "
+                             "both axes of the captures (Frame X, Frame Y)")
+        px = gpr_scene.parse_numbers(s.frame_px, 4)
+        if px:
+            frame = core.declare_frame(px, x_range, y_range)
+        else:
+            _kind, specs = core.scan_stack(src, kind="screenshot")
+            if not specs:
+                raise ValueError("No captures in %s" % src)
+            m = core.measure_frame(_decode_capture(specs[0].path), x_range, y_range)
+            frame = core.declare_frame(m["px"], x_range, y_range, m.get("image_size"))
+            s.frame_px = "%d, %d, %d, %d" % tuple(frame["px"])
+        declared = gpr_scene.declared(kind, frame=frame)
+    if kind != "geotiff":
+        georef = gpr_scene.typed_georef(_as_float(s.origin_e), _as_float(s.origin_n),
+                                        s.epsg, s.rotation_deg)
+    value_range = gpr_scene.parse_pair(s.value_range) if s.normalize == 'FIXED' else None
+    return dict(
+        kind=kind,
+        out_dir=bpy.path.abspath(s.cache_dir) if s.cache_dir else None,
+        colormap=_colormap(s), normalize=s.normalize, clip_lo=s.clip_lo,
+        clip_hi=s.clip_hi, value_range=value_range,
+        value_scale=gpr_scene.value_scale(
+            s.use_value_scale, gpr_scene.parse_pair(s.vs_from) or (0, 0),
+            gpr_scene.parse_pair(s.vs_to) or (0, 0), s.vs_unit, s.vs_source),
+        declared=declared, georef=georef,
+        decode=_decode_capture if kind == "screenshot" else None,
+        method=s.method, quantity=s.quantity or None, unit=s.unit or None,
+        limit=s.limit, software=_software())
+
+
+class GPR_OT_build_stack_cache(Operator):
+    """Read the stack with the geophysics core and cache it as PNGs + manifest"""
+    bl_idname = "gpr.build_stack_cache"
+    bl_label = "Build raster cache"
+    bl_options = {"REGISTER"}
+
+    @classmethod
+    def poll(cls, context):
+        s = context.scene.gpr_settings
+        return s.stack_kind not in gpr_scene.LEGACY_KINDS and bool(s.source_dir)
+
+    def execute(self, context):
+        s = context.scene.gpr_settings
+        src = bpy.path.abspath(s.source_dir)
+        if not os.path.isdir(src):
+            self.report({'ERROR'}, "Slice folder does not exist: %s" % src)
+            return {'CANCELLED'}
+        kind = gpr_scene.CORE_KIND[s.stack_kind]
+        if kind is None:
+            kind = core.guess_kind(src)
+            if kind not in ("xyzv", "xyz_lines"):
+                self.report({'ERROR'}, "No point volume or 'line N' file in %s" % src)
+                return {'CANCELLED'}
+        wm = context.window_manager
+
+        def progress(i, n, name):
+            if i == 0:
+                wm.progress_begin(0, n)
+            wm.progress_update(i)
+            s.progress_text = "slice %d/%d  %s" % (i + 1, n, name)
+
+        try:
+            opts = _stack_options(s, src, kind)
+            m = core.build_stack_cache(src, progress=progress, **opts)
+        except Exception as exc:                     # noqa: BLE001 — EN of the core's errors
+            self.report({'ERROR'}, str(getattr(exc, "en", "") or exc))
+            return {'CANCELLED'}
+        finally:
+            wm.progress_end()
+            s.progress_text = ""
+        s.built_cache = opts["out_dir"] or os.path.join(core.cache_root(), m["cache_key"])
+        warn = m.get("warnings") or []
+        first = warn[0] if warn else ""
+        first = first.get("en", "") if isinstance(first, dict) else str(first)
+        self.report({'WARNING'} if warn else {'INFO'},
+                    "%s: %d slices %s in %.1f s%s" % (
+                        kind, len(m["slices"]), "reused" if m.get("reused") else "cached",
+                        (m.get("timing") or {}).get("total", 0.0),
+                        ", %d warning(s): %s" % (len(warn), first) if warn else ""))
         return {'FINISHED'}
 
 
@@ -538,6 +755,24 @@ def _build_geometry_drape(context, name, root, ground, g, max_faces):
     out.calc_loop_triangles()
     return out, {"mode": "GEOMETRY", "faces": len(out.loop_triangles),
                  "misses": 0, "source_faces": n_src}
+
+
+def _build_plane_mesh(name, g, orientation="horizontal"):
+    """One quad for a slice with a grid of its own, lying (horizontal) or
+    standing on its line (vertical: x along the line, z the height above
+    ground); the PNG's row 0 is the grid's y_min, so the UV are the corners."""
+    old = bpy.data.meshes.get(name)
+    if old is not None and old.users == 0:
+        bpy.data.meshes.remove(old)
+    me = bpy.data.meshes.new(name)
+    me.from_pydata(gpr_scene.quad(g, orientation), [], [(0, 1, 2, 3)])
+    me.update()
+    uvl = me.uv_layers.new(name="UVMap")
+    for li, uv in zip(me.polygons[0].loop_indices,
+                      ((0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0))):
+        uvl.data[li].uv = uv
+    me.materials.append(None)
+    return me
 
 
 def _build_drape(context, name, root, settings, g):
@@ -714,12 +949,14 @@ class GPR_OT_import_stack(Operator):
         sz = scene.BL_z_shift if s.use_shift else 0.0
         ox = float(origin_e) - float(sx)
         oy = float(origin_n) - float(sy)
-        theta = math.radians(s.rotation_deg)
+        rotation = gpr_scene.stack_rotation(s.rotation_deg, geo)
+        theta = math.radians(rotation)
         draping = (s.drape_mode != 'FLAT' and s.ground_object is not None)
 
         stack_name = os.path.basename(os.path.normpath(
             bpy.path.abspath(s.source_dir))) or "GPR"
-        coll_name = "GPR_%s" % stack_name
+        method_word = ((manifest.get("stack") or {}).get("method") or s.method).upper()
+        coll_name = "%s_%s" % (method_word, stack_name)
         coll = bpy.data.collections.get(coll_name)
         if coll is None:
             coll = bpy.data.collections.new(coll_name)
@@ -765,7 +1002,16 @@ class GPR_OT_import_stack(Operator):
         root["gpr_origin_e"] = "%.6f" % float(origin_e)
         root["gpr_origin_n"] = "%.6f" % float(origin_n)
         root["gpr_georef_source"] = geo.get("source", "typed by hand")
-        root["gpr_rotation_deg"] = s.rotation_deg
+        root["gpr_rotation_deg"] = rotation
+        stack_info = manifest.get("stack") or {}
+        root["geo_method"] = stack_info.get("method", s.method)
+        root["geo_kind"] = manifest.get("kind", "")
+        if stack_info.get("quantity"):
+            root["geo_quantity"] = stack_info["quantity"]
+        if stack_info.get("unit"):
+            root["geo_unit"] = stack_info["unit"]
+        if stack_info.get("value_scale"):
+            root["geo_value_scale"] = json.dumps(stack_info["value_scale"])
         root["gpr_shift_applied"] = (sx, sy, sz)
         root["gpr_cell_size"] = (g["x_step"], g["y_step"])
         root["gpr_grid"] = (g["nx"], g["ny"])
@@ -779,7 +1025,9 @@ class GPR_OT_import_stack(Operator):
         root["emwgeo_version"] = "0"
         root["em_interpretation_target"] = "USD"
 
-        made = 0
+        made = own = 0
+        method = root["geo_method"]
+        head_geo = manifest.get("georef")
         for entry in manifest["slices"]:
             ref = entry["raster"]
             img_path = ref if os.path.isabs(ref) else os.path.join(cache, ref)
@@ -787,16 +1035,25 @@ class GPR_OT_import_stack(Operator):
                 log.warning("missing raster %s", img_path)
                 continue
             img = bpy.data.images.load(img_path, check_existing=True)
-            name = "%s_d%06.3f" % (coll_name, entry["depth_top"])
+            name = gpr_scene.slice_object_name(coll_name, entry)
+            lay = gpr_scene.slice_layout(entry, g, head_geo)
+            # one shared mesh where the slice is the stack's grid; a plane of
+            # its own where it is not (each Basilica file has its own grid, a
+            # section stands upright on its line)
+            if lay["shared"]:
+                mesh = drape_mesh
+            else:
+                mesh = _build_plane_mesh("%s_plane" % name, lay["grid"],
+                                         lay["orientation"])
+                own += 1
             ob = bpy.data.objects.get(name)
             if ob is None:
-                ob = bpy.data.objects.new(name, drape_mesh)
+                ob = bpy.data.objects.new(name, mesh)
                 coll.objects.link(ob)
             else:
-                ob.data = drape_mesh
+                ob.data = mesh
             ob.parent = root
-            ob.location = (0.0, 0.0,
-                           -0.5 * (entry["depth_top"] + entry["depth_bottom"]))
+            ob.location = (lay["offset"][0], lay["offset"][1], lay["z"])
             # material on the OBJECT, not on the shared mesh
             if ob.material_slots:
                 ob.material_slots[0].link = 'OBJECT'
@@ -805,19 +1062,33 @@ class GPR_OT_import_stack(Operator):
             ob[SLICE_IDX_PROP] = entry["index"]
             # one slice = one document: the identity lives on the slice, not
             # on the stack, because that is the grain at which extraction
-            # happens (E.D., 2026-09-21)
-            ob["em_document_id"] = entry.get(
-                "document_id",
-                "gpr:%s#d%.3f-%.3fm" % (stack_name, entry["depth_top"],
-                                        entry["depth_bottom"]))
-            ob["em_document_kind"] = "gpr_time_slice"
-            ob["gpr_depth_top"] = entry["depth_top"]
-            ob["gpr_depth_bottom"] = entry["depth_bottom"]
+            # happens (E.D., 2026-09-21); the core's identity
+            # (gpr:/ert:/mag:<stack>#d…m, #s<line>, #<product>)
+            ob["em_document_id"] = entry.get("document_id") or entry.get("geo_id") or name
+            ob["em_document_kind"] = gpr_scene.document_kind(method, lay["orientation"])
+            ob["geo_orientation"] = lay["orientation"]
+            for key in ("line", "product"):
+                if entry.get(key):
+                    ob["geo_%s" % key] = str(entry[key])
+            if lay["depth_known"]:
+                ob["gpr_depth_top"] = entry["depth_top"]
+                ob["gpr_depth_bottom"] = entry["depth_bottom"]
             ob["gpr_amplitude_range"] = (entry["vmin"], entry["vmax"])
             ob["gpr_valid_cells"] = entry["valid_cells"]
             ob["gpr_source_file"] = entry["source"]
+            if entry.get("stamp"):
+                ob["geo_stamp"] = os.path.join(cache, entry["stamp"])
             ob[STACK_ID_PROP] = coll_name
             made += 1
+        if own and draping:
+            self.report({'WARNING'},
+                        "%d slice(s) with a grid of their own or upright are "
+                        "flat planes, not draped" % own)
+        if any(e.get("orientation") == "vertical" for e in manifest["slices"]):
+            self.report({'WARNING'},
+                        "The files do not say where the sections run: they "
+                        "stand along X from the stack's origin; move each "
+                        "onto its line")
 
         s.active_stack = coll_name
         s.slice_index = min(s.slice_index, max(0, made - 1))
@@ -828,8 +1099,8 @@ class GPR_OT_import_stack(Operator):
                         "the texture memory bounded" % made)
         _update_visible_slice(s, context)
 
-        msg = "GPR: %d slices, %s drape (%d faces, one shared mesh)" % (
-            made, drape_info["mode"].lower(), drape_info["faces"])
+        msg = "%s: %d slices, %s drape (%d faces, one shared mesh)" % (
+            method_word, made, drape_info["mode"].lower(), drape_info["faces"])
         if drape_info.get("misses"):
             msg += ", %d grid points off the ground" % drape_info["misses"]
         if self.situation == 'USE_SCENE':
@@ -856,12 +1127,25 @@ class GPR_OT_set_source(Operator, ImportHelper):
                                 options={'HIDDEN'})  # type: ignore
 
     def execute(self, context):
-        context.scene.gpr_settings.source_dir = self.directory
-        kind, specs = core.scan_stack(self.directory)
+        s = context.scene.gpr_settings
+        s.source_dir = self.directory
+        s.built_cache = ""
+        guessed = core.guess_kind(self.directory)
+        if guessed in gpr_scene.PANEL_KIND and not (
+                s.stack_kind == 'SCREENSHOT' and guessed == "image_stack"):
+            s.stack_kind = gpr_scene.PANEL_KIND[guessed]
+        kind = gpr_scene.CORE_KIND[s.stack_kind] or guessed
+        try:
+            kind, specs = core.scan_stack(self.directory, kind=kind or "auto")
+        except Exception as exc:                     # noqa: BLE001
+            self.report({'ERROR'}, str(exc))
+            return {'FINISHED'}
+        depths = [x for sp in specs for x in (sp.depth_top, sp.depth_bottom)
+                  if x is not None]
         if specs:
-            self.report({'INFO'}, "%d %s slices, %.2f–%.2f m"
-                        % (len(specs), kind, specs[0].depth_top,
-                           specs[-1].depth_bottom))
+            self.report({'INFO'}, "%d %s slices%s" % (
+                len(specs), kind, ", %.2f–%.2f m" % (min(depths), max(depths))
+                if depths else ", depth not in the names"))
         else:
             self.report({'WARNING'}, "No slices found in that folder")
         return {'FINISHED'}
@@ -915,8 +1199,9 @@ class GPR_OT_tag_anomaly(Operator):
         read.sort(key=lambda o: o[SLICE_IDX_PROP])
 
         doc_ids = [o.get("em_document_id", o.name) for o in read]
-        tops = [o["gpr_depth_top"] for o in read]
-        bots = [o["gpr_depth_bottom"] for o in read]
+        tops = [o["gpr_depth_top"] for o in read if "gpr_depth_top" in o]
+        bots = [o["gpr_depth_bottom"] for o in read if "gpr_depth_bottom" in o]
+        span = (min(tops), max(bots)) if tops and bots else None
 
         n = 0
         for ob in context.selected_objects:
@@ -928,15 +1213,17 @@ class GPR_OT_tag_anomaly(Operator):
             ob["em_document_count"] = len(doc_ids)
             ob["em_extraction"] = ("combiner" if len(doc_ids) > 1
                                    else "extractor")
-            ob["em_read_depth_span"] = (min(tops), max(bots))
+            if span:
+                ob["em_read_depth_span"] = span
             ob["em_acquisition"] = root.name
             ob["em_source_manifest"] = root.get("gpr_manifest", "")
             ob["em_source_crs"] = root.get("gpr_crs", "")
             ob["emwgeo_version"] = "0"
             ob["em_note"] = (
-                "Read off %d GPR time-slice document(s), %.2f-%.2f m; the "
+                "Read off %d geophysical slice document(s)%s; the "
                 "extraction(s) and the USD are the interpreter's to declare "
-                "(EMWgeo v.0)" % (len(doc_ids), min(tops), max(bots)))
+                "(EMWgeo v.0)" % (len(doc_ids), ", %.2f-%.2f m" % span
+                                  if span else ""))
             n += 1
         self.report(
             {'INFO'},
@@ -953,7 +1240,7 @@ class GPR_OT_tag_anomaly(Operator):
 
 class VIEW3D_PT_dsc_GPR(Panel):
     bl_category = "3DSC"
-    bl_label = "GPR slices"
+    bl_label = "Geophysics slices"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_context = "objectmode"
@@ -968,23 +1255,56 @@ class VIEW3D_PT_dsc_GPR(Panel):
         row.prop(s, "source_dir", text="")
         row.operator("gpr.set_source", icon='FILE_FOLDER', text="")
         col.prop(s, "cache_dir", text="Cache")
-        col.prop(s, "stack_kind", expand=True)
+        col.prop(s, "stack_kind", text="")
+        col.prop(s, "method", expand=True)
+        legacy = s.stack_kind in gpr_scene.LEGACY_KINDS
 
         box = layout.box()
         box.label(text="Raster cache", icon='IMAGE_DATA')
-        if s.stack_kind == 'CSV':
+        if s.stack_kind != 'IMAGES' and s.stack_kind != 'SCREENSHOT':
             box.prop(s, "colormap")
             box.prop(s, "normalize")
-        if s.stack_kind == 'CSV':
+            if s.normalize == 'FIXED':
+                box.prop(s, "value_range")
             r = box.row(align=True)
             r.prop(s, "clip_lo")
             r.prop(s, "clip_hi")
+        if not legacy:
+            r = box.row(align=True)
+            r.prop(s, "quantity")
+            r.prop(s, "unit")
+            box.prop(s, "use_value_scale")
+            if s.use_value_scale:
+                sub = box.column(align=True)
+                r = sub.row(align=True)
+                r.prop(s, "vs_from")
+                r.prop(s, "vs_to")
+                r = sub.row(align=True)
+                r.prop(s, "vs_unit")
+                r.prop(s, "vs_source")
+        if s.stack_kind == 'ASCII':
+            sub = box.column(align=True)
+            sub.prop(s, "extent")
+            sub.prop(s, "sections")
+            sub.prop(s, "section_size")
+        elif s.stack_kind == 'SCREENSHOT':
+            sub = box.column(align=True)
+            sub.prop(s, "frame_x")
+            sub.prop(s, "frame_y")
+            sub.prop(s, "frame_px")
         box.prop(s, "limit")
         if s.stack_kind == 'CSV':
             box.operator("gpr.build_cache", icon='FILE_REFRESH')
-        else:
+        elif s.stack_kind == 'IMAGES':
             box.prop(s, "img_cell_size")
             box.operator("gpr.build_image_manifest", icon='FILE_REFRESH')
+        else:
+            box.operator("gpr.build_stack_cache", icon='FILE_REFRESH')
+            if s.built_cache:
+                sub = box.column()
+                sub.scale_y = 0.7
+                sub.label(text="cache: %s" % os.path.basename(s.built_cache),
+                          icon='CHECKMARK')
         if s.progress_text:
             box.label(text=s.progress_text, icon='TIME')
 
@@ -993,6 +1313,8 @@ class VIEW3D_PT_dsc_GPR(Panel):
         r = box.row(align=True)
         r.prop(s, "origin_e", text="E")
         r.prop(s, "origin_n", text="N")
+        if not legacy:
+            box.prop(s, "epsg")
         box.prop(s, "rotation_deg")
         box.prop(s, "shift_round_to")
         box.prop(s, "use_shift")
@@ -1051,6 +1373,7 @@ classes = [
     GPRSettings,
     GPR_OT_build_cache,
     GPR_OT_build_image_manifest,
+    GPR_OT_build_stack_cache,
     GPR_OT_mark_ground,
     GPR_OT_import_stack,
     GPR_OT_set_source,
