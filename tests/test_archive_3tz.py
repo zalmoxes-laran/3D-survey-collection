@@ -303,3 +303,66 @@ def test_templu_mare_keeps_its_sha256(tmp_path):
     assert r["content_digest"]["digest"] == \
         "sha256:8aa6fbd3e5847e9f8c2e219fb4305d9a3ad52e41135120e79bb8c3d18b67caed"
     assert r["content_digest"]["files"] == 7302
+
+
+# ── the RealityScan form: X.json beside the folder X ─────────────────────────
+
+def _realityscan_pair(parent: Path, name: str = "tileset_Basilica") -> Path:
+    """RealityScan writes the root X.json BESIDE the folder X/, whose tiles the
+    root references as ``X/...``."""
+    folder = parent / name
+    for i in range(5):
+        p = folder / "Geometry" / f"{i}.b3dm"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b"b3dm" + bytes([i]) * 500)
+    (folder / ".DS_Store").write_bytes(b"x")
+    (parent / f"{name}.json").write_text(json.dumps({
+        "asset": {"version": "1.0", "generator": "RealityScan"}, "geometricError": 10,
+        "root": {"geometricError": 0, "boundingVolume": {"sphere": [0, 0, 0, 1]},
+                 "children": [{"geometricError": 0, "content": {"uri": f"{name}/Geometry/{i}.b3dm"}}
+                              for i in range(5)]}}))
+    return folder
+
+
+def test_find_source_understands_the_four_shapes(tmp_path):
+    plain = _fake_tileset(tmp_path / "plain")
+    assert tz.find_tileset_source(plain) == (str(plain), None, str(plain) + ".3tz")
+    pair_dir = tmp_path / "rs"
+    folder = _realityscan_pair(pair_dir)
+    want = (str(folder), str(folder) + ".json", str(folder) + ".3tz")
+    assert tz.find_tileset_source(folder) == want                    # the folder X
+    assert tz.find_tileset_source(str(folder) + ".json") == want     # the X.json
+    assert tz.find_tileset_source(pair_dir) == want                  # the folder holding the pair
+
+
+def test_find_source_refuses_what_is_not_a_tileset(tmp_path):
+    (tmp_path / "empty").mkdir()
+    with pytest.raises(ValueError, match="RealityScan form"):
+        tz.find_tileset_source(tmp_path / "empty")
+    two = tmp_path / "two"
+    _realityscan_pair(two, "a")
+    _realityscan_pair(two, "b")
+    with pytest.raises(ValueError, match="choose one"):
+        tz.find_tileset_source(two)
+
+
+def test_realityscan_pair_packs_with_root_tileset_json(tmp_path):
+    folder = _realityscan_pair(tmp_path)
+    fol, root, out = tz.find_tileset_source(folder)
+    stage = tz.stage_tileset_pair(root, fol)
+    try:
+        info = tz.write_3tz(stage, out)
+        v = tz.verify_3tz(out, stage)
+    finally:
+        import shutil
+        shutil.rmtree(stage)
+    assert v["ok"], v["errors"]
+    assert info["entries"] == 6                     # tileset.json + 5 tiles, no .DS_Store
+    with zipfile.ZipFile(out) as zf:
+        names = zf.namelist()
+    assert "tileset.json" in names and "tileset_Basilica/Geometry/0.b3dm" in names
+    assert json.loads(tz.read_entry(out, "tileset.json"))["asset"]["generator"] == "RealityScan"
+    # the originals are untouched and nothing is left beside them
+    assert sorted(p.name for p in tmp_path.iterdir()) == [
+        "tileset_Basilica", "tileset_Basilica.3tz", "tileset_Basilica.json"]
+    assert (folder / ".DS_Store").exists()

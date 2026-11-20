@@ -196,6 +196,79 @@ def write_3tz(src_dir: str, out_path: str, *, progress=None) -> dict:
     return {**out, "sha256": str(out["sha256"]).split(":")[-1]}
 
 
+def find_tileset_source(path: str):
+    """What to pack from ``path``, and where the archive goes.
+
+    → ``(folder, root_json, out_path)``; ``root_json`` is ``None`` for a plain
+    tileset folder. Four shapes are understood:
+
+    - a folder with ``tileset.json`` at its root → ``<folder>.3tz`` beside it;
+    - the folder ``X/`` of the RealityScan (RealityCapture) form, ``X.json``
+      written BESIDE it, the tiles referenced as ``X/...`` → ``X.3tz`` beside
+      them;
+    - the ``X.json`` of that pair, chosen as a file → the same;
+    - a folder holding one such pair (``X.json`` + ``X/``, no ``tileset.json``)
+      → ``X.3tz`` inside it, beside the pair.
+
+    Raises ``ValueError`` with a sentence for the user otherwise."""
+    p = os.path.abspath(os.fspath(path)).rstrip(os.sep)
+    if os.path.isfile(p) and p.lower().endswith(".json"):
+        folder = p[:-5]
+        if os.path.isdir(folder):
+            return folder, p, folder + ".3tz"
+        raise ValueError(f"{os.path.basename(p)}: no folder {os.path.basename(folder)} beside it")
+    if not os.path.isdir(p):
+        raise ValueError(f"Not a folder: {p}")
+    if os.path.isfile(os.path.join(p, ENTRY_POINT)):
+        return p, None, p + ".3tz"
+    if os.path.isfile(p + ".json"):
+        return p, p + ".json", p + ".3tz"
+    pairs = sorted(f[:-5] for f in os.listdir(p)
+                   if f.lower().endswith(".json") and os.path.isdir(os.path.join(p, f[:-5])))
+    if len(pairs) == 1:
+        folder = os.path.join(p, pairs[0])
+        return folder, folder + ".json", folder + ".3tz"
+    if len(pairs) > 1:
+        raise ValueError(f"{p}: {len(pairs)} tilesets in the RealityScan form here "
+                         f"({', '.join(pairs[:4])}): choose one of their folders")
+    raise ValueError(f"{p}: no tileset.json at its root, and no X.json beside a folder X "
+                     "(the RealityScan form)")
+
+
+def stage_tileset_pair(root_json: str, folder: str) -> str:
+    """A folder with ``tileset.json`` at its root made of the RealityScan pair
+    (``X.json`` beside ``X/``), for a writer that packs folders: hard links
+    where the disk allows (no byte copied), copies otherwise. Written beside
+    the pair, hidden, never inside the originals; the caller removes it. The
+    archive's content is the same one EMStudio's bridge packs from the pair."""
+    import shutil
+    import tempfile
+    folder = os.path.abspath(folder).rstrip(os.sep)
+    name = os.path.basename(folder)
+    stage = tempfile.mkdtemp(prefix=".3dsc-tileset-", dir=os.path.dirname(folder))
+
+    def put(src, dst):
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        try:
+            os.link(src, dst)
+        except OSError:
+            shutil.copy2(src, dst)
+
+    try:
+        put(root_json, os.path.join(stage, ENTRY_POINT))
+        for d, dirs, files in os.walk(folder):
+            dirs.sort()
+            for f in files:
+                if f in SKIP_NAMES:
+                    continue
+                src = os.path.join(d, f)
+                put(src, os.path.join(stage, name, os.path.relpath(src, folder)))
+    except BaseException:
+        shutil.rmtree(stage, ignore_errors=True)
+        raise
+    return stage
+
+
 def read_index(path: str) -> dict:
     """``md5 -> local header offset`` from the index entry.
 

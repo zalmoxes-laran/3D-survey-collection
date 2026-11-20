@@ -1173,8 +1173,10 @@ def _folder_parent(src, info):
 
 
 class OBJECT_OT_cesium_pack_3tz(bpy.types.Operator):
-    """Pack a tileset folder (tileset.json at its root, any generator) into a
-    deterministic .3tz next to it, with the same name"""
+    """Pack a tileset into a deterministic .3tz beside it: a folder with
+    tileset.json at its root (any generator), or the RealityScan /
+    RealityCapture export (X.json beside the folder X) — choose the folder X
+    or the folder that holds the pair"""
     bl_idname = "object.cesium_pack_3tz"
     bl_label = "Pack a tileset into .3tz"
     bl_options = {'REGISTER'}
@@ -1182,7 +1184,8 @@ class OBJECT_OT_cesium_pack_3tz(bpy.types.Operator):
     directory: bpy.props.StringProperty(  # type: ignore
         name="Tileset folder",
         subtype='DIR_PATH',
-        description="Folder with tileset.json at its root",
+        description="Folder with tileset.json at its root, or the RealityScan export "
+                    "(X.json beside the folder X)",
     )
     filter_folder: bpy.props.BoolProperty(default=True, options={'HIDDEN'})  # type: ignore
     verify: bpy.props.BoolProperty(  # type: ignore
@@ -1200,16 +1203,29 @@ class OBJECT_OT_cesium_pack_3tz(bpy.types.Operator):
         return {'RUNNING_MODAL'}
 
     def execute(self, context):
-        src = Path(bpy.path.abspath(self.directory).strip())
-        if not src.is_dir():
-            self.report({'ERROR'}, f"Not a folder: {src}")
+        from . import archive_3tz
+        import shutil
+        try:
+            folder, root_json, out = archive_3tz.find_tileset_source(
+                bpy.path.abspath(self.directory).strip())
+        except ValueError as exc:
+            self.report({'ERROR'}, str(exc))
             return {'CANCELLED'}
-        if not (src / "tileset.json").is_file():
-            self.report({'ERROR'}, f"No tileset.json at the root of {src}")
-            return {'CANCELLED'}
-        out = _archive_path_for(src)
-        _add_to_cesium_log(context, f"Packing {src.name} -> {out.name} ...")
-        ok, _info, msg = _pack_3tz(context, str(src), out, verify=self.verify)
+        src, out = Path(folder), Path(out)
+        form = " (RealityScan form)" if root_json else ""
+        _add_to_cesium_log(context, f"Packing {src.name}{form} -> {out.name} ...")
+        stage = None
+        try:
+            if root_json:
+                try:
+                    stage = archive_3tz.stage_tileset_pair(root_json, folder)
+                except OSError as exc:
+                    self.report({'ERROR'}, f"cannot prepare {src.name}: {exc}")
+                    return {'CANCELLED'}
+            ok, _info, msg = _pack_3tz(context, stage or str(src), out, verify=self.verify)
+        finally:
+            if stage:
+                shutil.rmtree(stage, ignore_errors=True)
         _add_to_cesium_log(context, ("[OK] " if ok else "[ERR] ") + msg)
         print(f"[3tz] {out}: {msg}")
         if not ok:
@@ -1219,8 +1235,9 @@ class OBJECT_OT_cesium_pack_3tz(bpy.types.Operator):
         sb = _stamp_bridge()
         if sb is not None:
             res = sb.stamp(str(out), dtc_kind=getattr(sb, "KIND_PACKING", sb.KIND_EXPORT),
-                           technique="3tz packing (3DSC canonical profile)",
-                           parameters={"operator": self.bl_idname, "verify": self.verify},
+                           technique="3tz packing (3DSC canonical profile)" + form,
+                           parameters={"operator": self.bl_idname, "verify": self.verify,
+                                       **({"root_json": Path(root_json).name} if root_json else {})},
                            parents=[_folder_parent(src, _info)], context=context)
             _stamp_line = sb.report(self, [res])
             if _stamp_line:
