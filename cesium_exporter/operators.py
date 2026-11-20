@@ -103,7 +103,7 @@ def _pack_3tz(context, src_dir, out_path, verify=True):
         info = archive_3tz.write_3tz(src_dir, str(out_path), progress=_progress)
         if verify:
             info["verify"] = archive_3tz.verify_3tz(str(out_path), src_dir)
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, ImportError) as exc:   # ImportError: no dtcstamp
         return False, {}, f"{Path(out_path).name}: {exc}"
     finally:
         wm.progress_end()

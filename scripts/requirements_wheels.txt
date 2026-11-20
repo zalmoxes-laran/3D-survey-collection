@@ -23,6 +23,12 @@ certifi>=2024.0
 # degrades gracefully there. cp311 (Blender 4.4-5.0) does have an x86_64 wheel
 # at the macosx_11_0 tag (release.yml / build.py use that tag).
 
+# --- the .3tz writer (cesium_exporter/archive_3tz.py) ----------------------
+# dtcstamp owns the canonical .3tz profile and its writer (write_canonical_3tz):
+# 3DSC packs through it, as EMStudio's bridge and s3Dgraphy do (MICRO-COR08).
+# Pure Python, no dependencies; the same wheel EM Tools bundles.
+dtcstamp>=0.1.5
+
 # --- NOT bundled (optional, lazy-imported with a friendly message) ----------
 # matplotlib  -> only the orthogonal_render placeholder fallback (PIL covers
 #                the normal path and is already in Blender)

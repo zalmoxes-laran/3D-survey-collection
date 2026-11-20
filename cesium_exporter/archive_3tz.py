@@ -2,6 +2,16 @@
 
 Pure Python, no ``bpy``: importable by the tests and by other tools.
 
+ONE WRITER (MICRO-COR08, 20 Nov 2026). The packing is dtcstamp's
+``write_canonical_3tz`` — the package that owns the profile owns its writer,
+and EMStudio's bridge (``/fs/pack-3tz``) and s3Dgraphy already call it.
+dtcstamp took that writer from this file on 15 Oct 2026; until today the two
+were held to the same bytes by a test, now :func:`write_3tz` hands the folder
+to dtcstamp and there is one road. dtcstamp comes in as a wheel
+(``scripts/requirements_wheels.txt``), the same one EM Tools bundles; it is a
+dependency, not a copy (``tests/test_stamp_bridge.py``). The reader and the
+verifier below stay here: they read an archive, they do not write one.
+
 Spec: 3D Tiles Archive Format v1.3 (github.com/erikdahlstrom/3tz-specification),
 media type ``application/vnd.maxar.archive.3tz+zip``.
 
@@ -47,7 +57,6 @@ MEDIA_TYPE = "application/vnd.maxar.archive.3tz+zip"
 INDEX_NAME = "@3dtilesIndex1@"
 FIXED_DATE = (1980, 1, 1, 0, 0, 0)
 SKIP_NAMES = frozenset((".DS_Store", "Thumbs.db"))
-MAX_ENTRY_BYTES = 4 * 1024 ** 3          # spec: 4 GB per file
 ZIP64_LIMIT = 0xFFFFFFFF
 _BLOCK = 1 << 20
 _RECORD = 24
@@ -67,15 +76,6 @@ def _md5(name: str) -> bytes:
 
 def _sort_key(md5: bytes):
     return struct.unpack("<QQ", md5)
-
-
-def _zinfo(name: str, size: int, compress: bool) -> zipfile.ZipInfo:
-    zi = zipfile.ZipInfo(name, date_time=FIXED_DATE)
-    zi.compress_type = zipfile.ZIP_DEFLATED if compress else zipfile.ZIP_STORED
-    zi.create_system = 3                          # unix, whatever the host
-    zi.external_attr = (0o100644 & 0xFFFF) << 16
-    zi.file_size = size
-    return zi
 
 
 def _path_key(name: str) -> bytes:
@@ -163,67 +163,37 @@ def sha256_file(path: str) -> str:
     return h.hexdigest()
 
 
-def write_3tz(src_dir: str, out_path: str, *, compress: bool = False,
-              progress=None) -> dict:
-    """Pack ``src_dir`` (with ``tileset.json`` at its root) into ``out_path``.
+def _dtcstamp():
+    """dtcstamp, or an ImportError that says where it comes from."""
+    try:
+        import dtcstamp
+        dtcstamp.write_canonical_3tz
+    except (ImportError, AttributeError) as exc:
+        raise ImportError(
+            "packing a .3tz needs dtcstamp 0.1.5 or later (write_canonical_3tz), "
+            "bundled as a wheel of 3D Survey Collection and of EM Tools — "
+            f"not importable here: {exc}") from exc
+    return dtcstamp
+
+
+def write_3tz(src_dir: str, out_path: str, *, progress=None) -> dict:
+    """Pack ``src_dir`` (with ``tileset.json`` at its root) into ``out_path``,
+    in the canonical profile — through ``dtcstamp.write_canonical_3tz``, the
+    one writer (EMStudio and s3Dgraphy call the same function).
 
     ``progress(done, total)`` is called after each entry, if given.
     Returns ``{"entries", "bytes", "sha256", "content_digest", "seconds",
-    "path"}``; the entry count excludes the index. ``content_digest`` is
-    ``{"digest", "files", "computed_by": "producer"}``, hashed from the
-    bytes as they are copied. The archive is written to a sibling
-    ``.part`` file and renamed at the end, so a failed write never leaves
-    a half archive under the final name.
+    "path"}``; the entry count excludes the index, ``sha256`` is the bare
+    hex. ``content_digest`` is ``{"digest", "files", "computed_by":
+    "producer"}``, hashed from the bytes as they are copied. The archive is
+    written to a sibling ``.part`` file and renamed at the end, so a failed
+    write never leaves a half archive under the final name. No compression:
+    the profile stores every entry (the ``compress`` option is gone with the
+    second writer).
     """
-    t0 = time.time()
-    src_dir = os.path.abspath(src_dir)
-    out_path = os.path.abspath(out_path)
-    if out_path.startswith(src_dir.rstrip(os.sep) + os.sep):
-        raise ValueError("the archive must not be written inside the folder it packs")
-    entries = _entries(src_dir)
-    total = len(entries)
-
-    part = out_path + ".part"
-    records = []
-    hashed = []
-    try:
-        with zipfile.ZipFile(part, "w", zipfile.ZIP_STORED, allowZip64=True) as zf:
-            for i, (rel, disk) in enumerate(entries, start=1):
-                src = os.path.join(src_dir, disk)
-                size = os.path.getsize(src)
-                if size > MAX_ENTRY_BYTES:
-                    raise ValueError(f"{rel}: {size} bytes, over the 4 GB per-file limit")
-                zi = _zinfo(rel, size, compress)
-                h = hashlib.sha256()
-                with open(src, "rb") as fh, \
-                        zf.open(zi, "w", force_zip64=size >= ZIP64_LIMIT) as dst:
-                    for chunk in iter(lambda: fh.read(_BLOCK), b""):
-                        h.update(chunk)
-                        dst.write(chunk)
-                hashed.append((rel, h.hexdigest()))
-                records.append((_md5(rel), zi.header_offset))
-                if progress is not None:
-                    progress(i, total)
-            records.sort(key=lambda r: _sort_key(r[0]))
-            index = b"".join(md5 + struct.pack("<Q", off) for md5, off in records)
-            zf.writestr(_zinfo(INDEX_NAME, len(index), False), index)
-        os.replace(part, out_path)
-    except BaseException:
-        try:
-            os.remove(part)
-        except OSError:
-            pass
-        raise
-
-    return {
-        "path": out_path,
-        "entries": total,
-        "bytes": os.path.getsize(out_path),
-        "sha256": sha256_file(out_path),
-        "content_digest": {"digest": _content_digest_of(hashed),
-                           "files": len(hashed), "computed_by": "producer"},
-        "seconds": round(time.time() - t0, 3),
-    }
+    out = _dtcstamp().write_canonical_3tz(os.fspath(src_dir), os.fspath(out_path),
+                                          progress=progress)
+    return {**out, "sha256": str(out["sha256"]).split(":")[-1]}
 
 
 def read_index(path: str) -> dict:

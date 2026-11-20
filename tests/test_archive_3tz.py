@@ -12,6 +12,19 @@ from pathlib import Path
 
 import pytest
 
+# the writer is dtcstamp's (MICRO-COR08): from the venv, or the checkout beside
+# this one when the venv has not been set up again since
+try:
+    import dtcstamp  # noqa: F401
+except ImportError:
+    import sys
+    _SIBLING = Path(__file__).resolve().parents[2] / "dtcstamp"
+    if not (_SIBLING / "dtcstamp.py").is_file():
+        pytest.skip("dtcstamp is neither installed nor checked out beside 3DSC",
+                    allow_module_level=True)
+    sys.path.insert(0, str(_SIBLING))
+    import dtcstamp  # noqa: F401
+
 _MOD = Path(__file__).resolve().parents[1] / "cesium_exporter" / "archive_3tz.py"
 _spec = importlib.util.spec_from_file_location("archive_3tz", _MOD)
 tz = importlib.util.module_from_spec(_spec)
@@ -93,16 +106,22 @@ def test_archive_layout_follows_spec(tmp_path):
     assert v["ok"], v["errors"]
 
 
-def test_compress_option_still_valid(tmp_path):
+def test_one_writer_dtcstamp_s(tmp_path, monkeypatch):
+    """MICRO-COR08: write_3tz is dtcstamp.write_canonical_3tz — the same bytes,
+    and the call goes there (no second writer, no compress option)."""
     src = _fake_tileset(tmp_path / "ts")
-    out = tmp_path / "c.3tz"
-    tz.write_3tz(src, out, compress=True)
-    with zipfile.ZipFile(out) as zf:
-        infos = zf.infolist()
-    assert infos[-1].compress_type == zipfile.ZIP_STORED     # index never compressed
-    assert infos[0].compress_type == zipfile.ZIP_DEFLATED
-    assert tz.read_entry(out, "tiles/0/0.glb") == (src / "tiles/0/0.glb").read_bytes()
-    assert tz.verify_3tz(out, src)["ok"]
+    ours = tz.write_3tz(src, tmp_path / "a.3tz")
+    theirs = dtcstamp.write_canonical_3tz(str(src), str(tmp_path / "b.3tz"))
+    assert theirs["sha256"] == "sha256:" + ours["sha256"]
+    assert theirs["content_digest"] == ours["content_digest"]
+    called = []
+    monkeypatch.setattr(dtcstamp, "write_canonical_3tz",
+                        lambda s, o, progress=None: called.append((s, o)) or
+                        {"sha256": "sha256:ab", "path": o})
+    assert tz.write_3tz(src, tmp_path / "c.3tz")["sha256"] == "ab"
+    assert called == [(str(src), str(tmp_path / "c.3tz"))]
+    with pytest.raises(TypeError):
+        tz.write_3tz(src, tmp_path / "d.3tz", compress=True)
 
 
 def test_verify_finds_altered_tile(tmp_path):
