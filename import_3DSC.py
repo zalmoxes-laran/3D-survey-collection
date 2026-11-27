@@ -181,8 +181,16 @@ class ImportMultipleObjs(Operator, ImportHelper):
             options={'HIDDEN'},
             ) # type: ignore
 
-    # Selected files
-    files: CollectionProperty(type=PropertyGroup) # type: ignore
+    # Selected files (Blender 5.x: the file browser fills these only with the
+    # canonical element type, plus a separate directory property)
+    files: CollectionProperty(
+            type=bpy.types.OperatorFileListElement,
+            options={'HIDDEN', 'SKIP_SAVE'},
+            ) # type: ignore
+    directory: StringProperty(
+            subtype='DIR_PATH',
+            options={'HIDDEN', 'SKIP_SAVE'},
+            ) # type: ignore
 
     # List of operator properties, the attributes will be assigned
     # to the class instance from the operator settings before calling.
@@ -311,14 +319,26 @@ class ImportMultipleObjs(Operator, ImportHelper):
         major, minor, _ = versione_blender
 
         # get the folder
-        folder = (os.path.dirname(self.filepath))
+        folder = self.directory or os.path.dirname(self.filepath)
+
+        # selected files; empty names are dropped, and if nothing usable is
+        # left we fall back to the single filepath (Blender 5.x behaviour)
+        names = [f.name for f in self.files if f.name]
+        if not names and self.filepath and os.path.isfile(self.filepath):
+                names = [os.path.basename(self.filepath)]
+                folder = os.path.dirname(self.filepath)
+        if not names:
+                self.report({'WARNING'}, "No OBJ file selected")
+                return {'CANCELLED'}
 
         unstamped = []
         # iterate through the selected files
-        for i in self.files:
-        
-                print(i)
-                path_to_file = (os.path.join(folder, i.name))
+        for name in names:
+
+                path_to_file = os.path.join(folder, name)
+                if not os.path.isfile(path_to_file):
+                        self.report({'WARNING'}, f"File not found: {path_to_file}")
+                        continue
 
                 if major >= 4:
                         # Codice per Blender 4.0 e versioni successive
@@ -342,7 +362,7 @@ class ImportMultipleObjs(Operator, ImportHelper):
                         obj[master_mark.SOURCE_PROP] = path_to_file
                 m = master_mark.mark(path_to_file)
                 if m and m["state"] == "unstamped":
-                        unstamped.append(i.name)
+                        unstamped.append(name)
 
         if unstamped:
                 self.report({'WARNING'}, f"{len(unstamped)} master(s) not stamped: "
